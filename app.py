@@ -1043,6 +1043,21 @@ def confirm_redemption():
 #  PUBLIC — TRUCK CONFIG
 # ══════════════════════════════════════════════════════
 
+@app.route("/api/trucks/search", methods=["GET"])
+def search_trucks():
+    """Search trucks by name — used by customer find-a-truck screen."""
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return ok([])
+    # Case-insensitive search on truck_name
+    rows = sb.table("vendors").select(
+        "id, truck_name, emoji, slug, vendor_number, color_primary, color_secondary, tagline"
+    ).ilike("truck_name", f"%{q}%").limit(10).execute().data
+    # Filter to active only
+    active = [r for r in rows if r]
+    return ok(active)
+
+
 @app.route("/api/truck/<slug>", methods=["GET"])
 @app.route("/api/truck/<slug>/config", methods=["GET"])
 def get_truck_config(slug):
