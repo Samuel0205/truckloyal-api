@@ -1605,8 +1605,9 @@ def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) 
     </html>
     """
 
+    resend_from = os.environ.get("RESEND_FROM", "onboarding@resend.dev")
     payload = _json.dumps({
-        "from": "Food Truck Rewards <noreply@foodtruckrewards.app>",
+        "from": f"Food Truck Rewards <{resend_from}>",
         "to": [to_email],
         "subject": "Reset your Food Truck Rewards password",
         "html": html_body,
