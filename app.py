@@ -1,5 +1,5 @@
 """
-Food Truck Rewards — Flask API  v2.0
+Food Truck Rewards — Flask API  v2.1
 Deploy on Render (Python 3.11+)
 
 pip install flask flask-cors supabase python-jose bcrypt stripe python-dotenv
