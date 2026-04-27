@@ -901,7 +901,7 @@ def vendor_analytics():
     members      = sb.table("customer_trucks").select("id, points_balance, points_total, visit_count", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
     visits_total = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).execute()
-    redemptions  = sb.table("redemptions").select("*, rewards(name, emoji)").eq("vendor_id", vid).eq("status", "used").execute()
+    redemptions  = sb.table("redemptions").select("*, rewards(name, emoji)").eq("vendor_id", vid).neq("status", "expired").execute()
 
     # Points stats from member data
     member_data  = members.data or []
@@ -958,13 +958,16 @@ def vendor_members():
             "last_visit":     r.get("last_visit_date", ""),
         })
     return ok(members)
+
+
+@app.route("/api/vendor/stats", methods=["GET"])
 @vendor_required
 def vendor_stats():
     vid   = request.vendor_id
     today = date.today().isoformat()
     members      = sb.table("customer_trucks").select("id", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
-    redemptions  = sb.table("redemptions").select("id", count="exact").eq("vendor_id", vid).execute()
+    redemptions  = sb.table("redemptions").select("id", count="exact").eq("vendor_id", vid).neq("status", "expired").execute()
     return ok({
         "total_members":     members.count      or 0,
         "visits_today":      visits_today.count or 0,
