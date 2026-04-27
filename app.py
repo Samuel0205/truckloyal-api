@@ -1321,19 +1321,20 @@ def get_truck_config(slug):
 
 @app.route("/api/customer/signup", methods=["POST"])
 def customer_signup():
-    body  = request.json or {}
-    name  = (body.get("name") or "").strip()
-    phone = re.sub(r'\D', '', body.get("phone") or "")
-    email = (body.get("email") or "").strip().lower()
+    body     = request.json or {}
+    name     = (body.get("name") or "").strip()
+    email    = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
 
     if not name:  return err("Name is required")
-    if len(phone) < 10: return err("Valid phone number is required")
     if not email or "@" not in email: return err("Valid email is required")
+    if not password or len(password) < 8:
+        return err("Password must be at least 8 characters")
 
-    if sb.table("customers").select("id").eq("phone", phone).execute().data:
-        return err("An account with this phone number already exists. Please sign in.")
     if sb.table("customers").select("id").ilike("email", email).execute().data:
         return err("An account with this email already exists. Please sign in.")
+
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
     rid = gen_rewards_id()
     while sb.table("customers").select("id").eq("rewards_id", rid).execute().data:
@@ -1349,7 +1350,8 @@ def customer_signup():
         if ref: referred_by = ref[0]["id"]
 
     customer = sb.table("customers").insert({
-        "name": name, "phone": phone, "email": email,
+        "name": name, "email": email,
+        "password_hash": pw_hash,
         "rewards_id": rid, "referral_code": ref_code, "referred_by": referred_by,
     }).execute().data[0]
 
@@ -1359,21 +1361,32 @@ def customer_signup():
 
 @app.route("/api/customer/login", methods=["POST"])
 def customer_login():
-    body  = request.json or {}
-    phone = re.sub(r'\D', '', body.get("phone") or "")
-    email = (body.get("email") or "").strip().lower()
-    if not phone and not email:
-        return err("Phone number or email is required")
+    body     = request.json or {}
+    email    = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
 
-    customer = None
-    if phone and len(phone) >= 10:
-        row = sb.table("customers").select("*").eq("phone", phone).execute().data
-        if row: customer = row[0]
-    if not customer and email:
-        row = sb.table("customers").select("*").ilike("email", email).execute().data
-        if row: customer = row[0]
-    if not customer:
-        return err("No account found. Please sign up first.", 404)
+    if not email:
+        return err("Email is required")
+    if not password:
+        return err("Password is required")
+
+    row = sb.table("customers").select("*").ilike("email", email).execute().data
+    if not row:
+        return err("No account found with that email. Please sign up.", 404)
+
+    customer = row[0]
+    pw_hash  = customer.get("password_hash")
+
+    if not pw_hash:
+        print(f"[CUSTOMER LOGIN] No password_hash for: {email}")
+        return err("Account needs password setup. Please use forgot password.", 401)
+
+    try:
+        if not bcrypt.checkpw(password.encode(), pw_hash.encode()):
+            return err("Invalid email or password", 401)
+    except Exception as e:
+        print(f"[CUSTOMER LOGIN ERROR] {e}")
+        return err("Login error — please try again", 500)
 
     trucks = _get_customer_trucks(customer["id"])
     token  = make_customer_token(customer["id"])
