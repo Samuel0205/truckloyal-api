@@ -245,7 +245,7 @@ def _calc_points(vendor: dict, order_total: float,
 def _get_customer_trucks(customer_id: str) -> list:
     ct_rows = sb.table("customer_trucks").select(
         "*, vendors(id, truck_name, tagline, emoji, slug, "
-        "color_primary, color_secondary, vendor_number, location_today)"
+        "color_primary, color_secondary, vendor_number, location_today, profile_picture_url)"
     ).eq("customer_id", customer_id).execute().data
 
     result = []
