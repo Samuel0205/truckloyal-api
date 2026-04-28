@@ -1965,6 +1965,524 @@ def stripe_webhook():
 
 
 # ══════════════════════════════════════════════════════
+#  PUSH NOTIFICATIONS
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/vendor/push", methods=["POST"])
+@vendor_required
+def send_push():
+    """Send push notification to all members of this truck."""
+    body    = request.json or {}
+    vid     = request.vendor_id
+    title   = (body.get("title") or "").strip()
+    message = (body.get("message") or "").strip()
+    ntype   = body.get("type", "broadcast")  # broadcast | promo | location
+
+    if not title or not message:
+        return err("Title and message are required")
+
+    # Get all customers for this vendor with push tokens
+    members = sb.table("customer_trucks").select(
+        "customer_id, customers(push_token, name)"
+    ).eq("vendor_id", vid).execute().data or []
+
+    vendor = sb.table("vendors").select("truck_name").eq("id", vid).execute().data
+    truck_name = vendor[0]["truck_name"] if vendor else "Your Food Truck"
+
+    # Store notification in DB for history
+    notif = sb.table("notifications").insert({
+        "vendor_id": vid,
+        "title":     title,
+        "message":   message,
+        "type":      ntype,
+        "sent_to":   len(members),
+    }).execute().data
+
+    # Send via Expo Push API (free, no account needed for basic)
+    tokens = []
+    for m in members:
+        cust = m.get("customers") or {}
+        token = cust.get("push_token")
+        if token and token.startswith("ExponentPushToken"):
+            tokens.append(token)
+
+    sent = 0
+    if tokens:
+        try:
+            import urllib.request, json as _json
+            payload = _json.dumps({
+                "to": tokens,
+                "title": f"🔥 {truck_name}",
+                "body": message,
+                "sound": "default",
+                "data": {"type": ntype, "vendor_id": vid}
+            }).encode()
+            req = urllib.request.Request(
+                "https://exp.host/--/api/v2/push/send",
+                data=payload,
+                headers={"Content-Type": "application/json", "Accept": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                sent = len(tokens)
+        except Exception as e:
+            print(f"[PUSH ERROR] {e}")
+
+    return ok({"sent": sent, "total_members": len(members)})
+
+
+@app.route("/api/vendor/notifications", methods=["GET"])
+@vendor_required
+def get_notifications():
+    """Get notification history for this vendor."""
+    vid = request.vendor_id
+    rows = sb.table("notifications").select("*").eq("vendor_id", vid)\
+        .order("created_at", desc=True).limit(20).execute()
+    return ok(rows.data or [])
+
+
+@app.route("/api/customer/<customer_id>/push-token", methods=["POST"])
+def save_push_token(customer_id):
+    """Save customer's Expo push token."""
+    body  = request.json or {}
+    token = body.get("token", "")
+    if not token:
+        return err("Token required")
+    sb.table("customers").update({"push_token": token}).eq("id", customer_id).execute()
+    return ok("saved")
+
+
+# ══════════════════════════════════════════════════════
+#  PROMOS & FLASH DEALS
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/vendor/promos", methods=["GET"])
+@vendor_required
+def get_promos():
+    vid = request.vendor_id
+    rows = sb.table("promos").select("*").eq("vendor_id", vid)\
+        .order("created_at", desc=True).limit(20).execute()
+    return ok(rows.data or [])
+
+
+@app.route("/api/vendor/promos", methods=["POST"])
+@vendor_required
+def create_promo():
+    body        = request.json or {}
+    vid         = request.vendor_id
+    title       = (body.get("title") or "").strip()
+    description = (body.get("description") or "").strip()
+    promo_type  = body.get("promo_type", "bonus_points")  # bonus_points | free_item | discount
+    value       = body.get("value", 2)   # multiplier or pts or % off
+    code        = (body.get("code") or "").strip().upper()
+    expires_at  = body.get("expires_at")  # ISO string or None (today only)
+
+    if not title: return err("Title required")
+    if not code:
+        import string as _s
+        code = "".join(random.choices(_s.ascii_uppercase + "0123456789", k=6))
+
+    # Check code uniqueness within vendor
+    existing = sb.table("promos").select("id").eq("vendor_id", vid).eq("code", code).execute().data
+    if existing: return err("Promo code already exists")
+
+    row = sb.table("promos").insert({
+        "vendor_id":   vid,
+        "title":       title,
+        "description": description,
+        "promo_type":  promo_type,
+        "value":       value,
+        "code":        code,
+        "expires_at":  expires_at,
+        "active":      True,
+        "used_count":  0,
+    }).execute().data[0]
+    return ok(row), 201
+
+
+@app.route("/api/vendor/promos/<promo_id>", methods=["DELETE"])
+@vendor_required
+def delete_promo(promo_id):
+    vid = request.vendor_id
+    sb.table("promos").delete().eq("id", promo_id).eq("vendor_id", vid).execute()
+    return ok("deleted")
+
+
+@app.route("/api/truck/<slug>/promos", methods=["GET"])
+def get_truck_promos(slug):
+    """Public — get active promos for a truck."""
+    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    if not vendor: return err("Truck not found", 404)
+    vid = vendor[0]["id"]
+    now = datetime.utcnow().isoformat()
+    rows = sb.table("promos").select("*").eq("vendor_id", vid).eq("active", True)\
+        .or_(f"expires_at.is.null,expires_at.gte.{now}").execute()
+    return ok(rows.data or [])
+
+
+@app.route("/api/customer/apply-promo", methods=["POST"])
+def apply_promo():
+    """Customer applies a promo code at a truck."""
+    body        = request.json or {}
+    customer_id = body.get("customer_id")
+    vendor_id   = body.get("vendor_id")
+    code        = (body.get("code") or "").strip().upper()
+    if not all([customer_id, vendor_id, code]):
+        return err("customer_id, vendor_id, code required")
+
+    now = datetime.utcnow().isoformat()
+    promo = sb.table("promos").select("*").eq("vendor_id", vendor_id).eq("code", code)\
+        .eq("active", True).or_(f"expires_at.is.null,expires_at.gte.{now}").execute().data
+    if not promo: return err("Promo not found or expired", 404)
+    p = promo[0]
+
+    # Check if customer already used this promo
+    used = sb.table("promo_uses").select("id").eq("promo_id", p["id"])\
+        .eq("customer_id", customer_id).execute().data
+    if used: return err("You've already used this promo")
+
+    # Record use
+    sb.table("promo_uses").insert({"promo_id": p["id"], "customer_id": customer_id, "vendor_id": vendor_id}).execute()
+    sb.table("promos").update({"used_count": (p.get("used_count") or 0) + 1}).eq("id", p["id"]).execute()
+
+    # Apply bonus
+    bonus_pts = 0
+    if p["promo_type"] == "bonus_points":
+        bonus_pts = int(p["value"])
+        ct = sb.table("customer_trucks").select("points_balance, points_total")\
+            .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
+        if ct:
+            new_bal = ct[0]["points_balance"] + bonus_pts
+            new_tot = ct[0]["points_total"] + bonus_pts
+            sb.table("customer_trucks").update({"points_balance": new_bal, "points_total": new_tot})\
+                .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute()
+
+    return ok({"promo": p, "bonus_pts": bonus_pts, "promo_type": p["promo_type"]})
+
+
+# ══════════════════════════════════════════════════════
+#  VENDOR SCHEDULE / LOCATION
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/vendor/schedule", methods=["GET"])
+@vendor_required
+def get_schedule():
+    vid  = request.vendor_id
+    rows = sb.table("vendor_schedule").select("*").eq("vendor_id", vid)\
+        .order("day_of_week").execute()
+    return ok(rows.data or [])
+
+
+@app.route("/api/vendor/schedule", methods=["POST"])
+@vendor_required
+def save_schedule():
+    body = request.json or {}
+    vid  = request.vendor_id
+    days = body.get("days", [])  # [{day_of_week:0, location:'Downtown', start_time:'11:00', end_time:'14:00'}]
+
+    # Delete existing and replace
+    sb.table("vendor_schedule").delete().eq("vendor_id", vid).execute()
+    if days:
+        for d in days:
+            d["vendor_id"] = vid
+        sb.table("vendor_schedule").insert(days).execute()
+    return ok("saved")
+
+
+@app.route("/api/trucks/nearby", methods=["GET"])
+def trucks_nearby():
+    """Get all active vendors with today's location for discovery."""
+    today = date.today().isoformat()
+    dow   = date.today().weekday()  # 0=Mon
+
+    vendors = sb.table("vendors").select(
+        "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
+        "location_today, pts_per_visit, pts_per_dollar, plan_active, trial_ends_at"
+    ).execute().data or []
+
+    result = []
+    for v in vendors:
+        if not _vendor_is_active(v): continue
+        # Get schedule for today
+        sched = sb.table("vendor_schedule").select("*")\
+            .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
+        # Get avg rating
+        ratings = sb.table("reviews").select("rating")\
+            .eq("vendor_id", v["id"]).execute().data or []
+        avg_rating = round(sum(r["rating"] for r in ratings) / len(ratings), 1) if ratings else None
+        v["schedule_today"] = sched[0] if sched else None
+        v["avg_rating"]     = avg_rating
+        v["review_count"]   = len(ratings)
+        result.append(v)
+
+    return ok(result)
+
+
+# ══════════════════════════════════════════════════════
+#  REVIEWS & RATINGS
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/customer/review", methods=["POST"])
+def submit_review():
+    body        = request.json or {}
+    customer_id = body.get("customer_id")
+    vendor_id   = body.get("vendor_id")
+    rating      = body.get("rating")  # 1-5
+    comment     = (body.get("comment") or "").strip()[:300]
+
+    if not all([customer_id, vendor_id, rating]):
+        return err("customer_id, vendor_id, rating required")
+    if not 1 <= int(rating) <= 5:
+        return err("Rating must be 1-5")
+
+    # One review per customer per vendor — upsert
+    existing = sb.table("reviews").select("id").eq("customer_id", customer_id)\
+        .eq("vendor_id", vendor_id).execute().data
+    if existing:
+        sb.table("reviews").update({"rating": rating, "comment": comment})\
+            .eq("id", existing[0]["id"]).execute()
+    else:
+        sb.table("reviews").insert({
+            "customer_id": customer_id, "vendor_id": vendor_id,
+            "rating": rating, "comment": comment,
+        }).execute()
+
+    return ok("saved")
+
+
+@app.route("/api/truck/<slug>/reviews", methods=["GET"])
+def get_truck_reviews(slug):
+    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    if not vendor: return err("Truck not found", 404)
+    vid = vendor[0]["id"]
+    rows = sb.table("reviews").select(
+        "rating, comment, created_at, customers(name, profile_picture_url)"
+    ).eq("vendor_id", vid).order("created_at", desc=True).limit(20).execute()
+    return ok(rows.data or [])
+
+
+@app.route("/api/vendor/reviews", methods=["GET"])
+@vendor_required
+def vendor_reviews():
+    vid  = request.vendor_id
+    rows = sb.table("reviews").select(
+        "rating, comment, created_at, customers(name, profile_picture_url)"
+    ).eq("vendor_id", vid).order("created_at", desc=True).limit(50).execute()
+    data = rows.data or []
+    avg  = round(sum(r["rating"] for r in data) / len(data), 1) if data else 0
+    return ok({"reviews": data, "avg_rating": avg, "total": len(data)})
+
+
+# ══════════════════════════════════════════════════════
+#  REFERRALS
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/customer/referral-complete", methods=["POST"])
+def referral_complete():
+    """Call when a referred customer makes their first purchase."""
+    body        = request.json or {}
+    customer_id = body.get("customer_id")
+    vendor_id   = body.get("vendor_id")
+    if not customer_id: return err("customer_id required")
+
+    customer = sb.table("customers").select("referred_by, referral_rewarded")\
+        .eq("id", customer_id).execute().data
+    if not customer: return err("Customer not found", 404)
+    c = customer[0]
+
+    if c.get("referral_rewarded"): return ok("already rewarded")
+    if not c.get("referred_by"):   return ok("no referrer")
+
+    referrer_id = c["referred_by"]
+    REFERRAL_BONUS = 100
+
+    # Award bonus to referrer at this vendor if they're a member
+    if vendor_id:
+        ct = sb.table("customer_trucks").select("points_balance, points_total")\
+            .eq("customer_id", referrer_id).eq("vendor_id", vendor_id).execute().data
+        if ct:
+            sb.table("customer_trucks").update({
+                "points_balance": ct[0]["points_balance"] + REFERRAL_BONUS,
+                "points_total":   ct[0]["points_total"]   + REFERRAL_BONUS,
+            }).eq("customer_id", referrer_id).eq("vendor_id", vendor_id).execute()
+
+    # Award to new customer too
+    if vendor_id:
+        ct2 = sb.table("customer_trucks").select("points_balance, points_total")\
+            .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
+        if ct2:
+            sb.table("customer_trucks").update({
+                "points_balance": ct2[0]["points_balance"] + REFERRAL_BONUS,
+                "points_total":   ct2[0]["points_total"]   + REFERRAL_BONUS,
+            }).eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute()
+
+    sb.table("customers").update({"referral_rewarded": True})\
+        .eq("id", customer_id).execute()
+
+    return ok({"bonus_pts": REFERRAL_BONUS})
+
+
+# ══════════════════════════════════════════════════════
+#  LEADERBOARD
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/truck/<slug>/leaderboard", methods=["GET"])
+def truck_leaderboard(slug):
+    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    if not vendor: return err("Truck not found", 404)
+    vid = vendor[0]["id"]
+
+    rows = sb.table("customer_trucks").select(
+        "points_total, visit_count, customers(name, profile_picture_url)"
+    ).eq("vendor_id", vid).order("points_total", desc=True).limit(10).execute().data or []
+
+    board = []
+    for i, r in enumerate(rows):
+        cust = r.get("customers") or {}
+        board.append({
+            "rank":                i + 1,
+            "name":                cust.get("name", "Member"),
+            "profile_picture_url": cust.get("profile_picture_url"),
+            "points_total":        r.get("points_total", 0),
+            "visit_count":         r.get("visit_count", 0),
+        })
+    return ok(board)
+
+
+# ══════════════════════════════════════════════════════
+#  VENDOR SOCIAL FEED
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/vendor/posts", methods=["GET"])
+@vendor_required
+def get_posts():
+    vid  = request.vendor_id
+    rows = sb.table("vendor_posts").select("*").eq("vendor_id", vid)\
+        .order("created_at", desc=True).limit(20).execute()
+    return ok(rows.data or [])
+
+
+@app.route("/api/vendor/posts", methods=["POST"])
+@vendor_required
+def create_post():
+    body    = request.json or {}
+    vid     = request.vendor_id
+    content = (body.get("content") or "").strip()[:500]
+    image   = body.get("image_url", "")
+    emoji   = body.get("emoji", "🚚")
+
+    if not content: return err("Post content required")
+
+    row = sb.table("vendor_posts").insert({
+        "vendor_id": vid, "content": content,
+        "image_url": image, "emoji": emoji,
+    }).execute().data[0]
+    return ok(row), 201
+
+
+@app.route("/api/vendor/posts/<post_id>", methods=["DELETE"])
+@vendor_required
+def delete_post(post_id):
+    vid = request.vendor_id
+    sb.table("vendor_posts").delete().eq("id", post_id).eq("vendor_id", vid).execute()
+    return ok("deleted")
+
+
+@app.route("/api/customer/feed", methods=["GET"])
+def customer_feed():
+    """Get posts from all trucks a customer follows."""
+    customer_id = request.args.get("customer_id")
+    if not customer_id: return err("customer_id required")
+
+    trucks = sb.table("customer_trucks").select("vendor_id")\
+        .eq("customer_id", customer_id).execute().data or []
+    vids = [t["vendor_id"] for t in trucks]
+    if not vids: return ok([])
+
+    posts = []
+    for vid in vids:
+        rows = sb.table("vendor_posts").select(
+            "*, vendors(truck_name, emoji, profile_picture_url)"
+        ).eq("vendor_id", vid).order("created_at", desc=True).limit(5).execute().data or []
+        posts.extend(rows)
+
+    posts.sort(key=lambda x: x.get("created_at",""), reverse=True)
+    return ok(posts[:30])
+
+
+# ══════════════════════════════════════════════════════
+#  REVENUE ANALYTICS
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/vendor/revenue", methods=["GET"])
+@vendor_required
+def vendor_revenue():
+    vid = request.vendor_id
+
+    # Sum all awarded points from visits (pts_earned / pts_per_dollar = dollars spent)
+    vendor = sb.table("vendors").select("pts_per_dollar, pts_per_visit")\
+        .eq("id", vid).execute().data
+    pts_per_dollar = vendor[0]["pts_per_dollar"] if vendor else 10
+
+    visits = sb.table("visits").select("pts_earned, created_at")\
+        .eq("vendor_id", vid).order("created_at", desc=True).execute().data or []
+
+    total_revenue  = 0
+    this_month_rev = 0
+    this_week_rev  = 0
+    now = datetime.utcnow()
+    week_start = now - timedelta(days=now.weekday())
+    month_start = now.replace(day=1)
+
+    monthly = {}
+    for v in visits:
+        order_pts = max(0, v.get("pts_earned", 0))
+        dollars   = round(order_pts / pts_per_dollar, 2) if pts_per_dollar else 0
+        total_revenue += dollars
+        try:
+            vdate = _parse_dt(v["created_at"])
+            if vdate >= _parse_dt(week_start.isoformat()):  this_week_rev  += dollars
+            if vdate >= _parse_dt(month_start.isoformat()): this_month_rev += dollars
+            month_key = vdate.strftime("%b %Y")
+            monthly[month_key] = monthly.get(month_key, 0) + dollars
+        except: pass
+
+    return ok({
+        "total_revenue":     round(total_revenue, 2),
+        "this_week_revenue": round(this_week_rev, 2),
+        "this_month_revenue":round(this_month_rev, 2),
+        "monthly_breakdown": [{"month": k, "revenue": round(v, 2)} for k,v in sorted(monthly.items())],
+        "total_visits":      len(visits),
+        "avg_order_value":   round(total_revenue / len(visits), 2) if visits else 0,
+    })
+
+
+# ══════════════════════════════════════════════════════
+#  DISCOVERY — Public truck map
+# ══════════════════════════════════════════════════════
+
+@app.route("/api/discover", methods=["GET"])
+def discover():
+    """Public discovery — all active trucks with today's location."""
+    vendors = sb.table("vendors").select(
+        "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
+        "location_today, plan_active, trial_ends_at"
+    ).execute().data or []
+
+    result = []
+    for v in vendors:
+        if not _vendor_is_active(v): continue
+        ratings = sb.table("reviews").select("rating").eq("vendor_id", v["id"]).execute().data or []
+        member_count = sb.table("customer_trucks").select("id", count="exact")\
+            .eq("vendor_id", v["id"]).execute().count or 0
+        v["avg_rating"]   = round(sum(r["rating"] for r in ratings)/len(ratings),1) if ratings else None
+        v["review_count"] = len(ratings)
+        v["member_count"] = member_count
+        result.append(v)
+
+    return ok(result)
+
+
+# ══════════════════════════════════════════════════════
 #  RUN
 # ══════════════════════════════════════════════════════
 
