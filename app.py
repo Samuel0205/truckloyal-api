@@ -130,50 +130,36 @@ def vendor_active_required(f):
     return decorated
 
 
-def _parse_dt(iso_str: str):
-    """Parse ISO datetime string, always returning timezone-naive UTC datetime."""
-    if not iso_str:
-        return None
-    # Remove Z and +00:00 suffixes, strip microseconds if needed
-    s = iso_str.replace("Z", "").replace("+00:00", "").split("+")[0].strip()
-    try:
-        return datetime.fromisoformat(s)
-    except Exception:
-        return None
-
-
 def _vendor_is_active(v: dict) -> bool:
     """Return True if vendor should have access."""
     now = datetime.utcnow()
+
+    # Active paid plan
     if v.get("plan_active"):
         return True
-    trial = _parse_dt(v.get("trial_ends_at"))
-    if trial and trial > now:
-        return True
-    promo = _parse_dt(v.get("promo_expires_at"))
-    if promo and promo > now:
-        return True
-    failed = _parse_dt(v.get("payment_failed_at"))
-    if failed and (now - failed).days <= GRACE_PERIOD_DAYS:
-        return True
+
+    # Within free trial
+    trial = v.get("trial_ends_at")
+    if trial:
+        trial_dt = datetime.fromisoformat(trial.replace("Z", ""))
+        if trial_dt > now:
+            return True
+
+    # Within promo period
+    promo = v.get("promo_expires_at")
+    if promo:
+        promo_dt = datetime.fromisoformat(promo.replace("Z", ""))
+        if promo_dt > now:
+            return True
+
+    # Within grace period after payment failure
+    failed = v.get("payment_failed_at")
+    if failed:
+        failed_dt = datetime.fromisoformat(failed.replace("Z", ""))
+        if (now - failed_dt).days <= GRACE_PERIOD_DAYS:
+            return True
+
     return False
-
-
-def _vendor_status(v: dict) -> str:
-    """Return human-readable status string."""
-    now = datetime.utcnow()
-    if v.get("plan_active"):
-        return "active"
-    trial = _parse_dt(v.get("trial_ends_at"))
-    if trial and trial > now:
-        return "trial"
-    promo = _parse_dt(v.get("promo_expires_at"))
-    if promo and promo > now:
-        return "promo"
-    failed = _parse_dt(v.get("payment_failed_at"))
-    if failed and (now - failed).days <= GRACE_PERIOD_DAYS:
-        return "grace"
-    return "inactive"
 
 
 def gen_code() -> str:
@@ -245,7 +231,7 @@ def _calc_points(vendor: dict, order_total: float,
 def _get_customer_trucks(customer_id: str) -> list:
     ct_rows = sb.table("customer_trucks").select(
         "*, vendors(id, truck_name, tagline, emoji, slug, "
-        "color_primary, color_secondary, vendor_number, location_today, profile_picture_url)"
+        "color_primary, color_secondary, vendor_number, location_today)"
     ).eq("customer_id", customer_id).execute().data
 
     result = []
@@ -429,7 +415,7 @@ def vendor_signup():
     if len(password) < 8:
         return err("Password must be at least 8 characters")
 
-    existing = sb.table("vendors").select("id").ilike("email", email).execute()
+    existing = sb.table("vendors").select("id").eq("email", email).execute()
     if existing.data:
         return err("An account with this email already exists")
 
@@ -515,24 +501,12 @@ def vendor_login():
     email    = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
 
-    row = sb.table("vendors").select("*").ilike("email", email).execute().data
+    row = sb.table("vendors").select("*").eq("email", email).execute().data
     if not row:
-        print(f"[LOGIN FAIL] No vendor found for email: {email}")
         return err("Invalid email or password", 401)
     vendor = row[0]
-
-    pw_hash = vendor.get("password_hash")
-    if not pw_hash:
-        print(f"[LOGIN FAIL] No password_hash for vendor: {email}")
-        return err("Account setup incomplete. Please contact support.", 401)
-
-    try:
-        if not bcrypt.checkpw(password.encode(), pw_hash.encode()):
-            print(f"[LOGIN FAIL] Wrong password for: {email}")
-            return err("Invalid email or password", 401)
-    except Exception as e:
-        print(f"[LOGIN ERROR] bcrypt error for {email}: {e}")
-        return err("Login error — please contact support", 500)
+    if not bcrypt.checkpw(password.encode(), vendor["password_hash"].encode()):
+        return err("Invalid email or password", 401)
 
     is_active = _vendor_is_active(vendor)
     token     = make_vendor_token(vendor["id"])
@@ -543,6 +517,23 @@ def vendor_login():
         "is_active": is_active,
         "status":    _vendor_status(vendor),
     })
+
+
+def _vendor_status(v: dict) -> str:
+    """Return human-readable status string."""
+    if v.get("plan_active"):
+        return "active"
+    now = datetime.utcnow()
+    trial = v.get("trial_ends_at")
+    if trial and datetime.fromisoformat(trial.replace("Z","")) > now:
+        return "trial"
+    promo = v.get("promo_expires_at")
+    if promo and datetime.fromisoformat(promo.replace("Z","")) > now:
+        return "promo"
+    failed = v.get("payment_failed_at")
+    if failed and (now - datetime.fromisoformat(failed.replace("Z",""))).days <= GRACE_PERIOD_DAYS:
+        return "grace"
+    return "inactive"
 
 
 @app.route("/api/vendor/me", methods=["GET"])
@@ -559,63 +550,16 @@ def vendor_me():
 #  VENDOR — STRIPE BILLING
 # ══════════════════════════════════════════════════════
 
-@app.route("/api/vendor/create-setup-intent", methods=["POST"])
-@vendor_required
-def create_setup_intent():
-    """
-    Creates a Stripe SetupIntent so the frontend can securely
-    collect and save the vendor's card without charging immediately.
-    The card gets attached to their Stripe customer for future use.
-    """
-    vendor = sb.table("vendors").select(
-        "stripe_customer_id, email, truck_name"
-    ).eq("id", request.vendor_id).execute().data
-
-    if not vendor:
-        return err("Vendor not found", 404)
-    vendor = vendor[0]
-
-    stripe = _stripe()
-
-    try:
-        # Create Stripe customer if they don't have one yet
-        customer_id = vendor.get("stripe_customer_id")
-        if not customer_id:
-            sc = stripe.Customer.create(
-                email=vendor["email"],
-                name=vendor["truck_name"],
-                metadata={"vendor_id": request.vendor_id},
-                # Stripe will send automatic invoice emails to this address
-                invoice_settings={"default_payment_method": None}
-            )
-            customer_id = sc.id
-            sb.table("vendors").update({
-                "stripe_customer_id": customer_id
-            }).eq("id", request.vendor_id).execute()
-
-        # Create SetupIntent — this lets frontend save card without charging
-        setup_intent = stripe.SetupIntent.create(
-            customer=customer_id,
-            payment_method_types=["card"],
-            usage="off_session",  # card will be charged later automatically
-            metadata={"vendor_id": request.vendor_id}
-        )
-
-        return ok({"client_secret": setup_intent.client_secret})
-
-    except Exception as e:
-        return err(str(e))
-
-
 @app.route("/api/vendor/create-subscription", methods=["POST"])
 @vendor_required
 def create_subscription():
     """
-    Creates a Stripe subscription with 14-day trial.
-    payment_method_id comes from the confirmed SetupIntent.
+    Called after signup when vendor adds their card.
+    Creates Stripe subscription with 14-day trial.
+    Returns client_secret for frontend to confirm payment.
     """
-    body           = request.json or {}
-    payment_method = body.get("payment_method_id")
+    body            = request.json or {}
+    payment_method  = body.get("payment_method_id")
 
     if not payment_method:
         return err("payment_method_id is required")
@@ -624,34 +568,29 @@ def create_subscription():
     stripe = _stripe()
 
     try:
-        # Set as default payment method on customer
+        # Attach payment method to customer
         stripe.PaymentMethod.attach(payment_method, customer=vendor["stripe_customer_id"])
         stripe.Customer.modify(
             vendor["stripe_customer_id"],
             invoice_settings={"default_payment_method": payment_method}
         )
 
-        # Create subscription with 14-day trial — no charge today
+        # Create subscription with 14-day trial
         subscription = stripe.Subscription.create(
             customer=vendor["stripe_customer_id"],
             items=[{"price": STRIPE_PRICE_ID}],
             trial_period_days=14,
-            default_payment_method=payment_method,
             expand=["latest_invoice.payment_intent"],
-            # Automatically email invoice receipts after each payment
-            collection_method="charge_automatically",
         )
 
         sb.table("vendors").update({
             "stripe_sub_id": subscription.id,
             "plan_active":   True,
-            "payment_failed_at": None,
         }).eq("id", request.vendor_id).execute()
 
         return ok({
             "subscription_id": subscription.id,
             "status":          subscription.status,
-            "trial_end":       subscription.trial_end,
         })
 
     except Exception as e:
@@ -891,75 +830,6 @@ def update_tier(tier_id):
 
 # ── Stats ──
 
-@app.route("/api/vendor/analytics", methods=["GET"])
-@vendor_required
-def vendor_analytics():
-    vid   = request.vendor_id
-    today = date.today().isoformat()
-
-    # Basic counts
-    members      = sb.table("customer_trucks").select("id, points_balance, points_total, visit_count", count="exact").eq("vendor_id", vid).execute()
-    visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
-    visits_total = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).execute()
-    redemptions  = sb.table("redemptions").select("*, rewards(name, emoji)").eq("vendor_id", vid).neq("status", "expired").execute()
-
-    # Points stats from member data
-    member_data  = members.data or []
-    total_pts_outstanding = sum(m.get("points_balance", 0) for m in member_data)
-    total_pts_earned      = sum(m.get("points_total", 0) for m in member_data)
-    avg_pts = round(total_pts_earned / len(member_data)) if member_data else 0
-    avg_visits = round(sum(m.get("visit_count", 0) for m in member_data) / len(member_data), 1) if member_data else 0
-    active_members = len([m for m in member_data if m.get("visit_count", 0) > 0])
-
-    # Redemption breakdown by reward
-    rdm_data = redemptions.data or []
-    rdm_by_reward = {}
-    for r in rdm_data:
-        name = r.get("rewards", {}).get("name", "Unknown") if r.get("rewards") else "Unknown"
-        emoji = r.get("rewards", {}).get("emoji", "🎁") if r.get("rewards") else "🎁"
-        key = f"{emoji} {name}"
-        rdm_by_reward[key] = rdm_by_reward.get(key, 0) + 1
-
-    return ok({
-        "total_members":    members.count or 0,
-        "active_members":   active_members,
-        "visits_today":     visits_today.count or 0,
-        "visits_total":     visits_total.count or 0,
-        "total_redemptions": len(rdm_data),
-        "redemptions_by_reward": rdm_by_reward,
-        "total_pts_outstanding": total_pts_outstanding,
-        "total_pts_earned": total_pts_earned,
-        "avg_pts_per_member": avg_pts,
-        "avg_visits_per_member": avg_visits,
-    })
-
-
-@app.route("/api/vendor/members", methods=["GET"])
-@vendor_required
-def vendor_members():
-    """Get member list with stats — no personal history."""
-    vid  = request.vendor_id
-    rows = sb.table("customer_trucks").select(
-        "points_balance, points_total, visit_count, current_streak, "
-        "longest_streak, last_visit_date, "
-        "customers(name, rewards_id)"
-    ).eq("vendor_id", vid).order("points_total", desc=True).limit(100).execute()
-
-    members = []
-    for r in (rows.data or []):
-        cust = r.pop("customers", {}) or {}
-        members.append({
-            "name":           cust.get("name", "Member"),
-            "rewards_id":     cust.get("rewards_id", ""),
-            "points_balance": r.get("points_balance", 0),
-            "points_total":   r.get("points_total", 0),
-            "visit_count":    r.get("visit_count", 0),
-            "current_streak": r.get("current_streak", 0),
-            "last_visit":     r.get("last_visit_date", ""),
-        })
-    return ok(members)
-
-
 @app.route("/api/vendor/stats", methods=["GET"])
 @vendor_required
 def vendor_stats():
@@ -967,7 +837,7 @@ def vendor_stats():
     today = date.today().isoformat()
     members      = sb.table("customer_trucks").select("id", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
-    redemptions  = sb.table("redemptions").select("id", count="exact").eq("vendor_id", vid).neq("status", "expired").execute()
+    redemptions  = sb.table("redemptions").select("id", count="exact").eq("vendor_id", vid).execute()
     return ok({
         "total_members":     members.count      or 0,
         "visits_today":      visits_today.count or 0,
@@ -1124,7 +994,7 @@ def lookup_redemption_code(code):
 
     expires = r.get("expires_at")
     if expires:
-        if datetime.fromisoformat(expires.replace("Z","").replace("+00:00","").split("+")[0].strip()) < datetime.utcnow():
+        if datetime.fromisoformat(expires.replace("Z","")) < datetime.utcnow():
             sb.table("redemptions").update({"status":"expired"}).eq("id", r["id"]).execute()
             return err("This code has expired")
 
@@ -1173,127 +1043,6 @@ def confirm_redemption():
 #  PUBLIC — TRUCK CONFIG
 # ══════════════════════════════════════════════════════
 
-@app.route("/api/vendor/upload-picture", methods=["POST"])
-@vendor_required
-def vendor_upload_picture():
-    """
-    Accepts a base64 image, uploads to Supabase Storage,
-    saves the public URL to vendor row.
-    Falls back to storing base64 directly if storage unavailable.
-    """
-    body  = request.json or {}
-    b64   = body.get("image_b64", "")
-    if not b64:
-        return err("image_b64 required")
-
-    # Try Supabase Storage upload
-    try:
-        import base64, uuid
-        # Strip data URI prefix if present
-        if "," in b64:
-            b64 = b64.split(",", 1)[1]
-        img_bytes = base64.b64decode(b64)
-        filename  = f"vendors/{request.vendor_id}/{uuid.uuid4()}.jpg"
-        sb.storage.from_("profile-pictures").upload(
-            filename, img_bytes,
-            {"content-type": "image/jpeg", "upsert": "true"}
-        )
-        supabase_url = os.environ["SUPABASE_URL"]
-        public_url   = f"{supabase_url}/storage/v1/object/public/profile-pictures/{filename}"
-    except Exception:
-        # Fallback: store base64 data URI directly
-        public_url = "data:image/jpeg;base64," + b64 if "data:" not in b64 else b64
-
-    sb.table("vendors").update({
-        "profile_picture_url": public_url
-    }).eq("id", request.vendor_id).execute()
-
-    return ok({"url": public_url})
-
-
-@app.route("/api/customer/upload-picture", methods=["POST"])
-def customer_upload_picture():
-    """
-    Accepts a base64 image from customer, uploads to Supabase Storage,
-    saves public URL to customer row.
-    """
-    auth = request.headers.get("X-Customer-Token", "")
-    if not auth:
-        return err("Missing customer token", 401)
-    try:
-        payload     = jwt.decode(auth, JWT_SECRET, algorithms=[JWT_ALGO])
-        customer_id = payload["sub"]
-    except JWTError:
-        return err("Invalid token", 401)
-
-    body = request.json or {}
-    b64  = body.get("image_b64", "")
-    if not b64:
-        return err("image_b64 required")
-
-    try:
-        import base64, uuid
-        if "," in b64:
-            b64 = b64.split(",", 1)[1]
-        img_bytes = base64.b64decode(b64)
-        filename  = f"customers/{customer_id}/{uuid.uuid4()}.jpg"
-        sb.storage.from_("profile-pictures").upload(
-            filename, img_bytes,
-            {"content-type": "image/jpeg", "upsert": "true"}
-        )
-        supabase_url = os.environ["SUPABASE_URL"]
-        public_url   = f"{supabase_url}/storage/v1/object/public/profile-pictures/{filename}"
-    except Exception:
-        public_url = "data:image/jpeg;base64," + b64 if "data:" not in b64 else b64
-
-    sb.table("customers").update({
-        "profile_picture_url": public_url
-    }).eq("id", customer_id).execute()
-
-    return ok({"url": public_url})
-
-
-@app.route("/api/trucks/search", methods=["GET"])
-def search_trucks():
-    """Search trucks by name or vendor number."""
-    q = (request.args.get("q") or "").strip()
-    if len(q) < 1:
-        return ok([])
-
-    results = []
-
-    # Search by truck name (case-insensitive)
-    name_rows = sb.table("vendors").select(
-        "id, truck_name, emoji, slug, vendor_number, "
-        "color_primary, color_secondary, tagline, plan_active, trial_ends_at, promo_expires_at"
-    ).ilike("truck_name", f"%{q}%").limit(10).execute().data
-    results.extend(name_rows)
-
-    # Also search by vendor number if query looks like a number
-    if q.isdigit() or (q.startswith('#') and q[1:].isdigit()):
-        num = q.lstrip('#')
-        num_rows = sb.table("vendors").select(
-            "id, truck_name, emoji, slug, vendor_number, "
-            "color_primary, color_secondary, tagline, plan_active, trial_ends_at, promo_expires_at"
-        ).eq("vendor_number", num).limit(5).execute().data
-        # Avoid duplicates
-        existing_ids = {r["id"] for r in results}
-        results.extend([r for r in num_rows if r["id"] not in existing_ids])
-
-    # Filter to active vendors only
-    now = datetime.utcnow()
-    active = []
-    for r in results:
-        if _vendor_is_active(r):
-            # Remove billing fields before sending to client
-            r.pop("plan_active", None)
-            r.pop("trial_ends_at", None)
-            r.pop("promo_expires_at", None)
-            active.append(r)
-
-    return ok(active)
-
-
 @app.route("/api/truck/<slug>", methods=["GET"])
 @app.route("/api/truck/<slug>/config", methods=["GET"])
 def get_truck_config(slug):
@@ -1324,20 +1073,19 @@ def get_truck_config(slug):
 
 @app.route("/api/customer/signup", methods=["POST"])
 def customer_signup():
-    body     = request.json or {}
-    name     = (body.get("name") or "").strip()
-    email    = (body.get("email") or "").strip().lower()
-    password = body.get("password") or ""
+    body  = request.json or {}
+    name  = (body.get("name") or "").strip()
+    phone = re.sub(r'\D', '', body.get("phone") or "")
+    email = (body.get("email") or "").strip().lower()
 
     if not name:  return err("Name is required")
+    if len(phone) < 10: return err("Valid phone number is required")
     if not email or "@" not in email: return err("Valid email is required")
-    if not password or len(password) < 8:
-        return err("Password must be at least 8 characters")
 
-    if sb.table("customers").select("id").ilike("email", email).execute().data:
+    if sb.table("customers").select("id").eq("phone", phone).execute().data:
+        return err("An account with this phone number already exists. Please sign in.")
+    if sb.table("customers").select("id").eq("email", email).execute().data:
         return err("An account with this email already exists. Please sign in.")
-
-    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
     rid = gen_rewards_id()
     while sb.table("customers").select("id").eq("rewards_id", rid).execute().data:
@@ -1353,8 +1101,7 @@ def customer_signup():
         if ref: referred_by = ref[0]["id"]
 
     customer = sb.table("customers").insert({
-        "name": name, "email": email,
-        "password_hash": pw_hash,
+        "name": name, "phone": phone, "email": email,
         "rewards_id": rid, "referral_code": ref_code, "referred_by": referred_by,
     }).execute().data[0]
 
@@ -1364,32 +1111,21 @@ def customer_signup():
 
 @app.route("/api/customer/login", methods=["POST"])
 def customer_login():
-    body     = request.json or {}
-    email    = (body.get("email") or "").strip().lower()
-    password = body.get("password") or ""
+    body  = request.json or {}
+    phone = re.sub(r'\D', '', body.get("phone") or "")
+    email = (body.get("email") or "").strip().lower()
+    if not phone and not email:
+        return err("Phone number or email is required")
 
-    if not email:
-        return err("Email is required")
-    if not password:
-        return err("Password is required")
-
-    row = sb.table("customers").select("*").ilike("email", email).execute().data
-    if not row:
-        return err("No account found with that email. Please sign up.", 404)
-
-    customer = row[0]
-    pw_hash  = customer.get("password_hash")
-
-    if not pw_hash:
-        print(f"[CUSTOMER LOGIN] No password_hash for: {email}")
-        return err("Account needs password setup. Please use forgot password.", 401)
-
-    try:
-        if not bcrypt.checkpw(password.encode(), pw_hash.encode()):
-            return err("Invalid email or password", 401)
-    except Exception as e:
-        print(f"[CUSTOMER LOGIN ERROR] {e}")
-        return err("Login error — please try again", 500)
+    customer = None
+    if phone and len(phone) >= 10:
+        row = sb.table("customers").select("*").eq("phone", phone).execute().data
+        if row: customer = row[0]
+    if not customer and email:
+        row = sb.table("customers").select("*").eq("email", email).execute().data
+        if row: customer = row[0]
+    if not customer:
+        return err("No account found. Please sign up first.", 404)
 
     trucks = _get_customer_trucks(customer["id"])
     token  = make_customer_token(customer["id"])
@@ -1423,7 +1159,7 @@ def update_customer_profile():
     if body.get("email"):
         email = body["email"].strip().lower()
         if "@" not in email: return err("Valid email required")
-        clash = sb.table("customers").select("id").ilike("email", email).neq("id", customer_id).execute().data
+        clash = sb.table("customers").select("id").eq("email", email).neq("id", customer_id).execute().data
         if clash: return err("Email already in use")
         updates["email"] = email
 
@@ -1653,12 +1389,8 @@ def customer_redeem():
 
 @app.route("/api/customer/<customer_id>/history", methods=["GET"])
 def customer_history(customer_id):
-    visits = sb.table("visits").select(
-        "*, spin_results!spin_results_visit_id_fkey(prize_name, prize_value)"
-    ).eq("customer_id", customer_id).order("created_at", desc=True).limit(50).execute()
-    redemptions = sb.table("redemptions").select(
-        "*, rewards(name, emoji)"
-    ).eq("customer_id", customer_id).order("created_at", desc=True).limit(30).execute()
+    visits = sb.table("visits").select("*, spin_results(prize_name, prize_value)").eq("customer_id", customer_id).order("created_at", desc=True).limit(50).execute()
+    redemptions = sb.table("redemptions").select("*, rewards(name, emoji)").eq("customer_id", customer_id).order("created_at", desc=True).limit(30).execute()
     return ok({"visits": visits.data, "redemptions": redemptions.data})
 
 
@@ -1668,249 +1400,7 @@ def customer_trucks_list(customer_id):
 
 
 # ══════════════════════════════════════════════════════
-#  PASSWORD RESET — Vendor + Customer
-#  Secure flow:
-#  1. POST /api/auth/forgot-password  → generates token, sends email
-#  2. POST /api/auth/reset-password   → verifies token, sets new password
-# ══════════════════════════════════════════════════════
-
-def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) -> bool:
-    """Send password reset email via Gmail SMTP."""
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-
-    gmail_user = os.environ.get("GMAIL_USER", "")
-    gmail_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
-
-    if not gmail_user or not gmail_pass:
-        print(f"[EMAIL] No GMAIL_USER/GMAIL_APP_PASSWORD set.")
-        print(f"[EMAIL DEBUG] Reset URL: {reset_url}")
-        return False
-
-    truck_or_name = "your Food Truck Rewards account"
-    if user_type == "vendor":
-        truck_or_name = f"your vendor account ({name})"
-    elif name:
-        truck_or_name = f"your account ({name})"
-
-    html_body = f"""<!DOCTYPE html>
-<html>
-<body style="font-family:Arial,sans-serif;background:#FFF8F0;padding:32px;margin:0">
-  <div style="max-width:480px;margin:0 auto;background:white;border-radius:16px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.08)">
-    <div style="text-align:center;margin-bottom:24px">
-      <div style="font-size:48px">🔥</div>
-      <h1 style="color:#FF5722;font-size:22px;margin:8px 0">Food Truck Rewards</h1>
-    </div>
-    <h2 style="color:#2D1B0E;font-size:18px;margin-bottom:8px">Reset Your Password</h2>
-    <p style="color:#666;font-size:14px;line-height:1.6;margin-bottom:24px">
-      We received a request to reset the password for {truck_or_name}.
-      Click the button below to set a new password.
-    </p>
-    <div style="text-align:center;margin-bottom:24px">
-      <a href="{reset_url}"
-         style="background:#FF5722;color:white;padding:14px 32px;border-radius:10px;
-                text-decoration:none;font-weight:bold;font-size:15px;display:inline-block">
-        Reset My Password
-      </a>
-    </div>
-    <p style="color:#999;font-size:12px;line-height:1.6">
-      This link expires in <strong>1 hour</strong> and can only be used once.
-      If you did not request a password reset, safely ignore this email.
-    </p>
-    <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
-    <p style="color:#ccc;font-size:11px;text-align:center">
-      Food Truck Rewards · flavoronwheels26@gmail.com
-    </p>
-  </div>
-</body>
-</html>"""
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Reset your Food Truck Rewards password"
-        msg["From"]    = f"Food Truck Rewards <{gmail_user}>"
-        msg["To"]      = to_email
-        msg.attach(MIMEText(html_body, "html"))
-
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(gmail_user, gmail_pass)
-            server.sendmail(gmail_user, to_email, msg.as_string())
-
-        print(f"[EMAIL SUCCESS] Sent to {to_email} via Gmail")
-        return True
-
-    except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
-        print(f"[EMAIL DEBUG] Reset URL: {reset_url}")
-        return False
-
-
-@app.route("/api/auth/forgot-password", methods=["POST"])
-def forgot_password():
-    """
-    Request a password reset. Works for both vendors and customers.
-    ALWAYS returns 200 — never reveals if email exists (security).
-    """
-    body      = request.json or {}
-    email     = (body.get("email") or "").strip().lower()
-    user_type = (body.get("user_type") or "vendor")
-
-    SAFE_RESPONSE = ok("If an account with that email exists, a reset link has been sent.")
-
-    if not email or "@" not in email:
-        return err("Valid email address is required")
-    if user_type not in ("vendor", "customer"):
-        return err("user_type must be 'vendor' or 'customer'")
-
-    try:
-        table      = "vendors" if user_type == "vendor" else "customers"
-        name_field = "truck_name" if user_type == "vendor" else "name"
-        row = sb.table(table).select(f"id, email, {name_field}").ilike("email", email).execute().data
-
-        if not row:
-            return SAFE_RESPONSE
-
-        user = row[0]
-
-        # Remove old unused tokens
-        try:
-            sb.table("password_reset_tokens").delete().eq("user_id", user["id"]).eq("used", False).execute()
-        except Exception:
-            pass  # Table may not exist yet — still generate token
-
-        # Generate secure token
-        import secrets
-        raw_token  = secrets.token_urlsafe(32)
-        token_hash = bcrypt.hashpw(raw_token.encode(), bcrypt.gensalt()).decode()
-        expires_at = (datetime.utcnow() + timedelta(hours=1)).isoformat()
-
-        try:
-            sb.table("password_reset_tokens").insert({
-                "user_type":  user_type,
-                "user_id":    user["id"],
-                "email":      email,
-                "token_hash": token_hash,
-                "expires_at": expires_at,
-                "used":       False,
-            }).execute()
-        except Exception as e:
-            print(f"[RESET TOKEN] Could not store token: {e}")
-            # Return success but log — user won't get email but won't see error
-            return SAFE_RESPONSE
-
-        app_url   = os.environ.get("APP_URL", "https://truckloyal-app.onrender.com")
-        reset_url = f"{app_url}?reset_token={raw_token}&user_type={user_type}&email={email}"
-        name      = user.get(name_field, "")
-        _send_reset_email(email, reset_url, user_type, name)
-
-    except Exception as e:
-        print(f"[FORGOT PASSWORD ERROR] {e}")
-        # Always return success — never leak error details
-
-    return SAFE_RESPONSE
-
-
-@app.route("/api/auth/reset-password", methods=["POST"])
-def reset_password():
-    """
-    Complete a password reset using the token from the email link.
-    Token is verified, single-use, and expires after 1 hour.
-    """
-    body         = request.json or {}
-    raw_token    = body.get("token", "").strip()
-    new_password = body.get("new_password", "")
-    user_type    = body.get("user_type", "vendor")
-    email        = (body.get("email") or "").strip().lower()
-
-    if not raw_token:
-        return err("Reset token is required")
-    if not new_password or len(new_password) < 8:
-        return err("Password must be at least 8 characters")
-    if not email:
-        return err("Email is required")
-
-    # Find tokens for this email (not yet used, not expired)
-    now = datetime.utcnow()
-    tokens = sb.table("password_reset_tokens").select("*").ilike("email", email).eq("user_type", user_type).eq("used", False).execute().data
-
-    if not tokens:
-        return err("This reset link is invalid or has already been used", 400)
-
-    # Find matching token by checking against all hashes (usually just 1)
-    matched = None
-    for t in tokens:
-        # Check expiry first
-        exp = datetime.fromisoformat(t["expires_at"].replace("Z","").replace("+00:00","").split("+")[0].strip())
-        if exp < now:
-            continue
-        # Verify token against stored hash
-        try:
-            if bcrypt.checkpw(raw_token.encode(), t["token_hash"].encode()):
-                matched = t
-                break
-        except Exception:
-            continue
-
-    if not matched:
-        return err("This reset link is invalid or has expired. Please request a new one.", 400)
-
-    # Hash the new password
-    new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-
-    # Update password in the right table
-    table = "vendors" if user_type == "vendor" else "customers"
-    sb.table(table).update({"password_hash": new_hash}).eq("id", matched["user_id"]).execute()
-
-    # Mark token as used — single use only
-    sb.table("password_reset_tokens").update({
-        "used": True,
-    }).eq("id", matched["id"]).execute()
-
-    # Also invalidate any other tokens for this user
-    sb.table("password_reset_tokens").delete().eq("user_id", matched["user_id"]).eq("used", False).execute()
-
-    return ok("Password updated successfully. You can now sign in with your new password.")
-
-
-@app.route("/api/auth/verify-reset-token", methods=["POST"])
-def verify_reset_token():
-    """
-    Quick check if a reset token is still valid before showing the
-    reset form. Doesn't consume the token.
-    """
-    body      = request.json or {}
-    raw_token = body.get("token", "").strip()
-    email     = (body.get("email") or "").strip().lower()
-    user_type = body.get("user_type", "vendor")
-
-    if not raw_token or not email:
-        return err("Token and email are required")
-
-    now    = datetime.utcnow()
-    tokens = sb.table("password_reset_tokens").select("*").ilike("email", email).eq("user_type", user_type).eq("used", False).execute().data
-
-    for t in tokens:
-        exp = datetime.fromisoformat(t["expires_at"].replace("Z","").replace("+00:00","").split("+")[0].strip())
-        if exp < now:
-            continue
-        try:
-            if bcrypt.checkpw(raw_token.encode(), t["token_hash"].encode()):
-                minutes_left = int((exp - now).total_seconds() / 60)
-                return ok({"valid": True, "minutes_remaining": minutes_left})
-        except Exception:
-            continue
-
-    return ok({"valid": False})
-
-
-@app.route("/api/auth/forgot-password", methods=["OPTIONS"])
-@app.route("/api/auth/reset-password", methods=["OPTIONS"])
-@app.route("/api/auth/verify-reset-token", methods=["OPTIONS"])
-def auth_options():
-    return ok("ok")
-
-
+#  STRIPE WEBHOOKS
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/webhooks/stripe", methods=["POST"])
