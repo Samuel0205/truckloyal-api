@@ -2249,6 +2249,17 @@ def submit_review():
     return ok("saved")
 
 
+@app.route("/api/truck/<slug>/schedule", methods=["GET"])
+def get_truck_schedule(slug):
+    """Public — get weekly schedule for a truck."""
+    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    if not vendor: return err("Truck not found", 404)
+    vid = vendor[0]["id"]
+    rows = sb.table("vendor_schedule").select("*").eq("vendor_id", vid)\
+        .order("day_of_week").execute()
+    return ok(rows.data or [])
+
+
 @app.route("/api/truck/<slug>/reviews", methods=["GET"])
 def get_truck_reviews(slug):
     vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
