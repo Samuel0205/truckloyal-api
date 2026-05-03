@@ -699,7 +699,7 @@ def cancel_subscription():
 
 @app.route("/api/vendor/apply-promo", methods=["POST"])
 @vendor_required
-def apply_promo():
+def apply_vendor_billing_promo():
     """Apply a promo code to an existing vendor account."""
     body = request.json or {}
     code = (body.get("code") or "").strip().upper()
