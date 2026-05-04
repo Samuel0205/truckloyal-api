@@ -764,7 +764,8 @@ def delete_vendor_account():
 def update_brand():
     body    = request.json or {}
     allowed = ["truck_name", "tagline", "emoji", "color_primary",
-               "color_secondary", "profile_picture_url", "location_today"]
+               "color_secondary", "profile_picture_url", "location_today",
+               "service_states"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
     if "truck_name" in updates:
@@ -897,39 +898,41 @@ def vendor_analytics():
     vid   = request.vendor_id
     today = date.today().isoformat()
 
-    # Basic counts
     members      = sb.table("customer_trucks").select("id, points_balance, points_total, visit_count", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
     visits_total = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).execute()
-    redemptions  = sb.table("redemptions").select("*, rewards(name, emoji)").eq("vendor_id", vid).neq("status", "expired").execute()
+    redemptions  = sb.table("redemptions").select("id, reward_id, status").eq("vendor_id", vid).neq("status", "expired").execute()
 
-    # Points stats from member data
     member_data  = members.data or []
     total_pts_outstanding = sum(m.get("points_balance", 0) for m in member_data)
     total_pts_earned      = sum(m.get("points_total", 0) for m in member_data)
-    avg_pts = round(total_pts_earned / len(member_data)) if member_data else 0
+    avg_pts    = round(total_pts_earned / len(member_data)) if member_data else 0
     avg_visits = round(sum(m.get("visit_count", 0) for m in member_data) / len(member_data), 1) if member_data else 0
     active_members = len([m for m in member_data if m.get("visit_count", 0) > 0])
 
-    # Redemption breakdown by reward
+    # Get reward names separately
     rdm_data = redemptions.data or []
+    reward_ids = list({r["reward_id"] for r in rdm_data if r.get("reward_id")})
+    reward_map = {}
+    if reward_ids:
+        rewards_rows = sb.table("rewards").select("id, name, emoji").in_("id", reward_ids).execute().data or []
+        reward_map = {r["id"]: f"{r.get('emoji','🎁')} {r.get('name','Reward')}" for r in rewards_rows}
+
     rdm_by_reward = {}
     for r in rdm_data:
-        name = r.get("rewards", {}).get("name", "Unknown") if r.get("rewards") else "Unknown"
-        emoji = r.get("rewards", {}).get("emoji", "🎁") if r.get("rewards") else "🎁"
-        key = f"{emoji} {name}"
+        key = reward_map.get(r.get("reward_id"), "🎁 Unknown Reward")
         rdm_by_reward[key] = rdm_by_reward.get(key, 0) + 1
 
     return ok({
-        "total_members":    members.count or 0,
-        "active_members":   active_members,
-        "visits_today":     visits_today.count or 0,
-        "visits_total":     visits_total.count or 0,
-        "total_redemptions": len(rdm_data),
+        "total_members":         members.count or 0,
+        "active_members":        active_members,
+        "visits_today":          visits_today.count or 0,
+        "visits_total":          visits_total.count or 0,
+        "total_redemptions":     len(rdm_data),
         "redemptions_by_reward": rdm_by_reward,
         "total_pts_outstanding": total_pts_outstanding,
-        "total_pts_earned": total_pts_earned,
-        "avg_pts_per_member": avg_pts,
+        "total_pts_earned":      total_pts_earned,
+        "avg_pts_per_member":    avg_pts,
         "avg_visits_per_member": avg_visits,
     })
 
@@ -1989,14 +1992,17 @@ def send_push():
     vendor = sb.table("vendors").select("truck_name").eq("id", vid).execute().data
     truck_name = vendor[0]["truck_name"] if vendor else "Your Food Truck"
 
-    # Store notification in DB for history
-    notif = sb.table("notifications").insert({
-        "vendor_id": vid,
-        "title":     title,
-        "message":   message,
-        "type":      ntype,
-        "sent_to":   len(members),
-    }).execute().data
+    # Store notification in DB for history (fault-tolerant)
+    try:
+        sb.table("notifications").insert({
+            "vendor_id": vid,
+            "title":     title,
+            "message":   message,
+            "type":      ntype,
+            "sent_to":   len(members),
+        }).execute()
+    except Exception as e:
+        print(f"[NOTIFY LOG ERROR] {e}")  # Don't fail the push if table missing
 
     # Send via Expo Push API (free, no account needed for basic)
     tokens = []
@@ -2474,20 +2480,40 @@ def vendor_revenue():
 @app.route("/api/discover", methods=["GET"])
 def discover():
     """Public discovery — all active trucks with today's location."""
+    state_filter = request.args.get("state", "").strip().upper()
+    dow = date.today().weekday()  # Mon=0
+
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
-        "location_today, plan_active, trial_ends_at"
+        "location_today, service_states, plan_active, trial_ends_at"
     ).execute().data or []
 
     result = []
     for v in vendors:
         if not _vendor_is_active(v): continue
+
+        # Filter by state if provided
+        if state_filter:
+            states = [s.strip().upper() for s in (v.get("service_states") or "").split(",") if s.strip()]
+            if states and state_filter not in states:
+                continue
+
+        # Get today's schedule location as fallback
+        sched = sb.table("vendor_schedule").select("location, hours")\
+            .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
+        today_sched = sched[0] if sched else {}
+        display_location = v.get("location_today") or today_sched.get("location") or ""
+        display_hours    = today_sched.get("hours") or ""
+
         ratings = sb.table("reviews").select("rating").eq("vendor_id", v["id"]).execute().data or []
         member_count = sb.table("customer_trucks").select("id", count="exact")\
             .eq("vendor_id", v["id"]).execute().count or 0
-        v["avg_rating"]   = round(sum(r["rating"] for r in ratings)/len(ratings),1) if ratings else None
-        v["review_count"] = len(ratings)
-        v["member_count"] = member_count
+
+        v["display_location"] = display_location
+        v["display_hours"]    = display_hours
+        v["avg_rating"]       = round(sum(r["rating"] for r in ratings)/len(ratings),1) if ratings else None
+        v["review_count"]     = len(ratings)
+        v["member_count"]     = member_count
         result.append(v)
 
     return ok(result)
