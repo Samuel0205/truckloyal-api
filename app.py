@@ -792,11 +792,19 @@ def update_vendor_profile():
     allowed = ["owner_name", "phone", "profile_picture_url"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
+    # Email change — check uniqueness
+    if body.get("email"):
+        new_email = body["email"].strip().lower()
+        existing = sb.table("vendors").select("id").ilike("email", new_email)\
+            .neq("id", request.vendor_id).execute().data
+        if existing:
+            return err("That email is already in use by another account")
+        updates["email"] = new_email
+
     # Password change
     if body.get("new_password"):
         if len(body["new_password"]) < 8:
             return err("Password must be at least 8 characters")
-        # Verify current password
         vendor = sb.table("vendors").select("password_hash").eq("id", request.vendor_id).execute().data[0]
         if not bcrypt.checkpw((body.get("current_password","")).encode(), vendor["password_hash"].encode()):
             return err("Current password is incorrect")
