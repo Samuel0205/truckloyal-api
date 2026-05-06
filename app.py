@@ -552,6 +552,14 @@ def vendor_login():
 @vendor_required
 def vendor_me():
     vendor = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data[0]
+
+    # Auto-clear location_today if it was set on a previous day
+    last_loc_date = vendor.get("location_updated_date", "")
+    if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
+        sb.table("vendors").update({"location_today": "", "location_updated_date": date.today().isoformat()})\
+            .eq("id", request.vendor_id).execute()
+        vendor["location_today"] = ""
+
     v = _safe_vendor(vendor)
     v["status"]    = _vendor_status(vendor)
     v["is_active"] = _vendor_is_active(vendor)
@@ -770,6 +778,10 @@ def update_brand():
                "color_secondary", "profile_picture_url", "location_today",
                "service_states"]
     updates = {k: v for k, v in body.items() if k in allowed}
+
+    # Track when location_today was last set so we can auto-expire it
+    if "location_today" in updates:
+        updates["location_updated_date"] = date.today().isoformat()
 
     if "truck_name" in updates:
         base = slugify(updates["truck_name"])
@@ -1317,7 +1329,7 @@ def get_truck_config(slug):
         "color_primary, color_secondary, profile_picture_url, "
         "pts_per_visit, pts_per_dollar, pts_spin_bonus, pts_streak_mult, "
         "pts_referral, double_first_visit, streak_bonus, "
-        "plan_active, trial_ends_at, promo_expires_at, location_today"
+        "plan_active, trial_ends_at, promo_expires_at, location_today, location_updated_date"
     ).eq("slug", slug).execute().data
 
     if not row: return err("Truck not found", 404)
@@ -1325,6 +1337,11 @@ def get_truck_config(slug):
 
     if not _vendor_is_active(vendor):
         return err("This truck's loyalty program is not currently active", 403)
+
+    # Auto-clear stale location_today for customers too
+    last_loc_date = vendor.get("location_updated_date", "")
+    if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
+        vendor["location_today"] = ""
 
     rewards = sb.table("rewards").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).order("sort_order").execute().data
     prizes  = sb.table("spin_prizes").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).execute().data
