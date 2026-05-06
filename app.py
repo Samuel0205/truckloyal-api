@@ -458,6 +458,8 @@ def vendor_signup():
         # Increment uses
         sb.table("promo_codes").update({"uses": pc["uses"] + 1}).eq("id", pc["id"]).execute()
 
+    service_states = (body.get("service_states") or "").strip().upper()
+
     vendor = sb.table("vendors").insert({
         "email":           email,
         "password_hash":   pw_hash,
@@ -465,9 +467,10 @@ def vendor_signup():
         "owner_name":      owner_name,
         "slug":            slug,
         "vendor_number":   vendor_number,
+        "service_states":  service_states,
         "trial_ends_at":   trial_end,
         "promo_expires_at": promo_expires,
-        "plan_active":     False,   # becomes True once Stripe subscription is active
+        "plan_active":     False,
         "pts_per_visit":   50,
         "pts_per_dollar":  10,
         "pts_spin_bonus":  25,
@@ -2495,7 +2498,7 @@ def discover():
         # Filter by state if provided
         if state_filter:
             states = [s.strip().upper() for s in (v.get("service_states") or "").split(",") if s.strip()]
-            if states and state_filter not in states:
+            if not states or state_filter not in states:
                 continue
 
         # Get today's schedule location as fallback
