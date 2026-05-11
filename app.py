@@ -31,12 +31,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # ── CORS — restrict to your domains only ──────────────────
-CORS(app, origins=[
-    "https://truckloyal-app.onrender.com",
-    "https://foodtruckrewards.app",
-    "http://localhost:3000",
-    "http://localhost:8080",
-])
+CORS(app, origins="*")
 
 sb: Client = create_client(
     os.environ["SUPABASE_URL"],
