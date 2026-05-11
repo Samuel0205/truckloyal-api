@@ -15,9 +15,10 @@ Environment variables (Render dashboard):
   GRACE_PERIOD_DAYS          ← days before locking after failed payment (default 5)
 """
 
-import os, re, bcrypt, random, string
+import os, re, bcrypt, random, string, time
 from datetime import datetime, timedelta, date
 from functools import wraps
+from collections import defaultdict
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -28,7 +29,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, origins=["*"])
+
+# ── CORS — restrict to your domains only ──────────────────
+CORS(app, origins=[
+    "https://truckloyal-app.onrender.com",
+    "https://foodtruckrewards.app",
+    "http://localhost:3000",
+    "http://localhost:8080",
+])
 
 sb: Client = create_client(
     os.environ["SUPABASE_URL"],
@@ -42,6 +50,44 @@ GRACE_PERIOD_DAYS  = int(os.environ.get("GRACE_PERIOD_DAYS", 5))
 MONTHLY_PRICE      = 9.99
 STRIPE_PRICE_ID    = os.environ.get("STRIPE_PRICE_ID", "")
 ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "changeme123")
+
+
+# ══════════════════════════════════════════════════════
+#  RATE LIMITING — simple in-memory per IP
+# ══════════════════════════════════════════════════════
+
+_rate_store = defaultdict(list)
+
+def rate_limit(max_calls: int, window_seconds: int):
+    """Decorator — limits an endpoint to max_calls per window per IP."""
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            ip  = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+            key = f"{f.__name__}:{ip}"
+            now = time.time()
+            # Remove old entries outside the window
+            _rate_store[key] = [t for t in _rate_store[key] if now - t < window_seconds]
+            if len(_rate_store[key]) >= max_calls:
+                return jsonify({"error": "Too many requests — please slow down"}), 429
+            _rate_store[key].append(now)
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
+
+
+# ══════════════════════════════════════════════════════
+#  SECURITY HEADERS
+# ══════════════════════════════════════════════════════
+
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"]  = "nosniff"
+    response.headers["X-Frame-Options"]          = "DENY"
+    response.headers["X-XSS-Protection"]         = "1; mode=block"
+    response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
+    response.headers["Cache-Control"]             = "no-store"
+    return response
 
 
 # ══════════════════════════════════════════════════════
@@ -282,7 +328,28 @@ def health():
 #  ADMIN AUTH
 # ══════════════════════════════════════════════════════
 
+@app.route("/api/admin/reset-locations", methods=["POST"])
+def reset_locations():
+    """Reset all stale location_today fields — call this daily at midnight via cron."""
+    # Verify admin password or internal secret
+    body = request.json or {}
+    if body.get("secret") != ADMIN_PASSWORD:
+        return err("Unauthorized", 401)
+
+    today = date.today().isoformat()
+    # Clear location_today for any vendor where it was set on a previous day
+    result = sb.table("vendors")\
+        .update({"location_today": ""})\
+        .neq("location_updated_date", today)\
+        .neq("location_today", "")\
+        .execute()
+    cleared = len(result.data) if result.data else 0
+    print(f"[DAILY RESET] Cleared location_today for {cleared} vendors")
+    return ok({"cleared": cleared, "date": today})
+
+
 @app.route("/api/admin/login", methods=["POST"])
+@rate_limit(5, 900)
 def admin_login():
     body = request.json or {}
     if body.get("password") != ADMIN_PASSWORD:
@@ -346,14 +413,93 @@ def admin_get_vendor(vendor_id):
 @app.route("/api/admin/vendor/<vendor_id>/override", methods=["POST"])
 @admin_required
 def admin_override_vendor(vendor_id):
-    """Manually activate or deactivate a vendor."""
+    """Manually activate, deactivate, block or grant demo access to a vendor."""
+    body    = request.json or {}
+    updates = {}
+
+    if "plan_active" in body:
+        updates["plan_active"] = bool(body["plan_active"])
+        if updates["plan_active"]:
+            updates["payment_failed_at"] = None
+            updates["is_blocked"] = False
+
+    if "is_blocked" in body:
+        updates["is_blocked"]   = bool(body["is_blocked"])
+        updates["blocked_email"] = body.get("blocked_email", "")
+        if updates["is_blocked"]:
+            updates["plan_active"] = False
+            # Store email so they can't re-register
+            vendor = sb.table("vendors").select("email").eq("id", vendor_id).execute().data
+            if vendor:
+                updates["blocked_email"] = vendor[0]["email"]
+
+    if "is_demo" in body:
+        updates["is_demo"]    = bool(body["is_demo"])
+        updates["plan_active"] = True  # demo gets full access
+
+    if updates:
+        sb.table("vendors").update(updates).eq("id", vendor_id).execute()
+
+    action = "blocked" if body.get("is_blocked") else \
+             "unblocked" if body.get("is_blocked") == False else \
+             "demo granted" if body.get("is_demo") else \
+             "activated" if body.get("plan_active") else "deactivated"
+    return ok(f"Vendor {action}")
+
+
+@app.route("/api/admin/customer/<customer_id>/block", methods=["POST"])
+@admin_required
+def admin_block_customer(customer_id):
+    """Block a customer account permanently."""
+    body      = request.json or {}
+    is_blocked = bool(body.get("is_blocked", True))
+    customer  = sb.table("customers").select("email").eq("id", customer_id).execute().data
+    if not customer:
+        return err("Customer not found", 404)
+    sb.table("customers").update({
+        "is_blocked":    is_blocked,
+        "blocked_email": customer[0]["email"] if is_blocked else "",
+    }).eq("id", customer_id).execute()
+    return ok(f"Customer {'blocked' if is_blocked else 'unblocked'}")
+
+
+@app.route("/api/admin/customers", methods=["GET"])
+@admin_required
+def admin_get_customers():
+    """Get all customers for admin view."""
+    customers = sb.table("customers").select(
+        "id, name, email, phone, created_at, is_blocked, referral_code"
+    ).order("created_at", desc=True).limit(200).execute().data or []
+    # Get visit count per customer
+    for c in customers:
+        visits = sb.table("visits").select("id", count="exact")\
+            .eq("customer_id", c["id"]).execute()
+        c["total_visits"] = visits.count or 0
+    return ok(customers)
+
+
+# ══════════════════════════════════════════════════════
+#  DEMO VENDOR MODE
+# ══════════════════════════════════════════════════════
+
+DEMO_SECRET = os.environ.get("DEMO_SECRET", "demo2024ftr")
+
+@app.route("/api/vendor/demo-login", methods=["POST"])
+@rate_limit(10, 3600)
+def demo_vendor_login():
+    """Login as a demo vendor — no payment required."""
     body   = request.json or {}
-    active = bool(body.get("plan_active", True))
-    sb.table("vendors").update({
-        "plan_active":       active,
-        "payment_failed_at": None if active else None,
-    }).eq("id", vendor_id).execute()
-    return ok(f"Vendor {'activated' if active else 'deactivated'}")
+    secret = body.get("secret", "")
+    if secret != DEMO_SECRET:
+        return err("Invalid demo code", 401)
+
+    # Find or create demo vendor
+    demo = sb.table("vendors").select("*").eq("slug", "demo-truck").execute().data
+    if not demo:
+        return err("Demo vendor not set up — contact admin", 500)
+    v = demo[0]
+    token = make_token({"sub": v["id"], "type": "vendor", "demo": True})
+    return ok({"token": token, "vendor": _safe_vendor(v)})
 
 
 # ══════════════════════════════════════════════════════
@@ -416,6 +562,7 @@ def delete_promo_code(code_id):
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/signup", methods=["POST"])
+@rate_limit(5, 3600)
 def vendor_signup():
     body         = request.json or {}
     email        = (body.get("email") or "").strip().lower()
@@ -513,6 +660,7 @@ def vendor_signup():
 
 
 @app.route("/api/vendor/login", methods=["POST"])
+@rate_limit(10, 60)
 def vendor_login():
     body     = request.json or {}
     email    = (body.get("email") or "").strip().lower()
@@ -520,9 +668,12 @@ def vendor_login():
 
     row = sb.table("vendors").select("*").ilike("email", email).execute().data
     if not row:
-        print(f"[LOGIN FAIL] No vendor found for email: {email}")
         return err("Invalid email or password", 401)
     vendor = row[0]
+
+    # Block check
+    if vendor.get("is_blocked"):
+        return err("This account has been suspended. Contact support@foodtruckrewards.app", 403)
 
     pw_hash = vendor.get("password_hash")
     if not pw_hash:
@@ -1355,6 +1506,7 @@ def get_truck_config(slug):
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/customer/signup", methods=["POST"])
+@rate_limit(5, 3600)
 def customer_signup():
     body     = request.json or {}
     name     = (body.get("name") or "").strip()
@@ -1365,6 +1517,14 @@ def customer_signup():
     if not email or "@" not in email: return err("Valid email is required")
     if not password or len(password) < 8:
         return err("Password must be at least 8 characters")
+
+    # Check if email is blocked from re-registering
+    blocked = sb.table("customers").select("id").eq("blocked_email", email).execute().data
+    if blocked:
+        return err("This email address cannot be used to create an account.", 403)
+    blocked_v = sb.table("vendors").select("id").eq("blocked_email", email).execute().data
+    if blocked_v:
+        return err("This email address cannot be used to create an account.", 403)
 
     if sb.table("customers").select("id").ilike("email", email).execute().data:
         return err("An account with this email already exists. Please sign in.")
@@ -1395,6 +1555,7 @@ def customer_signup():
 
 
 @app.route("/api/customer/login", methods=["POST"])
+@rate_limit(10, 60)
 def customer_login():
     body     = request.json or {}
     email    = (body.get("email") or "").strip().lower()
@@ -1410,6 +1571,11 @@ def customer_login():
         return err("No account found with that email. Please sign up.", 404)
 
     customer = row[0]
+
+    # Block check
+    if customer.get("is_blocked"):
+        return err("This account has been suspended. Contact support@foodtruckrewards.app", 403)
+
     pw_hash  = customer.get("password_hash")
 
     if not pw_hash:
@@ -1779,6 +1945,7 @@ def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) 
 
 
 @app.route("/api/auth/forgot-password", methods=["POST"])
+@rate_limit(5, 3600)
 def forgot_password():
     """
     Request a password reset. Works for both vendors and customers.
@@ -2001,6 +2168,7 @@ def stripe_webhook():
 
 @app.route("/api/vendor/push", methods=["POST"])
 @vendor_required
+@rate_limit(20, 3600)
 def send_push():
     """Send push notification to all members of this truck."""
     body    = request.json or {}
