@@ -110,6 +110,12 @@ def make_admin_token() -> str:
     }, JWT_SECRET, algorithm=JWT_ALGO)
 
 
+def make_token(payload: dict) -> str:
+    """Generic token maker — merges payload with expiry."""
+    payload["exp"] = datetime.utcnow() + timedelta(days=JWT_EXPIRY)
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
 def vendor_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
