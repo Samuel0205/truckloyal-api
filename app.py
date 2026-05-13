@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, date
 from functools import wraps
 from collections import defaultdict
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from supabase import create_client, Client
 from jose import jwt, JWTError
@@ -61,7 +61,6 @@ def rate_limit(max_calls: int, window_seconds: int):
             ip  = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
             key = f"{f.__name__}:{ip}"
             now = time.time()
-            # Remove old entries outside the window
             _rate_store[key] = [t for t in _rate_store[key] if now - t < window_seconds]
             if len(_rate_store[key]) >= max_calls:
                 return jsonify({"error": "Too many requests — please slow down"}), 429
@@ -181,7 +180,6 @@ def _parse_dt(iso_str: str):
     """Parse ISO datetime string, always returning timezone-naive UTC datetime."""
     if not iso_str:
         return None
-    # Remove Z and +00:00 suffixes, strip microseconds if needed
     s = iso_str.replace("Z", "").replace("+00:00", "").split("+")[0].strip()
     try:
         return datetime.fromisoformat(s)
@@ -317,12 +315,23 @@ def _stripe():
 
 
 # ══════════════════════════════════════════════════════
-#  HEALTH
+#  HEALTH + SERVE FRONTEND APP
 # ══════════════════════════════════════════════════════
 
 @app.route("/")
 def health():
     return ok("Food Truck Rewards API v2 🚚")
+
+
+@app.route("/app")
+@app.route("/app/")
+def serve_app():
+    """
+    Serves the frontend HTML app directly from this API service.
+    This bypasses any networking restrictions on the static site.
+    The WebView in the Android app points to this URL.
+    """
+    return send_from_directory('.', 'index.html')
 
 
 # ══════════════════════════════════════════════════════
@@ -332,13 +341,11 @@ def health():
 @app.route("/api/admin/reset-locations", methods=["POST"])
 def reset_locations():
     """Reset all stale location_today fields — call this daily at midnight via cron."""
-    # Verify admin password or internal secret
     body = request.json or {}
     if body.get("secret") != ADMIN_PASSWORD:
         return err("Unauthorized", 401)
 
     today = date.today().isoformat()
-    # Clear location_today for any vendor where it was set on a previous day
     result = sb.table("vendors")\
         .update({"location_today": ""})\
         .neq("location_updated_date", today)\
@@ -429,14 +436,13 @@ def admin_override_vendor(vendor_id):
         updates["blocked_email"] = body.get("blocked_email", "")
         if updates["is_blocked"]:
             updates["plan_active"] = False
-            # Store email so they can't re-register
             vendor = sb.table("vendors").select("email").eq("id", vendor_id).execute().data
             if vendor:
                 updates["blocked_email"] = vendor[0]["email"]
 
     if "is_demo" in body:
         updates["is_demo"]    = bool(body["is_demo"])
-        updates["plan_active"] = True  # demo gets full access
+        updates["plan_active"] = True
 
     if updates:
         sb.table("vendors").update(updates).eq("id", vendor_id).execute()
@@ -471,7 +477,6 @@ def admin_get_customers():
     customers = sb.table("customers").select(
         "id, name, email, phone, created_at, is_blocked, referral_code"
     ).order("created_at", desc=True).limit(200).execute().data or []
-    # Get visit count per customer
     for c in customers:
         visits = sb.table("visits").select("id", count="exact")\
             .eq("customer_id", c["id"]).execute()
@@ -494,7 +499,6 @@ def demo_vendor_login():
     if secret != DEMO_SECRET:
         return err("Invalid demo code", 401)
 
-    # Find or create demo vendor
     demo = sb.table("vendors").select("*").eq("slug", "demo-truck").execute().data
     if not demo:
         return err("Demo vendor not set up — contact admin", 500)
@@ -520,7 +524,7 @@ def create_promo_code():
     body     = request.json or {}
     code     = (body.get("code") or "").strip().upper()
     months   = int(body.get("free_months") or 1)
-    max_uses = body.get("max_uses")          # None = unlimited
+    max_uses = body.get("max_uses")
 
     if not code:
         return err("Code is required")
@@ -591,7 +595,6 @@ def vendor_signup():
     vendor_number = gen_vendor_number()
     trial_end     = (datetime.utcnow() + timedelta(days=14)).isoformat()
 
-    # Handle promo code
     promo_expires = None
     if promo_code:
         pc = sb.table("promo_codes").select("*").eq("code", promo_code).eq("is_active", True).execute().data
@@ -603,7 +606,6 @@ def vendor_signup():
             return err("This promo code has reached its maximum uses")
         months = pc.get("free_months", 1)
         promo_expires = (datetime.utcnow() + timedelta(days=30 * months)).isoformat()
-        # Increment uses
         sb.table("promo_codes").update({"uses": pc["uses"] + 1}).eq("id", pc["id"]).execute()
 
     service_states = (body.get("service_states") or "").strip().upper()
@@ -631,13 +633,11 @@ def vendor_signup():
         "referral_bonus":  True,
     }).execute().data[0]
 
-    # Seed defaults
     try:
         sb.rpc("seed_vendor_defaults", {"v_id": vendor["id"]}).execute()
     except Exception:
         pass
 
-    # Create Stripe customer
     stripe_customer_id = None
     try:
         stripe = _stripe()
@@ -649,7 +649,7 @@ def vendor_signup():
         stripe_customer_id = sc.id
         sb.table("vendors").update({"stripe_customer_id": sc.id}).eq("id", vendor["id"]).execute()
     except Exception:
-        pass  # Stripe optional during development
+        pass
 
     token = make_vendor_token(vendor["id"])
     return ok({
@@ -672,7 +672,6 @@ def vendor_login():
         return err("Invalid email or password", 401)
     vendor = row[0]
 
-    # Block check
     if vendor.get("is_blocked"):
         return err("This account has been suspended. Contact support@foodtruckrewards.app", 403)
 
@@ -705,7 +704,6 @@ def vendor_login():
 def vendor_me():
     vendor = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data[0]
 
-    # Auto-clear location_today if it was set on a previous day
     last_loc_date = vendor.get("location_updated_date", "")
     if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
         sb.table("vendors").update({"location_today": "", "location_updated_date": date.today().isoformat()})\
@@ -725,11 +723,6 @@ def vendor_me():
 @app.route("/api/vendor/create-setup-intent", methods=["POST"])
 @vendor_required
 def create_setup_intent():
-    """
-    Creates a Stripe SetupIntent so the frontend can securely
-    collect and save the vendor's card without charging immediately.
-    The card gets attached to their Stripe customer for future use.
-    """
     vendor = sb.table("vendors").select(
         "stripe_customer_id, email, truck_name"
     ).eq("id", request.vendor_id).execute().data
@@ -741,14 +734,12 @@ def create_setup_intent():
     stripe = _stripe()
 
     try:
-        # Create Stripe customer if they don't have one yet
         customer_id = vendor.get("stripe_customer_id")
         if not customer_id:
             sc = stripe.Customer.create(
                 email=vendor["email"],
                 name=vendor["truck_name"],
                 metadata={"vendor_id": request.vendor_id},
-                # Stripe will send automatic invoice emails to this address
                 invoice_settings={"default_payment_method": None}
             )
             customer_id = sc.id
@@ -756,11 +747,10 @@ def create_setup_intent():
                 "stripe_customer_id": customer_id
             }).eq("id", request.vendor_id).execute()
 
-        # Create SetupIntent — this lets frontend save card without charging
         setup_intent = stripe.SetupIntent.create(
             customer=customer_id,
             payment_method_types=["card"],
-            usage="off_session",  # card will be charged later automatically
+            usage="off_session",
             metadata={"vendor_id": request.vendor_id}
         )
 
@@ -773,10 +763,6 @@ def create_setup_intent():
 @app.route("/api/vendor/create-subscription", methods=["POST"])
 @vendor_required
 def create_subscription():
-    """
-    Creates a Stripe subscription with 14-day trial.
-    payment_method_id comes from the confirmed SetupIntent.
-    """
     body           = request.json or {}
     payment_method = body.get("payment_method_id")
 
@@ -787,21 +773,18 @@ def create_subscription():
     stripe = _stripe()
 
     try:
-        # Set as default payment method on customer
         stripe.PaymentMethod.attach(payment_method, customer=vendor["stripe_customer_id"])
         stripe.Customer.modify(
             vendor["stripe_customer_id"],
             invoice_settings={"default_payment_method": payment_method}
         )
 
-        # Create subscription with 14-day trial — no charge today
         subscription = stripe.Subscription.create(
             customer=vendor["stripe_customer_id"],
             items=[{"price": STRIPE_PRICE_ID}],
             trial_period_days=14,
             default_payment_method=payment_method,
             expand=["latest_invoice.payment_intent"],
-            # Automatically email invoice receipts after each payment
             collection_method="charge_automatically",
         )
 
@@ -824,13 +807,12 @@ def create_subscription():
 @app.route("/api/vendor/billing-portal", methods=["POST"])
 @vendor_required
 def billing_portal():
-    """Return Stripe billing portal URL for vendor to manage payment."""
     vendor = sb.table("vendors").select("stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
     stripe = _stripe()
     try:
         session = stripe.billing_portal.Session.create(
             customer=vendor["stripe_customer_id"],
-            return_url="https://truckloyal-app.onrender.com",
+            return_url="https://truckloyal-api.onrender.com/app",
         )
         return ok({"url": session.url})
     except Exception as e:
@@ -840,7 +822,6 @@ def billing_portal():
 @app.route("/api/vendor/cancel-subscription", methods=["POST"])
 @vendor_required
 def cancel_subscription():
-    """Cancel at end of current billing period."""
     vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
     stripe = _stripe()
     try:
@@ -855,7 +836,6 @@ def cancel_subscription():
         }).eq("id", request.vendor_id).execute()
         return ok("Subscription cancelled. You have access until the end of your billing period.")
     except Exception as e:
-        # Cancel locally even if Stripe fails
         sb.table("vendors").update({"plan_active": False}).eq("id", request.vendor_id).execute()
         return ok("Account cancelled.")
 
@@ -863,7 +843,6 @@ def cancel_subscription():
 @app.route("/api/vendor/apply-promo", methods=["POST"])
 @vendor_required
 def apply_vendor_billing_promo():
-    """Apply a promo code to an existing vendor account."""
     body = request.json or {}
     code = (body.get("code") or "").strip().upper()
 
@@ -896,7 +875,6 @@ def apply_vendor_billing_promo():
 @app.route("/api/vendor/delete-account", methods=["DELETE"])
 @vendor_required
 def delete_vendor_account():
-    """Permanently delete vendor account and all data."""
     body     = request.json or {}
     confirm  = body.get("confirm")
 
@@ -905,7 +883,6 @@ def delete_vendor_account():
 
     vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
 
-    # Cancel Stripe subscription
     try:
         stripe = _stripe()
         if vendor.get("stripe_sub_id"):
@@ -913,7 +890,6 @@ def delete_vendor_account():
     except Exception:
         pass
 
-    # Delete vendor (cascades to rewards, prizes, tiers, visits, redemptions)
     sb.table("vendors").delete().eq("id", request.vendor_id).execute()
     return ok("Account permanently deleted")
 
@@ -931,7 +907,6 @@ def update_brand():
                "service_states"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
-    # Track when location_today was last set so we can auto-expire it
     if "location_today" in updates:
         updates["location_updated_date"] = date.today().isoformat()
 
@@ -951,12 +926,10 @@ def update_brand():
 @app.route("/api/vendor/profile", methods=["PATCH"])
 @vendor_required
 def update_vendor_profile():
-    """Update vendor owner profile details."""
     body    = request.json or {}
     allowed = ["owner_name", "phone", "profile_picture_url"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
-    # Email change — check uniqueness
     if body.get("email"):
         new_email = body["email"].strip().lower()
         existing = sb.table("vendors").select("id").ilike("email", new_email)\
@@ -965,7 +938,6 @@ def update_vendor_profile():
             return err("That email is already in use by another account")
         updates["email"] = new_email
 
-    # Password change
     if body.get("new_password"):
         if len(body["new_password"]) < 8:
             return err("Password must be at least 8 characters")
@@ -1085,7 +1057,6 @@ def vendor_analytics():
     avg_visits = round(sum(m.get("visit_count", 0) for m in member_data) / len(member_data), 1) if member_data else 0
     active_members = len([m for m in member_data if m.get("visit_count", 0) > 0])
 
-    # Get reward names separately
     rdm_data = redemptions.data or []
     reward_ids = list({r["reward_id"] for r in rdm_data if r.get("reward_id")})
     reward_map = {}
@@ -1115,7 +1086,6 @@ def vendor_analytics():
 @app.route("/api/vendor/members", methods=["GET"])
 @vendor_required
 def vendor_members():
-    """Get member list with stats — no personal history."""
     vid  = request.vendor_id
     rows = sb.table("customer_trucks").select(
         "points_balance, points_total, visit_count, current_streak, "
@@ -1175,7 +1145,6 @@ def find_customer():
         row = sb.table("customers").select("*").eq("rewards_id", rid).execute().data
         if row: customer = row[0]
     elif number:
-        # Find by rewards number (same as rewards_id lookup)
         row = sb.table("customers").select("*").eq("rewards_id", number.upper()).execute().data
         if row: customer = row[0]
 
@@ -1225,7 +1194,6 @@ def award_points():
         already_visited = (last_date == today)
 
         if already_visited:
-            # Only award order pts, no visit bonus
             order_pts = int(order_total * (vendor.get("pts_per_dollar") or 10))
             if order_pts <= 0:
                 return err("Already awarded visit points today. Enter an order total to award order points.", 409)
@@ -1349,26 +1317,19 @@ def confirm_redemption():
 
 
 # ══════════════════════════════════════════════════════
-#  PUBLIC — TRUCK CONFIG
+#  PUBLIC — TRUCK CONFIG & PICTURES
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/upload-picture", methods=["POST"])
 @vendor_required
 def vendor_upload_picture():
-    """
-    Accepts a base64 image, uploads to Supabase Storage,
-    saves the public URL to vendor row.
-    Falls back to storing base64 directly if storage unavailable.
-    """
     body  = request.json or {}
     b64   = body.get("image_b64", "")
     if not b64:
         return err("image_b64 required")
 
-    # Try Supabase Storage upload
     try:
         import base64, uuid
-        # Strip data URI prefix if present
         if "," in b64:
             b64 = b64.split(",", 1)[1]
         img_bytes = base64.b64decode(b64)
@@ -1380,7 +1341,6 @@ def vendor_upload_picture():
         supabase_url = os.environ["SUPABASE_URL"]
         public_url   = f"{supabase_url}/storage/v1/object/public/profile-pictures/{filename}"
     except Exception:
-        # Fallback: store base64 data URI directly
         public_url = "data:image/jpeg;base64," + b64 if "data:" not in b64 else b64
 
     sb.table("vendors").update({
@@ -1392,10 +1352,6 @@ def vendor_upload_picture():
 
 @app.route("/api/customer/upload-picture", methods=["POST"])
 def customer_upload_picture():
-    """
-    Accepts a base64 image from customer, uploads to Supabase Storage,
-    saves public URL to customer row.
-    """
     auth = request.headers.get("X-Customer-Token", "")
     if not auth:
         return err("Missing customer token", 401)
@@ -1434,37 +1390,31 @@ def customer_upload_picture():
 
 @app.route("/api/trucks/search", methods=["GET"])
 def search_trucks():
-    """Search trucks by name or vendor number."""
     q = (request.args.get("q") or "").strip()
     if len(q) < 1:
         return ok([])
 
     results = []
 
-    # Search by truck name (case-insensitive)
     name_rows = sb.table("vendors").select(
         "id, truck_name, emoji, slug, vendor_number, "
         "color_primary, color_secondary, tagline, plan_active, trial_ends_at, promo_expires_at"
     ).ilike("truck_name", f"%{q}%").limit(10).execute().data
     results.extend(name_rows)
 
-    # Also search by vendor number if query looks like a number
     if q.isdigit() or (q.startswith('#') and q[1:].isdigit()):
         num = q.lstrip('#')
         num_rows = sb.table("vendors").select(
             "id, truck_name, emoji, slug, vendor_number, "
             "color_primary, color_secondary, tagline, plan_active, trial_ends_at, promo_expires_at"
         ).eq("vendor_number", num).limit(5).execute().data
-        # Avoid duplicates
         existing_ids = {r["id"] for r in results}
         results.extend([r for r in num_rows if r["id"] not in existing_ids])
 
-    # Filter to active vendors only
     now = datetime.utcnow()
     active = []
     for r in results:
         if _vendor_is_active(r):
-            # Remove billing fields before sending to client
             r.pop("plan_active", None)
             r.pop("trial_ends_at", None)
             r.pop("promo_expires_at", None)
@@ -1490,7 +1440,6 @@ def get_truck_config(slug):
     if not _vendor_is_active(vendor):
         return err("This truck's loyalty program is not currently active", 403)
 
-    # Auto-clear stale location_today for customers too
     last_loc_date = vendor.get("location_updated_date", "")
     if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
         vendor["location_today"] = ""
@@ -1519,7 +1468,6 @@ def customer_signup():
     if not password or len(password) < 8:
         return err("Password must be at least 8 characters")
 
-    # Check if email is blocked from re-registering
     blocked = sb.table("customers").select("id").eq("blocked_email", email).execute().data
     if blocked:
         return err("This email address cannot be used to create an account.", 403)
@@ -1573,7 +1521,6 @@ def customer_login():
 
     customer = row[0]
 
-    # Block check
     if customer.get("is_blocked"):
         return err("This account has been suspended. Contact support@foodtruckrewards.app", 403)
 
@@ -1597,7 +1544,6 @@ def customer_login():
 
 @app.route("/api/customer/profile", methods=["PATCH"])
 def update_customer_profile():
-    """Update customer profile. Auth via X-Customer-Token header."""
     auth = request.headers.get("X-Customer-Token", "")
     if not auth:
         return err("Missing customer token", 401)
@@ -1611,7 +1557,6 @@ def update_customer_profile():
     allowed = ["name", "profile_picture_url", "birthday"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
-    # Phone/email change with uniqueness check
     if body.get("phone"):
         phone = re.sub(r'\D', '', body["phone"])
         if len(phone) < 10: return err("Valid phone number required")
@@ -1774,7 +1719,6 @@ def record_visit():
         "pts_earned": total_pts, "streak_day": new_streak, "awarded_by": "customer",
     }).execute().data[0]
 
-    # Spin
     prizes = sb.table("spin_prizes").select("*").eq("vendor_id", vendor_id).eq("is_active", True).execute().data
     spin_result = None
     if prizes:
@@ -1867,10 +1811,7 @@ def customer_trucks_list(customer_id):
 
 
 # ══════════════════════════════════════════════════════
-#  PASSWORD RESET — Vendor + Customer
-#  Secure flow:
-#  1. POST /api/auth/forgot-password  → generates token, sends email
-#  2. POST /api/auth/reset-password   → verifies token, sets new password
+#  PASSWORD RESET
 # ══════════════════════════════════════════════════════
 
 def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) -> bool:
@@ -1948,10 +1889,6 @@ def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) 
 @app.route("/api/auth/forgot-password", methods=["POST"])
 @rate_limit(5, 3600)
 def forgot_password():
-    """
-    Request a password reset. Works for both vendors and customers.
-    ALWAYS returns 200 — never reveals if email exists (security).
-    """
     body      = request.json or {}
     email     = (body.get("email") or "").strip().lower()
     user_type = (body.get("user_type") or "vendor")
@@ -1973,13 +1910,11 @@ def forgot_password():
 
         user = row[0]
 
-        # Remove old unused tokens
         try:
             sb.table("password_reset_tokens").delete().eq("user_id", user["id"]).eq("used", False).execute()
         except Exception:
-            pass  # Table may not exist yet — still generate token
+            pass
 
-        # Generate secure token
         import secrets
         raw_token  = secrets.token_urlsafe(32)
         token_hash = bcrypt.hashpw(raw_token.encode(), bcrypt.gensalt()).decode()
@@ -1996,27 +1931,22 @@ def forgot_password():
             }).execute()
         except Exception as e:
             print(f"[RESET TOKEN] Could not store token: {e}")
-            # Return success but log — user won't get email but won't see error
             return SAFE_RESPONSE
 
-        app_url   = os.environ.get("APP_URL", "https://truckloyal-app.onrender.com")
+        # Reset link points to the API-served app URL
+        app_url   = os.environ.get("APP_URL", "https://truckloyal-api.onrender.com/app")
         reset_url = f"{app_url}?reset_token={raw_token}&user_type={user_type}&email={email}"
         name      = user.get(name_field, "")
         _send_reset_email(email, reset_url, user_type, name)
 
     except Exception as e:
         print(f"[FORGOT PASSWORD ERROR] {e}")
-        # Always return success — never leak error details
 
     return SAFE_RESPONSE
 
 
 @app.route("/api/auth/reset-password", methods=["POST"])
 def reset_password():
-    """
-    Complete a password reset using the token from the email link.
-    Token is verified, single-use, and expires after 1 hour.
-    """
     body         = request.json or {}
     raw_token    = body.get("token", "").strip()
     new_password = body.get("new_password", "")
@@ -2030,21 +1960,17 @@ def reset_password():
     if not email:
         return err("Email is required")
 
-    # Find tokens for this email (not yet used, not expired)
     now = datetime.utcnow()
     tokens = sb.table("password_reset_tokens").select("*").ilike("email", email).eq("user_type", user_type).eq("used", False).execute().data
 
     if not tokens:
         return err("This reset link is invalid or has already been used", 400)
 
-    # Find matching token by checking against all hashes (usually just 1)
     matched = None
     for t in tokens:
-        # Check expiry first
         exp = datetime.fromisoformat(t["expires_at"].replace("Z","").replace("+00:00","").split("+")[0].strip())
         if exp < now:
             continue
-        # Verify token against stored hash
         try:
             if bcrypt.checkpw(raw_token.encode(), t["token_hash"].encode()):
                 matched = t
@@ -2055,19 +1981,15 @@ def reset_password():
     if not matched:
         return err("This reset link is invalid or has expired. Please request a new one.", 400)
 
-    # Hash the new password
     new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
 
-    # Update password in the right table
     table = "vendors" if user_type == "vendor" else "customers"
     sb.table(table).update({"password_hash": new_hash}).eq("id", matched["user_id"]).execute()
 
-    # Mark token as used — single use only
     sb.table("password_reset_tokens").update({
         "used": True,
     }).eq("id", matched["id"]).execute()
 
-    # Also invalidate any other tokens for this user
     sb.table("password_reset_tokens").delete().eq("user_id", matched["user_id"]).eq("used", False).execute()
 
     return ok("Password updated successfully. You can now sign in with your new password.")
@@ -2075,10 +1997,6 @@ def reset_password():
 
 @app.route("/api/auth/verify-reset-token", methods=["POST"])
 def verify_reset_token():
-    """
-    Quick check if a reset token is still valid before showing the
-    reset form. Doesn't consume the token.
-    """
     body      = request.json or {}
     raw_token = body.get("token", "").strip()
     email     = (body.get("email") or "").strip().lower()
@@ -2111,6 +2029,8 @@ def auth_options():
     return ok("ok")
 
 
+# ══════════════════════════════════════════════════════
+#  STRIPE WEBHOOKS
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/webhooks/stripe", methods=["POST"])
@@ -2147,14 +2067,12 @@ def stripe_webhook():
         }).eq("stripe_customer_id", obj["customer"]).execute()
 
     elif etype == "invoice.payment_failed":
-        # Start grace period clock
         sb.table("vendors").update({
             "plan_active":        False,
             "payment_failed_at":  datetime.utcnow().isoformat(),
         }).eq("stripe_customer_id", obj["customer"]).execute()
 
     elif etype == "invoice.payment_succeeded":
-        # Clear grace period
         sb.table("vendors").update({
             "plan_active":        True,
             "payment_failed_at":  None,
@@ -2171,17 +2089,15 @@ def stripe_webhook():
 @vendor_required
 @rate_limit(20, 3600)
 def send_push():
-    """Send push notification to all members of this truck."""
     body    = request.json or {}
     vid     = request.vendor_id
     title   = (body.get("title") or "").strip()
     message = (body.get("message") or "").strip()
-    ntype   = body.get("type", "broadcast")  # broadcast | promo | location
+    ntype   = body.get("type", "broadcast")
 
     if not title or not message:
         return err("Title and message are required")
 
-    # Get all customers for this vendor with push tokens
     members = sb.table("customer_trucks").select(
         "customer_id, customers(push_token, name)"
     ).eq("vendor_id", vid).execute().data or []
@@ -2189,7 +2105,6 @@ def send_push():
     vendor = sb.table("vendors").select("truck_name").eq("id", vid).execute().data
     truck_name = vendor[0]["truck_name"] if vendor else "Your Food Truck"
 
-    # Store notification in DB for history (fault-tolerant)
     try:
         sb.table("notifications").insert({
             "vendor_id": vid,
@@ -2199,9 +2114,8 @@ def send_push():
             "sent_to":   len(members),
         }).execute()
     except Exception as e:
-        print(f"[NOTIFY LOG ERROR] {e}")  # Don't fail the push if table missing
+        print(f"[NOTIFY LOG ERROR] {e}")
 
-    # Send via Expo Push API (free, no account needed for basic)
     tokens = []
     for m in members:
         cust = m.get("customers") or {}
@@ -2236,7 +2150,6 @@ def send_push():
 @app.route("/api/vendor/notifications", methods=["GET"])
 @vendor_required
 def get_notifications():
-    """Get notification history for this vendor."""
     vid = request.vendor_id
     rows = sb.table("notifications").select("*").eq("vendor_id", vid)\
         .order("created_at", desc=True).limit(20).execute()
@@ -2245,7 +2158,6 @@ def get_notifications():
 
 @app.route("/api/customer/<customer_id>/push-token", methods=["POST"])
 def save_push_token(customer_id):
-    """Save customer's Expo push token."""
     body  = request.json or {}
     token = body.get("token", "")
     if not token:
@@ -2274,17 +2186,16 @@ def create_promo():
     vid         = request.vendor_id
     title       = (body.get("title") or "").strip()
     description = (body.get("description") or "").strip()
-    promo_type  = body.get("promo_type", "bonus_points")  # bonus_points | free_item | discount
-    value       = body.get("value", 2)   # multiplier or pts or % off
+    promo_type  = body.get("promo_type", "bonus_points")
+    value       = body.get("value", 2)
     code        = (body.get("code") or "").strip().upper()
-    expires_at  = body.get("expires_at")  # ISO string or None (today only)
+    expires_at  = body.get("expires_at")
 
     if not title: return err("Title required")
     if not code:
         import string as _s
         code = "".join(random.choices(_s.ascii_uppercase + "0123456789", k=6))
 
-    # Check code uniqueness within vendor
     existing = sb.table("promos").select("id").eq("vendor_id", vid).eq("code", code).execute().data
     if existing: return err("Promo code already exists")
 
@@ -2312,7 +2223,6 @@ def delete_promo(promo_id):
 
 @app.route("/api/truck/<slug>/promos", methods=["GET"])
 def get_truck_promos(slug):
-    """Public — get active promos for a truck."""
     vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
@@ -2324,7 +2234,6 @@ def get_truck_promos(slug):
 
 @app.route("/api/customer/apply-promo", methods=["POST"])
 def apply_promo():
-    """Customer applies a promo code at a truck."""
     body        = request.json or {}
     customer_id = body.get("customer_id")
     vendor_id   = body.get("vendor_id")
@@ -2338,16 +2247,13 @@ def apply_promo():
     if not promo: return err("Promo not found or expired", 404)
     p = promo[0]
 
-    # Check if customer already used this promo
     used = sb.table("promo_uses").select("id").eq("promo_id", p["id"])\
         .eq("customer_id", customer_id).execute().data
     if used: return err("You've already used this promo")
 
-    # Record use
     sb.table("promo_uses").insert({"promo_id": p["id"], "customer_id": customer_id, "vendor_id": vendor_id}).execute()
     sb.table("promos").update({"used_count": (p.get("used_count") or 0) + 1}).eq("id", p["id"]).execute()
 
-    # Apply bonus
     bonus_pts = 0
     if p["promo_type"] == "bonus_points":
         bonus_pts = int(p["value"])
@@ -2380,9 +2286,8 @@ def get_schedule():
 def save_schedule():
     body = request.json or {}
     vid  = request.vendor_id
-    days = body.get("days", [])  # [{day_of_week:0, location:'Downtown', start_time:'11:00', end_time:'14:00'}]
+    days = body.get("days", [])
 
-    # Delete existing and replace
     sb.table("vendor_schedule").delete().eq("vendor_id", vid).execute()
     if days:
         for d in days:
@@ -2393,9 +2298,8 @@ def save_schedule():
 
 @app.route("/api/trucks/nearby", methods=["GET"])
 def trucks_nearby():
-    """Get all active vendors with today's location for discovery."""
     today = date.today().isoformat()
-    dow   = date.today().weekday()  # 0=Mon
+    dow   = date.today().weekday()
 
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
@@ -2405,10 +2309,8 @@ def trucks_nearby():
     result = []
     for v in vendors:
         if not _vendor_is_active(v): continue
-        # Get schedule for today
         sched = sb.table("vendor_schedule").select("*")\
             .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
-        # Get avg rating
         ratings = sb.table("reviews").select("rating")\
             .eq("vendor_id", v["id"]).execute().data or []
         avg_rating = round(sum(r["rating"] for r in ratings) / len(ratings), 1) if ratings else None
@@ -2429,7 +2331,7 @@ def submit_review():
     body        = request.json or {}
     customer_id = body.get("customer_id")
     vendor_id   = body.get("vendor_id")
-    rating      = body.get("rating")  # 1-5
+    rating      = body.get("rating")
     comment     = (body.get("comment") or "").strip()[:300]
 
     if not all([customer_id, vendor_id, rating]):
@@ -2437,7 +2339,6 @@ def submit_review():
     if not 1 <= int(rating) <= 5:
         return err("Rating must be 1-5")
 
-    # One review per customer per vendor — upsert
     existing = sb.table("reviews").select("id").eq("customer_id", customer_id)\
         .eq("vendor_id", vendor_id).execute().data
     if existing:
@@ -2454,7 +2355,6 @@ def submit_review():
 
 @app.route("/api/truck/<slug>/schedule", methods=["GET"])
 def get_truck_schedule(slug):
-    """Public — get weekly schedule for a truck."""
     vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
@@ -2492,7 +2392,6 @@ def vendor_reviews():
 
 @app.route("/api/customer/referral-complete", methods=["POST"])
 def referral_complete():
-    """Call when a referred customer makes their first purchase."""
     body        = request.json or {}
     customer_id = body.get("customer_id")
     vendor_id   = body.get("vendor_id")
@@ -2509,7 +2408,6 @@ def referral_complete():
     referrer_id = c["referred_by"]
     REFERRAL_BONUS = 100
 
-    # Award bonus to referrer at this vendor if they're a member
     if vendor_id:
         ct = sb.table("customer_trucks").select("points_balance, points_total")\
             .eq("customer_id", referrer_id).eq("vendor_id", vendor_id).execute().data
@@ -2519,7 +2417,6 @@ def referral_complete():
                 "points_total":   ct[0]["points_total"]   + REFERRAL_BONUS,
             }).eq("customer_id", referrer_id).eq("vendor_id", vendor_id).execute()
 
-    # Award to new customer too
     if vendor_id:
         ct2 = sb.table("customer_trucks").select("points_balance, points_total")\
             .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
@@ -2603,7 +2500,6 @@ def delete_post(post_id):
 
 @app.route("/api/customer/feed", methods=["GET"])
 def customer_feed():
-    """Get posts from all trucks a customer follows."""
     customer_id = request.args.get("customer_id")
     if not customer_id: return err("customer_id required")
 
@@ -2632,7 +2528,6 @@ def customer_feed():
 def vendor_revenue():
     vid = request.vendor_id
 
-    # Sum all awarded points from visits (pts_earned / pts_per_dollar = dollars spent)
     vendor = sb.table("vendors").select("pts_per_dollar, pts_per_visit")\
         .eq("id", vid).execute().data
     pts_per_dollar = vendor[0]["pts_per_dollar"] if vendor else 10
@@ -2671,14 +2566,13 @@ def vendor_revenue():
 
 
 # ══════════════════════════════════════════════════════
-#  DISCOVERY — Public truck map
+#  DISCOVERY
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/discover", methods=["GET"])
 def discover():
-    """Public discovery — all active trucks with today's location."""
     state_filter = request.args.get("state", "").strip().upper()
-    dow = date.today().weekday()  # Mon=0
+    dow = date.today().weekday()
 
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
@@ -2689,13 +2583,11 @@ def discover():
     for v in vendors:
         if not _vendor_is_active(v): continue
 
-        # Filter by state if provided
         if state_filter:
             states = [s.strip().upper() for s in (v.get("service_states") or "").split(",") if s.strip()]
             if not states or state_filter not in states:
                 continue
 
-        # Get today's schedule location as fallback
         sched = sb.table("vendor_schedule").select("location, hours")\
             .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
         today_sched = sched[0] if sched else {}
