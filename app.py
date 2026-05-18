@@ -440,16 +440,11 @@ def admin_override_vendor(vendor_id):
             if vendor:
                 updates["blocked_email"] = vendor[0]["email"]
 
-    if "is_demo" in body:
-        updates["is_demo"]    = bool(body["is_demo"])
-        updates["plan_active"] = True
-
     if updates:
         sb.table("vendors").update(updates).eq("id", vendor_id).execute()
 
     action = "blocked" if body.get("is_blocked") else \
              "unblocked" if body.get("is_blocked") == False else \
-             "demo granted" if body.get("is_demo") else \
              "activated" if body.get("plan_active") else "deactivated"
     return ok(f"Vendor {action}")
 
@@ -482,30 +477,6 @@ def admin_get_customers():
             .eq("customer_id", c["id"]).execute()
         c["total_visits"] = visits.count or 0
     return ok(customers)
-
-
-# ══════════════════════════════════════════════════════
-#  DEMO VENDOR MODE
-# ══════════════════════════════════════════════════════
-
-DEMO_SECRET = os.environ.get("DEMO_SECRET", "demo2024ftr")
-
-@app.route("/api/vendor/demo-login", methods=["POST"])
-@rate_limit(10, 3600)
-def demo_vendor_login():
-    """Login as a demo vendor — no payment required."""
-    body   = request.json or {}
-    secret = body.get("secret", "")
-    if secret != DEMO_SECRET:
-        return err("Invalid demo code", 401)
-
-    demo = sb.table("vendors").select("*").eq("slug", "demo-truck").execute().data
-    if not demo:
-        return err("Demo vendor not set up — contact admin", 500)
-    v = demo[0]
-    token = make_token({"sub": v["id"], "type": "vendor", "demo": True})
-    return ok({"token": token, "vendor": _safe_vendor(v)})
-
 
 # ══════════════════════════════════════════════════════
 #  ADMIN — PROMO CODES
