@@ -334,6 +334,11 @@ def serve_app():
     return send_from_directory('.', 'index.html')
 
 
+@app.route("/styles.css")
+def serve_styles():
+    return send_from_directory('.', 'styles.css')
+
+
 # ══════════════════════════════════════════════════════
 #  ADMIN AUTH
 # ══════════════════════════════════════════════════════
