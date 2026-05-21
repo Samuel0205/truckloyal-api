@@ -880,7 +880,7 @@ def update_brand():
     body    = request.json or {}
     allowed = ["truck_name", "tagline", "emoji", "color_primary",
                "color_secondary", "profile_picture_url", "location_today",
-               "service_states"]
+               "location_zip", "home_zip", "service_states"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
     if "location_today" in updates:

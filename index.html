@@ -1544,6 +1544,7 @@ const S = {
   // Pending win from server
   pendingWin: null,
   visitPtsEarned: 0,
+  checkInBalance: 0,
   // Vendor award flow
   awardCustomer: null,
   // Vendor confirm flow
@@ -2012,7 +2013,7 @@ function debounceSaveLocation(){clearTimeout(window._locTimer);window._locTimer=
 async function saveLocation(){
   const v   = document.getElementById('v-location-input')?.value.trim()||'';
   const zip = document.getElementById('v-location-zip')?.value.trim()||'';
-  const r   = await apiPatch('/api/vendor/brand',{location_today:v, location_zip:zip, location_updated_date: new Date().toISOString().split('T')[0]});
+  const r   = await apiPatch('/api/vendor/brand',{location_today:v, location_zip:zip});
   if(r.ok){
     if(S.vendor){ S.vendor.location_today=v; S.vendor.location_zip=zip; }
     if(v) showToast('📍 Location posted — customers can see it!');
@@ -2024,7 +2025,7 @@ async function clearLocation(){
   const zip = document.getElementById('v-location-zip');
   if(el)  el.value='';
   if(zip) zip.value='';
-  const r = await apiPatch('/api/vendor/brand',{location_today:'', location_zip:'', location_updated_date: new Date().toISOString().split('T')[0]});
+  const r = await apiPatch('/api/vendor/brand',{location_today:'', location_zip:''});
   if(r.ok){
     if(S.vendor){ S.vendor.location_today=''; S.vendor.location_zip=''; }
     showToast('✅ Location cleared');
@@ -3183,6 +3184,7 @@ async function checkInAtTruck(){
   const d=r.data.data;
   S.visitPtsEarned=d.pts_earned||50;
   S.pendingWin=d.spin_result||null;
+  S.checkInBalance=d.new_balance||0;
 
   const idx=S.myTrucks.findIndex(t=>t.id===S.activeTruck.id);
   const updatedFields = {
@@ -3336,9 +3338,13 @@ function shareReferral(){
   }
 }
 
-function saveBirthday(){
+async function saveBirthday(){
   const v=document.getElementById('c-birthday')?.value;
   if(!v){showToast('Pick your birthday first');return}
+  const r=await apiPatch('/api/customer/profile',{birthday:v});
+  if(!r.ok){showToast('❌ Could not save birthday');return}
+  if(S.customer) S.customer.birthday=v;
+  closeSheet('sheet-birthday');
   showToast('🎂 Birthday saved! You\'ll get a surprise on your day.');
 }
 
@@ -3504,9 +3510,11 @@ function doSpin(){
       const wonPts=parseInt(won.prize_value||won.pts||25);
       const visitPts=S.visitPtsEarned||50;
 
-      // Update truck balance with BOTH visit pts + spin pts
-      const prevBal=S.activeTruck?.points_balance||0;
-      const newBal=prevBal+wonPts; // visit pts already added on check-in, just add spin now
+      // checkInBalance is the visit-pts-only balance captured at check-in;
+      // spin_pts were pre-credited in DB so we must not read S.activeTruck.points_balance
+      // (which may already include them if the truck data was refreshed mid-flow)
+      const prevBal=S.checkInBalance||S.activeTruck?.points_balance||0;
+      const newBal=prevBal+wonPts;
       if(S.activeTruck){
         S.activeTruck.points_balance=newBal;
         localStorage.setItem('tl_active_truck',JSON.stringify(S.activeTruck));
