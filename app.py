@@ -426,7 +426,7 @@ def admin_get_vendor(vendor_id):
 @app.route("/api/admin/vendor/<vendor_id>/override", methods=["POST"])
 @admin_required
 def admin_override_vendor(vendor_id):
-    """Manually activate, deactivate, block or grant demo access to a vendor."""
+    """Manually activate, deactivate, or block a vendor."""
     body    = request.json or {}
     updates = {}
 
@@ -875,7 +875,7 @@ def delete_vendor_account():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/brand", methods=["PATCH"])
-@vendor_required
+@vendor_active_required
 def update_brand():
     body    = request.json or {}
     allowed = ["truck_name", "tagline", "emoji", "color_primary",
@@ -900,7 +900,7 @@ def update_brand():
 
 
 @app.route("/api/vendor/profile", methods=["PATCH"])
-@vendor_required
+@vendor_active_required
 def update_vendor_profile():
     body    = request.json or {}
     allowed = ["owner_name", "phone", "profile_picture_url"]
@@ -927,7 +927,7 @@ def update_vendor_profile():
 
 
 @app.route("/api/vendor/points-config", methods=["PATCH"])
-@vendor_required
+@vendor_active_required
 def update_points_config():
     body    = request.json or {}
     allowed = ["pts_per_visit", "pts_per_dollar", "pts_spin_bonus",
@@ -941,13 +941,13 @@ def update_points_config():
 # ── Rewards / Prizes / Tiers ──
 
 @app.route("/api/vendor/rewards", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def get_rewards():
     rows = sb.table("rewards").select("*").eq("vendor_id", request.vendor_id).order("sort_order").execute()
     return ok(rows.data)
 
 @app.route("/api/vendor/rewards", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def add_reward():
     body = request.json or {}
     if not body.get("name") or not body.get("pts_required"):
@@ -963,19 +963,19 @@ def add_reward():
     return ok(row), 201
 
 @app.route("/api/vendor/rewards/<reward_id>", methods=["DELETE"])
-@vendor_required
+@vendor_active_required
 def delete_reward(reward_id):
     sb.table("rewards").delete().eq("id", reward_id).eq("vendor_id", request.vendor_id).execute()
     return ok("Deleted")
 
 @app.route("/api/vendor/prizes", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def get_prizes():
     rows = sb.table("spin_prizes").select("*").eq("vendor_id", request.vendor_id).execute()
     return ok(rows.data)
 
 @app.route("/api/vendor/prizes", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def add_prize():
     body = request.json or {}
     if not body.get("name") or not body.get("probability"):
@@ -992,19 +992,19 @@ def add_prize():
     return ok(row), 201
 
 @app.route("/api/vendor/prizes/<prize_id>", methods=["DELETE"])
-@vendor_required
+@vendor_active_required
 def delete_prize(prize_id):
     sb.table("spin_prizes").delete().eq("id", prize_id).eq("vendor_id", request.vendor_id).execute()
     return ok("Deleted")
 
 @app.route("/api/vendor/tiers", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def get_tiers():
     rows = sb.table("tiers").select("*").eq("vendor_id", request.vendor_id).order("pts_threshold").execute()
     return ok(rows.data)
 
 @app.route("/api/vendor/tiers/<tier_id>", methods=["PATCH"])
-@vendor_required
+@vendor_active_required
 def update_tier(tier_id):
     body    = request.json or {}
     allowed = ["name", "icon", "pts_threshold", "perks"]
@@ -1016,7 +1016,7 @@ def update_tier(tier_id):
 # ── Stats ──
 
 @app.route("/api/vendor/analytics", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def vendor_analytics():
     vid   = request.vendor_id
     today = date.today().isoformat()
@@ -1060,7 +1060,7 @@ def vendor_analytics():
 
 
 @app.route("/api/vendor/members", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def vendor_members():
     vid  = request.vendor_id
     rows = sb.table("customer_trucks").select(
@@ -1086,7 +1086,7 @@ def vendor_members():
 
 
 @app.route("/api/vendor/stats", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def vendor_stats():
     vid   = request.vendor_id
     today = date.today().isoformat()
@@ -1105,7 +1105,7 @@ def vendor_stats():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/find-customer", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def find_customer():
     body      = request.json or {}
     vendor_id = request.vendor_id
@@ -1141,7 +1141,7 @@ def find_customer():
 
 
 @app.route("/api/vendor/award-points", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def award_points():
     body        = request.json or {}
     vendor_id   = request.vendor_id
@@ -1230,7 +1230,7 @@ def award_points():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/redemption/<code>", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def lookup_redemption_code(code):
     code      = code.upper().strip()
     vendor_id = request.vendor_id
@@ -1264,7 +1264,7 @@ def lookup_redemption_code(code):
 
 
 @app.route("/api/vendor/confirm-redemption", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def confirm_redemption():
     body      = request.json or {}
     code      = (body.get("redemption_code") or "").upper().strip()
@@ -1297,7 +1297,7 @@ def confirm_redemption():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/upload-picture", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def vendor_upload_picture():
     body  = request.json or {}
     b64   = body.get("image_b64", "")
@@ -2062,7 +2062,7 @@ def stripe_webhook():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/push", methods=["POST"])
-@vendor_required
+@vendor_active_required
 @rate_limit(20, 3600)
 def send_push():
     body    = request.json or {}
@@ -2124,7 +2124,7 @@ def send_push():
 
 
 @app.route("/api/vendor/notifications", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def get_notifications():
     vid = request.vendor_id
     rows = sb.table("notifications").select("*").eq("vendor_id", vid)\
@@ -2147,7 +2147,7 @@ def save_push_token(customer_id):
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/promos", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def get_promos():
     vid = request.vendor_id
     rows = sb.table("promos").select("*").eq("vendor_id", vid)\
@@ -2156,7 +2156,7 @@ def get_promos():
 
 
 @app.route("/api/vendor/promos", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def create_promo():
     body        = request.json or {}
     vid         = request.vendor_id
@@ -2190,7 +2190,7 @@ def create_promo():
 
 
 @app.route("/api/vendor/promos/<promo_id>", methods=["DELETE"])
-@vendor_required
+@vendor_active_required
 def delete_promo(promo_id):
     vid = request.vendor_id
     sb.table("promos").delete().eq("id", promo_id).eq("vendor_id", vid).execute()
@@ -2249,7 +2249,7 @@ def apply_promo():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/schedule", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def get_schedule():
     vid  = request.vendor_id
     rows = sb.table("vendor_schedule").select("*").eq("vendor_id", vid)\
@@ -2258,7 +2258,7 @@ def get_schedule():
 
 
 @app.route("/api/vendor/schedule", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def save_schedule():
     body = request.json or {}
     vid  = request.vendor_id
@@ -2351,7 +2351,7 @@ def get_truck_reviews(slug):
 
 
 @app.route("/api/vendor/reviews", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def vendor_reviews():
     vid  = request.vendor_id
     rows = sb.table("reviews").select(
@@ -2440,7 +2440,7 @@ def truck_leaderboard(slug):
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/posts", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def get_posts():
     vid  = request.vendor_id
     rows = sb.table("vendor_posts").select("*").eq("vendor_id", vid)\
@@ -2449,7 +2449,7 @@ def get_posts():
 
 
 @app.route("/api/vendor/posts", methods=["POST"])
-@vendor_required
+@vendor_active_required
 def create_post():
     body    = request.json or {}
     vid     = request.vendor_id
@@ -2467,7 +2467,7 @@ def create_post():
 
 
 @app.route("/api/vendor/posts/<post_id>", methods=["DELETE"])
-@vendor_required
+@vendor_active_required
 def delete_post(post_id):
     vid = request.vendor_id
     sb.table("vendor_posts").delete().eq("id", post_id).eq("vendor_id", vid).execute()
@@ -2500,7 +2500,7 @@ def customer_feed():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/vendor/revenue", methods=["GET"])
-@vendor_required
+@vendor_active_required
 def vendor_revenue():
     vid = request.vendor_id
 

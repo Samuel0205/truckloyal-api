@@ -1070,6 +1070,8 @@
           <button class="btn btn-p" onclick="joinTruckByCode()">Join This Truck →</button>
         </div>
 
+      </div>
+    </div>
 
     <!-- CUSTOMER: PER-TRUCK DASHBOARD -->
     <div class="screen" id="s-c-truck">
@@ -1631,8 +1633,9 @@ function setMode(mode){
         return;
       }
       // If vendor has never completed billing setup, force them to card screen
+      const trialActive = S.vendor.trial_ends_at && new Date(S.vendor.trial_ends_at) > new Date();
       const needsBilling = !S.vendor.stripe_sub_id && !S.vendor.plan_active &&
-                           !S.vendor.promo_expires_at;
+                           !S.vendor.promo_expires_at && !trialActive;
       if(needsBilling && S.vScreen !== 's-v-card-setup'){
         S.vScreen='s-v-card-setup';
         show('s-v-card-setup'); renderNav([],'' );
@@ -1721,26 +1724,6 @@ function renderNav(tabs,activeId){
 /* ════════════════════════════════════
    VENDOR AUTH
 ════════════════════════════════════ */
-async function demoVendorLogin(){
-  const code = document.getElementById('v-demo-code')?.value.trim().toUpperCase();
-  const errEl = document.getElementById('v-demo-err');
-  if(!code){ showErr(errEl,'Enter your demo access code'); return; }
-  showLoad('Loading demo...');
-  const r = await apiPost('/api/vendor/demo-login', {secret: code});
-  hideLoad();
-  if(r.ok){
-    S.vendorToken = r.data.data.token;
-    S.vendor = r.data.data.vendor;
-    S.vendor.isDemo = true;
-    localStorage.setItem('tl_vtoken', S.vendorToken);
-    localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
-    showToast('🎮 Welcome to Demo Mode!');
-    setMode('vendor');
-  } else {
-    showErr(errEl, r.data?.error || 'Invalid demo code');
-  }
-}
-
 
 async function vendorLogin(){
   const email=document.getElementById('v-login-email').value.trim();
@@ -2995,7 +2978,7 @@ async function renderTruckDash(){
   if(!t) return;
 
   // Refresh per-truck data from API to ensure points are current
-  if(t.id && t.id!=='demo' && S.customer?.id){
+  if(t.id && S.customer?.id){
     try {
       const r=await apiGet('/api/customer/'+S.customer.id+'/trucks');
       if(r.ok && r.data.data){
@@ -3171,12 +3154,6 @@ async function checkInAtTruck(){
 
   const todayKey='spin_used_'+S.activeTruck.id+'_'+new Date().toDateString();
   const alreadySpun=localStorage.getItem(todayKey);
-
-  if(S.activeTruck.id==='demo'){
-    S.visitPtsEarned=50; S.pendingWin=null;
-    if(alreadySpun){showToast('✅ Already spun today! Come back tomorrow.');return}
-    goC('s-c-spin'); return;
-  }
 
   // If spin says used but points show 0, something is stale — clear and retry
   if(alreadySpun && (S.activeTruck.points_balance||0) === 0 && (S.activeTruck.visit_count||0) === 0){
