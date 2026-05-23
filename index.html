@@ -3265,6 +3265,7 @@ async function openRedeem(i){
   setText('rdm-code-inline',d.code);
   // Update balance display
   setText('ct-pts',newBal);
+  renderTruckRewards();
   openSheet('sh-redeem');
 }
 
