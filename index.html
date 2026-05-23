@@ -3676,15 +3676,19 @@ async function searchTrucks(query) {
       el.innerHTML = '<div style="text-align:center;padding:12px;color:var(--mu);font-size:13px;font-weight:600">No trucks found — try the truck code or number below</div>';
       return;
     }
-    el.innerHTML = res.data.data.map(t => `
-      <div style="display:flex;align-items:center;gap:12px;background:white;border:2px solid var(--b2);border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh1)" onclick="joinTruckFromSearch('${t.slug}','${(t.truck_name||'').replace(/'/g,"\\'")}')">
+    el.innerHTML = res.data.data.map(t => {
+      const already = S.myTrucks.find(mt => mt.id === t.id || mt.slug === t.slug);
+      return `
+      <div style="display:flex;align-items:center;gap:12px;background:white;border:2px solid ${already?'var(--brand)':'var(--b2)'};border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh1)"
+        onclick="${already ? `openTruck(${S.myTrucks.findIndex(mt=>mt.id===t.id||mt.slug===t.slug)});goC('s-c-truck')` : `joinTruckFromSearch('${t.slug}','${(t.truck_name||'').replace(/'/g,"\\'")}')` }">
         <div style="font-size:26px;width:44px;height:44px;background:var(--s2);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${t.emoji||'🚚'}</div>
         <div style="flex:1">
           <div style="font-weight:800;font-size:14px">${t.truck_name}</div>
-          <div style="font-size:12px;color:var(--mu);font-weight:600">Truck #${t.vendor_number||'–'}</div>
+          <div style="font-size:12px;color:var(--mu);font-weight:600">${already ? '✓ Already joined' : 'Truck #'+(t.vendor_number||'–')}</div>
         </div>
-        <div style="font-size:20px;color:var(--brand)">→</div>
-      </div>`).join('');
+        <div style="font-size:${already?'13px':'20px'};color:var(--brand);font-weight:700">${already?'View →':'→'}</div>
+      </div>`;
+    }).join('');
   } catch(e) {
     el.innerHTML = '<div style="text-align:center;padding:12px;color:var(--mu);font-size:13px">Search unavailable — enter the truck code below</div>';
   }
