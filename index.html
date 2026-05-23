@@ -1516,7 +1516,9 @@
 /* ════════════════════════════════════
    CONFIG
 ════════════════════════════════════ */
-const API = 'https://truckloyal-api.onrender.com';
+const API_PRIMARY  = 'https://truckloyal-api.onrender.com';
+const API_FALLBACK = 'https://truckloyal-api-production.up.railway.app';
+let   API          = API_PRIMARY;
 
 /* ════════════════════════════════════
    STATE
@@ -1590,13 +1592,28 @@ async function apiFetch(path, opts={}) {
   const headers = {'Content-Type':'application/json'};
   if (S.vendorToken) headers['Authorization'] = `Bearer ${S.vendorToken}`;
   if (S.customer?.token) headers['X-Customer-Token'] = S.customer.token;
-  try {
-    const r = await fetch(API+path, {headers,...opts});
-    const d = await r.json();
-    return {ok:r.ok, status:r.status, data:d};
-  } catch(e) {
-    return {ok:false, status:0, data:{error:'Network error'}};
+
+  const tryFetch = async (base) => {
+    try {
+      const r = await fetch(base + path, {headers, ...opts});
+      const d = await r.json();
+      return {ok: r.ok, status: r.status, data: d};
+    } catch { return null; }
+  };
+
+  let res = await tryFetch(API);
+  if (res) return res;
+
+  // Network error — try the other server and switch if it responds
+  const alt = (API === API_PRIMARY) ? API_FALLBACK : API_PRIMARY;
+  res = await tryFetch(alt);
+  if (res) {
+    API = alt;
+    showToast(alt === API_FALLBACK ? '⚠️ Switched to backup server' : '✅ Back on main server');
+    return res;
   }
+
+  return {ok: false, status: 0, data: {error: 'Network error'}};
 }
 const apiGet  = p => apiFetch(p,{method:'GET'});
 const apiPost = (p,b) => apiFetch(p,{method:'POST',body:JSON.stringify(b)});
