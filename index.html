@@ -112,6 +112,13 @@
             <input type="text" id="v-su-zip" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" pattern="[0-9]*">
             <div style="font-size:11px;color:var(--mu);margin-top:4px">Your primary area. Used to show your truck to nearby customers.</div>
           </div>
+          <div class="field">
+            <label style="display:flex;align-items:center;gap:6px">
+              Promo Code
+              <span style="font-size:11px;font-weight:500;color:var(--mu)">(optional)</span>
+            </label>
+            <input type="text" id="v-su-promo" placeholder="Enter code if you have one" autocomplete="off" style="text-transform:uppercase;letter-spacing:1px" oninput="this.value=this.value.toUpperCase()">
+          </div>
           <button class="btn btn-p" id="v-signup-btn" onclick="vendorSignup()">Continue to Payment Setup →</button>
           <div class="auth-switch">Already have an account? <span onclick="goV('s-v-login')">Sign in</span></div>
         </div>
@@ -1799,6 +1806,7 @@ async function vendorSignup(){
   const pass   = document.getElementById('v-su-pass').value;
   const states = (document.getElementById('v-su-states')?.value||'').trim().toUpperCase();
   const zip    = (document.getElementById('v-su-zip')?.value||'').trim();
+  const promo  = (document.getElementById('v-su-promo')?.value||'').trim().toUpperCase();
   const errEl  = document.getElementById('v-signup-err');
   errEl.classList.remove('show');
 
@@ -1809,7 +1817,7 @@ async function vendorSignup(){
   if(!zip||zip.length!==5||!/^\d{5}$/.test(zip)){showErr(errEl,'Enter a valid 5-digit ZIP code');return}
 
   // Store signup info — account is NOT created until payment succeeds
-  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip};
+  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, ...(promo && {promo_code:promo})};
 
   // Show trial end date
   const trialEnd = new Date();
