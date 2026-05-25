@@ -31,26 +31,30 @@
 
     <!-- VENDOR LOGIN -->
     <div class="screen on" id="s-v-login">
-      <div class="auth-wrap">
-        <div class="auth-logo">🚚</div>
-        <div class="auth-title">Vendor Login</div>
-        <div class="auth-sub">Manage your loyalty program, award points, and confirm rewards</div>
-        <div class="auth-err" id="v-login-err"></div>
-        <div class="auth-form">
-          <div class="field"><label>Email</label><input type="email" id="v-login-email" placeholder="you@yourtruck.com" autocomplete="email"></div>
-          <div class="field"><label>Password</label><input type="password" id="v-login-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')vendorLogin()"></div>
-          <button class="btn btn-p" id="v-login-btn" onclick="vendorLogin()">Sign In</button>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-            <input type="checkbox" id="v-remember-me" style="width:16px;height:16px;accent-color:var(--brand);cursor:pointer">
-            <label for="v-remember-me" style="font-size:13px;font-weight:600;color:var(--tx);cursor:pointer">Remember me</label>
-          </div>
-          <div style="text-align:center;margin-top:12px">
-            <span style="font-size:13px;color:var(--brand);font-weight:700;cursor:pointer;text-decoration:underline" onclick="goV('s-v-forgot')">Forgot password?</span>
-          </div>
-          <div class="auth-switch">No account? <span onclick="goV('s-v-signup')">Start free 14-day trial →</span></div>
+      <div class="auth-wrap" style="padding:0;background:#FF5722;justify-content:flex-start;align-items:stretch">
+        <div class="auth-header">
+          <div class="auth-logo">🚚</div>
+          <div class="auth-title">Vendor Login</div>
+          <div class="auth-sub">Manage your loyalty program, award points, and confirm rewards</div>
         </div>
-        <div style="text-align:center;margin-top:28px;font-size:10px;color:var(--fa);font-weight:600;letter-spacing:.5px">
-          Food Truck Rewards · v2.1.0
+        <div class="auth-body">
+          <div class="auth-err" id="v-login-err"></div>
+          <div class="auth-form">
+            <div class="field"><label>Email</label><input type="email" id="v-login-email" placeholder="you@yourtruck.com" autocomplete="email"></div>
+            <div class="field"><label>Password</label><input type="password" id="v-login-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')vendorLogin()"></div>
+            <button class="btn btn-p" id="v-login-btn" onclick="vendorLogin()">Sign In</button>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+              <input type="checkbox" id="v-remember-me" style="width:16px;height:16px;accent-color:var(--brand);cursor:pointer">
+              <label for="v-remember-me" style="font-size:13px;font-weight:600;color:var(--tx);cursor:pointer">Remember me</label>
+            </div>
+            <div style="text-align:center;margin-top:12px">
+              <span style="font-size:13px;color:var(--brand);font-weight:700;cursor:pointer;text-decoration:underline" onclick="goV('s-v-forgot')">Forgot password?</span>
+            </div>
+            <div class="auth-switch">No account? <span onclick="goV('s-v-signup')">Start free 14-day trial →</span></div>
+          </div>
+          <div style="text-align:center;margin-top:28px;font-size:10px;color:var(--fa);font-weight:600;letter-spacing:.5px">
+            Food Truck Rewards · v2.1.0
+          </div>
         </div>
       </div>
     </div>
@@ -928,23 +932,27 @@
 
     <!-- CUSTOMER LOGIN -->
     <div class="screen" id="s-c-login">
-      <div class="auth-wrap">
-        <div class="auth-logo">👤</div>
-        <div class="auth-title">Sign In</div>
-        <div class="auth-sub">Welcome back! Sign in with your email and password.</div>
-        <div class="auth-err" id="c-login-err"></div>
-        <div class="auth-form">
-          <div class="field"><label>Email Address</label><input type="email" id="c-login-email" placeholder="you@email.com" autocomplete="email"></div>
-          <div class="field"><label>Password</label><input type="password" id="c-login-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')customerLogin()"></div>
-          <button class="btn btn-p" id="c-login-btn" onclick="customerLogin()">Sign In</button>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
-            <input type="checkbox" id="c-remember-me" style="width:16px;height:16px;accent-color:var(--brand);cursor:pointer">
-            <label for="c-remember-me" style="font-size:13px;font-weight:600;color:var(--tx);cursor:pointer">Remember me</label>
+      <div class="auth-wrap" style="padding:0;background:#FF5722;justify-content:flex-start;align-items:stretch">
+        <div class="auth-header">
+          <div class="auth-logo">👤</div>
+          <div class="auth-title">Sign In</div>
+          <div class="auth-sub">Welcome back! Sign in with your email and password.</div>
+        </div>
+        <div class="auth-body">
+          <div class="auth-err" id="c-login-err"></div>
+          <div class="auth-form">
+            <div class="field"><label>Email Address</label><input type="email" id="c-login-email" placeholder="you@email.com" autocomplete="email"></div>
+            <div class="field"><label>Password</label><input type="password" id="c-login-pass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')customerLogin()"></div>
+            <button class="btn btn-p" id="c-login-btn" onclick="customerLogin()">Sign In</button>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+              <input type="checkbox" id="c-remember-me" style="width:16px;height:16px;accent-color:var(--brand);cursor:pointer">
+              <label for="c-remember-me" style="font-size:13px;font-weight:600;color:var(--tx);cursor:pointer">Remember me</label>
+            </div>
+            <div style="text-align:center;margin-top:12px">
+              <span style="font-size:13px;color:var(--brand);font-weight:700;cursor:pointer;text-decoration:underline" onclick="goC('s-c-forgot')">Forgot password?</span>
+            </div>
+            <div class="auth-switch">No account? <span onclick="goC('s-c-signup')">Create one free</span></div>
           </div>
-          <div style="text-align:center;margin-top:12px">
-            <span style="font-size:13px;color:var(--brand);font-weight:700;cursor:pointer;text-decoration:underline" onclick="goC('s-c-forgot')">Forgot password?</span>
-          </div>
-          <div class="auth-switch">No account? <span onclick="goC('s-c-signup')">Create one free</span></div>
         </div>
       </div>
     </div>
