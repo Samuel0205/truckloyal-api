@@ -157,11 +157,23 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .auth-switch span{color:var(--brand);cursor:pointer;font-weight:800}
 
 /* LOGIN SPLIT LAYOUT */
-.auth-header{width:100%;background:linear-gradient(145deg,#FF5722 0%,#FF7043 100%);padding:52px 28px 72px;display:flex;flex-direction:column;align-items:center;text-align:center}
-.auth-header .auth-logo{width:84px;height:84px;border-radius:24px;background:white;display:flex;align-items:center;justify-content:center;font-size:42px;box-shadow:0 10px 36px rgba(0,0,0,.22);margin-bottom:18px;filter:none;animation:float 3s ease-in-out infinite}
-.auth-header .auth-title{color:white;margin-bottom:8px;text-shadow:0 1px 4px rgba(0,0,0,.12)}
-.auth-header .auth-sub{color:rgba(255,255,255,.85);margin-bottom:0;font-weight:500}
-.auth-body{background:white;border-radius:28px 28px 0 0;margin-top:-28px;padding:30px 24px 52px;flex:1;width:100%;box-sizing:border-box;box-shadow:0 -4px 24px rgba(180,100,40,.12)}
+.auth-header{width:100%;background:linear-gradient(160deg,#FF5722 0%,#FF6F3C 60%,#FF8A65 100%);padding:44px 28px 66px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.auth-header .auth-logo{width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.2);border:2.5px solid rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:14px;filter:none;animation:float 3s ease-in-out infinite}
+.auth-header .auth-title{color:white;font-size:24px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;text-shadow:0 1px 6px rgba(0,0,0,.15)}
+.auth-header .auth-sub{color:rgba(255,255,255,.82);margin-bottom:0;font-weight:500;font-size:13px}
+.auth-tabs{display:flex;background:rgba(255,255,255,.2);border-radius:50px;padding:4px;margin-top:18px;gap:3px;width:100%;max-width:240px}
+.auth-tab{flex:1;padding:9px 0;border-radius:50px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--fb);transition:all .2s}
+.auth-tab.active{background:white;color:var(--brand);box-shadow:0 2px 10px rgba(0,0,0,.14)}
+.auth-tab.inactive{background:transparent;color:rgba(255,255,255,.85)}
+.auth-body{background:white;border-radius:28px 28px 0 0;margin-top:-28px;padding:28px 24px 52px;flex:1;width:100%;box-sizing:border-box;box-shadow:0 -4px 24px rgba(180,100,40,.12)}
+.auth-body-title{font-family:var(--fd);font-weight:900;font-size:22px;color:var(--tx);margin-bottom:4px}
+.auth-body-sub{font-size:13px;color:var(--mu);font-weight:500;margin-bottom:20px}
+.field-icon-wrap{position:relative}
+.field-icon-wrap .fi{position:absolute;left:13px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--mu);pointer-events:none;flex-shrink:0}
+.field-icon-wrap .fi-right{position:absolute;right:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--mu);cursor:pointer;padding:2px;opacity:.6}
+.field-icon-wrap input{padding-left:38px}
+.field-icon-wrap.has-right input{padding-right:42px}
+.auth-remember-row{display:flex;align-items:center;justify-content:space-between;margin:14px 0 18px}
 
 /* VENDOR HERO */
 .vh-hero{padding:24px 20px 18px;border-bottom:2px solid var(--b1);background:linear-gradient(135deg,#FF5722 0%,#FF8A65 100%);position:relative;overflow:hidden}
