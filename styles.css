@@ -204,7 +204,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .c-hero-shimmer{position:absolute;top:0;left:-100%;width:40%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,200,100,.07),transparent);animation:shimmer 3s ease-in-out infinite}
 @keyframes shimmer{0%{left:-100%}100%{left:220%}}
 .c-hero-inner{display:flex;align-items:center;gap:16px}
-.c-hero-icon{width:54px;height:54px;border-radius:16px;background:rgba(255,87,34,.1);border:1.5px solid rgba(255,87,34,.2);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0;overflow:hidden}
+.c-hero-icon{width:68px;height:68px;border-radius:18px;background:rgba(255,87,34,.1);border:1.5px solid rgba(255,87,34,.2);display:flex;align-items:center;justify-content:center;font-size:34px;flex-shrink:0;overflow:hidden}
 .c-hero-info{flex:1;min-width:0}
 .c-hero-title{font-family:var(--fd);font-weight:900;font-size:16px;color:var(--tx);margin-bottom:3px}
 .c-hero-sub{font-size:12px;color:var(--mu);margin-bottom:8px}
