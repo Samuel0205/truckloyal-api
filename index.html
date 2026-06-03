@@ -1794,11 +1794,13 @@ function closeSheet(id){document.getElementById(id).classList.remove('open')}
 /* ════════════════════════════════════
    ROUTING
 ════════════════════════════════════ */
+const AUTH_SCREENS=new Set(['s-v-login','s-c-login','s-v-forgot','s-c-forgot','s-v-reset','s-c-reset','s-v-signup','s-c-signup']);
 function show(id){
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
   const el=document.getElementById(id);
   if(el) el.classList.add('on');
   document.getElementById('scroll').scrollTop=0;
+  document.querySelector('.topbar').style.display=AUTH_SCREENS.has(id)?'none':'';
 }
 
 function setMode(mode){
