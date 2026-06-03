@@ -28,9 +28,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .scroll,#scroll{position:relative;z-index:1}
 
 .topbar{display:flex;flex-direction:row;align-items:center;justify-content:space-between;padding:8px 18px;padding-top:calc(8px + env(safe-area-inset-top,0px));background:var(--brand);flex-shrink:0;z-index:60;box-shadow:0 2px 12px rgba(255,87,34,.3)}
-.tl-logo{font-family:var(--fd);font-weight:900;font-size:16px;letter-spacing:.3px;color:white;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.2);text-align:center}
-.mode-tog{display:flex;background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);border-radius:99px;padding:3px;gap:2px}
-.mb{padding:5px 14px;border-radius:99px;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:var(--fb);transition:all .2s;background:transparent;color:rgba(255,255,255,.8);white-space:nowrap}
+.tl-logo{font-family:var(--fd);font-weight:900;font-size:14px;letter-spacing:.3px;color:white;white-space:nowrap;text-shadow:0 1px 3px rgba(0,0,0,.2);flex-shrink:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.mode-tog{display:flex;background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);border-radius:99px;padding:3px;gap:2px;flex-shrink:0}
+.mb{padding:5px 11px;border-radius:99px;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:var(--fb);transition:all .2s;background:transparent;color:rgba(255,255,255,.8);white-space:nowrap}
 .mb.on{background:white;color:var(--brand);box-shadow:var(--sh1)}
 .scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:none}
 .scroll::-webkit-scrollbar{display:none}
