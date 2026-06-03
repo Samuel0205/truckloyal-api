@@ -1804,7 +1804,7 @@ function show(id){
   const el=document.getElementById(id);
   if(el) el.classList.add('on');
   document.getElementById('scroll').scrollTop=0;
-  document.querySelector('.topbar').style.display=AUTH_SCREENS.has(id)?'none':'';
+  document.querySelector('.topbar').classList.toggle('auth-mode',AUTH_SCREENS.has(id));
 }
 
 function setMode(mode){
