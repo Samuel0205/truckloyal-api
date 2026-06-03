@@ -551,6 +551,7 @@ def vendor_signup():
     truck_name   = (body.get("truck_name") or "My Food Truck").strip()
     owner_name   = (body.get("owner_name") or "").strip()
     promo_code   = (body.get("promo_code") or "").strip().upper()
+    is_tester    = bool(body.get("is_tester", False))
 
     if not email or not password:
         return err("Email and password are required")
@@ -596,7 +597,7 @@ def vendor_signup():
         "service_states":  service_states,
         "trial_ends_at":   trial_end,
         "promo_expires_at": promo_expires,
-        "plan_active":     False,
+        "plan_active":     True if is_tester else False,
         "pts_per_visit":   50,
         "pts_per_dollar":  10,
         "pts_spin_bonus":  25,

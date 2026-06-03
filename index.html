@@ -188,6 +188,10 @@
               </label>
               <input type="text" id="v-su-promo" placeholder="Enter code if you have one" autocomplete="off" style="text-transform:uppercase;letter-spacing:1px" oninput="this.value=this.value.toUpperCase()">
             </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,87,34,.06);border:1.5px dashed rgba(255,87,34,.3);border-radius:12px;margin-bottom:4px">
+              <input type="checkbox" id="v-su-tester" style="width:18px;height:18px;accent-color:var(--brand);cursor:pointer;flex-shrink:0">
+              <label for="v-su-tester" style="font-size:13px;font-weight:700;color:var(--tx);cursor:pointer;line-height:1.3">🧪 Tester account <span style="color:var(--mu);font-weight:500;font-size:12px">— skip payment, instant access</span></label>
+            </div>
             <button class="btn btn-p" id="v-signup-btn" onclick="vendorSignup()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Continue to Payment Setup →</button>
             <div class="auth-switch">Already have an account? <span onclick="goV('s-v-login')">Sign in</span></div>
           </div>
@@ -1963,8 +1967,9 @@ async function vendorSignup(){
   const pass   = document.getElementById('v-su-pass').value;
   const states = (document.getElementById('v-su-states')?.value||'').trim().toUpperCase();
   const zip    = (document.getElementById('v-su-zip')?.value||'').trim();
-  const promo  = (document.getElementById('v-su-promo')?.value||'').trim().toUpperCase();
-  const errEl  = document.getElementById('v-signup-err');
+  const promo    = (document.getElementById('v-su-promo')?.value||'').trim().toUpperCase();
+  const isTester = document.getElementById('v-su-tester')?.checked || false;
+  const errEl    = document.getElementById('v-signup-err');
   errEl.classList.remove('show');
 
   if(!name||!owner||!email||!pass){showErr(errEl,'Please fill in all fields');return}
@@ -1972,6 +1977,23 @@ async function vendorSignup(){
   if(!email.includes('@')){showErr(errEl,'Enter a valid email address');return}
   if(!states){showErr(errEl,'Enter at least one state you operate in (e.g. OH)');return}
   if(!zip||zip.length!==5||!/^\d{5}$/.test(zip)){showErr(errEl,'Enter a valid 5-digit ZIP code');return}
+
+  // Tester path — create account directly, skip card setup
+  if(isTester){
+    showLoad('Creating tester account...');
+    const r = await apiPost('/api/vendor/signup', {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, is_tester:true, ...(promo && {promo_code:promo})});
+    hideLoad();
+    if(!r.ok){showErr(errEl, r.data.error||'Signup failed'); return;}
+    S.vendorToken = r.data.data.token;
+    localStorage.setItem('tl_vendor_token', S.vendorToken);
+    const me = await apiGet('/api/vendor/me');
+    S.vendor = me.ok ? me.data.data : r.data.data.vendor;
+    localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
+    S.vScreen='s-v-home'; show('s-v-home'); renderNav(VNAV,'s-v-home');
+    loadVendorHome();
+    showToast('🧪 Tester account activated!');
+    return;
+  }
 
   // Store signup info — account is NOT created until payment succeeds
   S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, ...(promo && {promo_code:promo})};
