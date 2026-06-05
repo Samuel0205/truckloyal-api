@@ -138,6 +138,7 @@
               </div>
             </div>
             <button class="btn btn-p" id="v-reset-btn" onclick="submitVendorReset()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Update Password</button>
+            <div class="auth-switch"><span onclick="goV('s-v-login')" style="color:var(--brand);cursor:pointer">← Back to Sign In</span></div>
           </div>
         </div>
       </div>
@@ -986,7 +987,7 @@
     <div class="screen" id="s-c-signup">
       <div class="auth-wrap" style="padding:0;justify-content:flex-start;align-items:stretch">
         <div class="auth-header">
-          <div class="auth-logo">🎰</div>
+          <div class="auth-logo">🎁</div>
           <div class="auth-title">Food Truck Rewards</div>
           <div class="auth-sub">One account. Every truck. 🍕</div>
         </div>
@@ -1132,6 +1133,7 @@
               </div>
             </div>
             <button class="btn btn-p" id="c-reset-btn" onclick="submitCustomerReset()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Update Password</button>
+            <div class="auth-switch"><span onclick="goC('s-c-login')" style="color:var(--brand);cursor:pointer">← Back to Sign In</span></div>
           </div>
         </div>
       </div>
@@ -4169,26 +4171,13 @@ async function sendVendorReset(){
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   const btn = document.getElementById('v-forgot-btn');
   btn.disabled=true; btn.textContent='Sending...';
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(), 15000);
-    await fetch(API+'/api/auth/forgot-password',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email, user_type:'vendor'}),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-  } catch(e) {
-    // Even on error, show success — security best practice (never reveal if email exists)
-    console.warn('Reset email error:', e);
-  } finally {
-    btn.disabled=false; btn.textContent='Send Reset Link';
-    form.style.display='none';
-    okEl.style.display='flex';
-    const backEl=document.getElementById('v-forgot-back');
-    if(backEl) backEl.style.display='block';
-  }
+  // Use apiFetch so Railway→Render failover applies; always show success (security best practice)
+  await apiPost('/api/auth/forgot-password',{email, user_type:'vendor'});
+  btn.disabled=false; btn.textContent='Send Reset Link';
+  form.style.display='none';
+  okEl.style.display='flex';
+  const backEl=document.getElementById('v-forgot-back');
+  if(backEl) backEl.style.display='block';
 }
 
 async function sendCustomerReset(){
@@ -4200,25 +4189,13 @@ async function sendCustomerReset(){
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   const btn = document.getElementById('c-forgot-btn');
   btn.disabled=true; btn.textContent='Sending...';
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(()=>controller.abort(), 15000);
-    await fetch(API+'/api/auth/forgot-password',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email, user_type:'customer'}),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-  } catch(e) {
-    console.warn('Reset email error:', e);
-  } finally {
-    btn.disabled=false; btn.textContent='Send Reset Link';
-    form.style.display='none';
-    okEl.style.display='flex';
-    const backEl=document.getElementById('c-forgot-back');
-    if(backEl) backEl.style.display='block';
-  }
+  // Use apiFetch so Railway→Render failover applies; always show success (security best practice)
+  await apiPost('/api/auth/forgot-password',{email, user_type:'customer'});
+  btn.disabled=false; btn.textContent='Send Reset Link';
+  form.style.display='none';
+  okEl.style.display='flex';
+  const backEl=document.getElementById('c-forgot-back');
+  if(backEl) backEl.style.display='block';
 }
 
 async function submitVendorReset(){
@@ -4234,13 +4211,9 @@ async function submitVendorReset(){
   if(!token||!email){showErr(errEl,'Invalid reset link. Please request a new one.');return}
   const btn=document.getElementById('v-reset-btn');
   btn.disabled=true; btn.textContent='Updating...';
-  const r=await fetch(API+'/api/auth/reset-password',{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({token,email,new_password:pass,user_type:'vendor'})
-  });
-  const d=await r.json();
+  const res=await apiPost('/api/auth/reset-password',{token,email,new_password:pass,user_type:'vendor'});
   btn.disabled=false; btn.textContent='Update Password';
-  if(!r.ok){showErr(errEl,d.error||'Reset failed. Link may have expired.');return}
+  if(!res.ok){showErr(errEl,res.data?.error||'Reset failed. Link may have expired.');return}
   showToast('✅ Password updated! Please sign in.');
   // Clear URL params and go to login
   window._resetToken=null; window._resetEmail=null;
@@ -4262,13 +4235,9 @@ async function submitCustomerReset(){
   if(!token||!email){showErr(errEl,'Invalid reset link. Please request a new one.');return}
   const btn=document.getElementById('c-reset-btn');
   btn.disabled=true; btn.textContent='Updating...';
-  const r=await fetch(API+'/api/auth/reset-password',{
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({token,email,new_password:pass,user_type:'customer'})
-  });
-  const d=await r.json();
+  const res=await apiPost('/api/auth/reset-password',{token,email,new_password:pass,user_type:'customer'});
   btn.disabled=false; btn.textContent='Update Password';
-  if(!r.ok){showErr(errEl,d.error||'Reset failed. Link may have expired.');return}
+  if(!res.ok){showErr(errEl,res.data?.error||'Reset failed. Link may have expired.');return}
   showToast('✅ Password updated! Please sign in.');
   window._resetToken=null; window._resetEmail=null;
   sessionStorage.removeItem('_rt'); sessionStorage.removeItem('_re');
