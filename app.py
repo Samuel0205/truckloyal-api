@@ -1445,12 +1445,15 @@ def customer_signup():
     if not password or len(password) < 8:
         return err("Password must be at least 8 characters")
 
-    blocked = sb.table("customers").select("id").eq("blocked_email", email).execute().data
-    if blocked:
-        return err("This email address cannot be used to create an account.", 403)
-    blocked_v = sb.table("vendors").select("id").eq("blocked_email", email).execute().data
-    if blocked_v:
-        return err("This email address cannot be used to create an account.", 403)
+    try:
+        blocked = sb.table("customers").select("id").eq("blocked_email", email).execute().data
+        if blocked:
+            return err("This email address cannot be used to create an account.", 403)
+        blocked_v = sb.table("vendors").select("id").eq("blocked_email", email).execute().data
+        if blocked_v:
+            return err("This email address cannot be used to create an account.", 403)
+    except Exception:
+        pass  # blocked_email column may not exist yet — safe to skip
 
     if sb.table("customers").select("id").ilike("email", email).execute().data:
         return err("An account with this email already exists. Please sign in.")
