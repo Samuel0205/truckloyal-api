@@ -1147,7 +1147,10 @@ def award_points():
     body        = request.json or {}
     vendor_id   = request.vendor_id
     customer_id = body.get("customer_id")
-    order_total = float(body.get("order_total") or 0)
+    try:
+        order_total = float(body.get("order_total") or 0)
+    except (ValueError, TypeError):
+        order_total = 0.0
 
     if not customer_id:
         return err("customer_id is required")
@@ -1252,14 +1255,16 @@ def lookup_redemption_code(code):
             sb.table("redemptions").update({"status":"expired"}).eq("id", r["id"]).execute()
             return err("This code has expired")
 
+    reward_data   = r.get("rewards") or {}
+    customer_data = r.get("customers") or {}
     return ok({
         "redemption_id": r["id"],
         "code":          code,
-        "reward_name":   r["rewards"]["name"],
-        "reward_emoji":  r["rewards"]["emoji"],
-        "pts_cost":      r["rewards"]["pts_required"],
-        "customer_name": r["customers"]["name"],
-        "customer_rid":  r["customers"]["rewards_id"],
+        "reward_name":   reward_data.get("name", "Reward"),
+        "reward_emoji":  reward_data.get("emoji", "🎁"),
+        "pts_cost":      reward_data.get("pts_required", 0),
+        "customer_name": customer_data.get("name", "Customer"),
+        "customer_rid":  customer_data.get("rewards_id", ""),
         "status":        r["status"],
     })
 
@@ -1286,10 +1291,11 @@ def confirm_redemption():
         "confirmed_by": vendor_id,
     }).eq("id", r["id"]).execute()
 
+    reward_data = r.get("rewards") or {}
     return ok({
         "confirmed":    True,
-        "reward_name":  r["rewards"]["name"],
-        "pts_deducted": r["rewards"]["pts_required"],
+        "reward_name":  reward_data.get("name", "Reward"),
+        "pts_deducted": reward_data.get("pts_required", 0),
     })
 
 
@@ -1694,10 +1700,13 @@ def record_visit():
             "longest_streak": 1, "last_visit_date": today_iso,
         }).execute()
 
-    visit = sb.table("visits").insert({
+    visit_rows = sb.table("visits").insert({
         "customer_id": customer_id, "vendor_id": vendor_id,
         "pts_earned": total_pts, "streak_day": new_streak, "awarded_by": "customer",
-    }).execute().data[0]
+    }).execute().data
+    if not visit_rows:
+        return err("Failed to record visit — please try again")
+    visit = visit_rows[0]
 
     prizes = sb.table("spin_prizes").select("*").eq("vendor_id", vendor_id).eq("is_active", True).execute().data
     spin_result = None
@@ -1709,12 +1718,13 @@ def record_visit():
             if r <= cum: won = p; break
 
         spin_pts = int(won.get("prize_value") or 25)
-        spin_result = sb.table("spin_results").insert({
+        spin_rows = sb.table("spin_results").insert({
             "customer_id": customer_id, "vendor_id": vendor_id,
             "visit_id": visit["id"], "prize_id": won["id"],
             "prize_name": won["name"], "prize_type": won.get("prize_type","points"),
             "prize_value": won.get("prize_value","25"),
-        }).execute().data[0]
+        }).execute().data
+        spin_result = spin_rows[0] if spin_rows else None
         sb.table("customer_trucks").update({
             "points_balance": new_balance + spin_pts,
             "points_total":   new_total   + spin_pts,
@@ -2316,8 +2326,11 @@ def submit_review():
 
     if not all([customer_id, vendor_id, rating]):
         return err("customer_id, vendor_id, rating required")
-    if not 1 <= int(rating) <= 5:
-        return err("Rating must be 1-5")
+    try:
+        if not 1 <= int(rating) <= 5:
+            return err("Rating must be 1-5")
+    except (ValueError, TypeError):
+        return err("Rating must be a number 1-5")
 
     existing = sb.table("reviews").select("id").eq("customer_id", customer_id)\
         .eq("vendor_id", vendor_id).execute().data
