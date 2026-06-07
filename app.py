@@ -1481,7 +1481,7 @@ def customer_signup():
 
     customer = sb.table("customers").insert({
         "name": name, "email": email,
-        "password_hash": pw_hash,
+        "password_hash": pw_hash, "phone": "",
         "rewards_id": rid, "referral_code": ref_code, "referred_by": referred_by,
     }).execute().data[0]
 
