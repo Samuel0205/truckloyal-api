@@ -1684,9 +1684,7 @@
 /* ════════════════════════════════════
    CONFIG
 ════════════════════════════════════ */
-const API_PRIMARY  = 'https://truckloyal-api.onrender.com';
-const API_FALLBACK = 'https://truckloyal-api-production.up.railway.app';
-let   API          = API_PRIMARY;
+const API = 'https://truckloyal-api.onrender.com';
 
 /* ════════════════════════════════════
    STATE
@@ -1761,30 +1759,17 @@ async function apiFetch(path, opts={}) {
   if (S.vendorToken) headers['Authorization'] = `Bearer ${S.vendorToken}`;
   if (S.customer?.token) headers['X-Customer-Token'] = S.customer.token;
 
-  const tryFetch = async (base) => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    try {
-      const r = await fetch(base + path, {headers, ...opts, signal: ctrl.signal});
-      const d = await r.json();
-      return {ok: r.ok, status: r.status, data: d};
-    } catch { return null; }
-    finally { clearTimeout(timer); }
-  };
-
-  let res = await tryFetch(API);
-  if (res) return res;
-
-  // Primary timed out or failed — try the other server
-  const alt = (API === API_PRIMARY) ? API_FALLBACK : API_PRIMARY;
-  res = await tryFetch(alt);
-  if (res) {
-    API = alt;
-    showToast(alt === API_FALLBACK ? '⚠️ Switched to backup server' : '✅ Back on main server');
-    return res;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(API + path, {headers, ...opts, signal: ctrl.signal});
+    const d = await r.json();
+    return {ok: r.ok, status: r.status, data: d};
+  } catch {
+    return {ok: false, status: 0, data: {error: 'Check your connection and try again'}};
+  } finally {
+    clearTimeout(timer);
   }
-
-  return {ok: false, status: 0, data: {error: 'Check your connection and try again'}};
 }
 const apiGet  = p => apiFetch(p,{method:'GET'});
 const apiPost = (p,b) => apiFetch(p,{method:'POST',body:JSON.stringify(b)});
@@ -4171,7 +4156,7 @@ async function sendVendorReset(){
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   const btn = document.getElementById('v-forgot-btn');
   btn.disabled=true; btn.textContent='Sending...';
-  // Use apiFetch so Railway→Render failover applies; always show success (security best practice)
+  // Always show success (security best practice — don't reveal if email exists)
   await apiPost('/api/auth/forgot-password',{email, user_type:'vendor'});
   btn.disabled=false; btn.textContent='Send Reset Link';
   form.style.display='none';
@@ -4189,7 +4174,7 @@ async function sendCustomerReset(){
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   const btn = document.getElementById('c-forgot-btn');
   btn.disabled=true; btn.textContent='Sending...';
-  // Use apiFetch so Railway→Render failover applies; always show success (security best practice)
+  // Always show success (security best practice — don't reveal if email exists)
   await apiPost('/api/auth/forgot-password',{email, user_type:'customer'});
   btn.disabled=false; btn.textContent='Send Reset Link';
   form.style.display='none';
