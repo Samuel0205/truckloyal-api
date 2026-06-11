@@ -326,17 +326,20 @@ def health():
 @app.route("/app")
 @app.route("/app/")
 def serve_app():
-    """
-    Serves the frontend HTML app directly from this API service.
-    This bypasses any networking restrictions on the static site.
-    The WebView in the Android app points to this URL.
-    """
-    return send_from_directory('.', 'index.html')
+    resp = send_from_directory('.', 'index.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route("/styles.css")
 def serve_styles():
-    return send_from_directory('.', 'styles.css')
+    resp = send_from_directory('.', 'styles.css')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 # ══════════════════════════════════════════════════════
