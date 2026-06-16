@@ -208,7 +208,7 @@
         <div class="auth-sub">Your 14-day free trial starts today. Your first payment of <strong>$9.99</strong> will be charged on <strong id="trial-end-date">—</strong>. You can cancel before then at no charge.</div>
 
         <!-- Trial timeline -->
-        <div style="width:100%;background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:var(--sh1)">
+        <div style="width:100%;background:var(--s1);border:2px solid var(--b2);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:var(--sh1)">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <div style="text-align:center;flex:1">
               <div style="font-size:20px">🎉</div>
@@ -231,9 +231,9 @@
         </div>
 
         <!-- What's included box -->
-        <div style="width:100%;background:#F1F8E9;border:2px solid #A5D6A7;border-radius:14px;padding:14px;margin-bottom:16px">
-          <div style="font-size:12px;font-weight:800;color:#2E7D32;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">What's included — $9.99/mo</div>
-          <div style="font-size:12px;color:#2D1B0E;font-weight:600;line-height:2">
+        <div style="width:100%;background:rgba(76,175,80,.08);border:2px solid rgba(76,175,80,.25);border-radius:14px;padding:14px;margin-bottom:16px">
+          <div style="font-size:12px;font-weight:800;color:#4CAF50;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">What's included — $9.99/mo</div>
+          <div style="font-size:12px;color:var(--mu);font-weight:600;line-height:2">
             ✅ Unlimited customer check-ins<br>
             ✅ Loyalty points & rewards system<br>
             ✅ Spin wheel bonus points<br>
@@ -248,12 +248,12 @@
         <!-- Stripe card input -->
         <div style="width:100%;margin-bottom:14px">
           <div style="font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:var(--mu);margin-bottom:8px">Card Details</div>
-          <div id="stripe-card-element" style="background:white;border:2px solid var(--b2);border-radius:12px;padding:16px;transition:border-color .2s"></div>
+          <div id="stripe-card-element" style="background:var(--s2);border:2px solid var(--b2);border-radius:12px;padding:16px;transition:border-color .2s"></div>
           <div id="stripe-card-errors" style="color:var(--rd);font-size:12px;font-weight:700;margin-top:6px;min-height:18px"></div>
         </div>
 
         <!-- Security badge -->
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;background:white;border:1.5px solid var(--b1);border-radius:10px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;background:var(--s1);border:1.5px solid var(--b2);border-radius:10px;padding:10px 12px">
           <span style="font-size:18px">🔒</span>
           <div>
             <div style="font-size:12px;font-weight:800;color:var(--tx)">256-bit SSL Encrypted</div>
@@ -262,7 +262,7 @@
         </div>
 
         <!-- LEGAL CONSENT — required checkbox -->
-        <div style="width:100%;background:#FFF8F0;border:2px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:14px">
+        <div style="width:100%;background:var(--s2);border:2px solid var(--b2);border-radius:12px;padding:14px;margin-bottom:14px">
           <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
             <input type="checkbox" id="legal-consent" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:var(--brand)">
             <div style="font-size:12px;color:var(--tx);line-height:1.7;font-weight:600">
@@ -284,7 +284,7 @@
         </button>
 
         <!-- Billing summary line — clearly shows what happens -->
-        <div style="width:100%;background:white;border:1.5px solid var(--b1);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:12px;color:var(--mu);font-weight:600;line-height:1.8">
+        <div style="width:100%;background:var(--s1);border:1.5px solid var(--b2);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:12px;color:var(--mu);font-weight:600;line-height:1.8">
           <div style="display:flex;justify-content:space-between"><span>Trial period</span><span style="color:var(--gn);font-weight:800">FREE — 14 days</span></div>
           <div style="display:flex;justify-content:space-between"><span>First charge</span><span style="font-weight:800" id="trial-end-summary">—</span></div>
           <div style="display:flex;justify-content:space-between"><span>Then every</span><span style="font-weight:800">30 days · $9.99</span></div>
@@ -1253,17 +1253,17 @@
           <div id="ct-emoji" style="width:44px;height:44px;border-radius:12px;overflow:hidden;background:rgba(255,87,34,.1);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">🚚</div>
         </div>
         <!-- Location today -->
-        <div id="ct-location-bar" style="background:#E3F2FD;border:1.5px solid #90CAF9;border-radius:10px;padding:8px 12px;font-size:12px;color:#1565C0;margin-bottom:12px;display:none;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <div id="ct-location-bar" style="background:rgba(66,165,245,.08);border:1.5px solid rgba(66,165,245,.2);border-radius:10px;padding:8px 12px;font-size:12px;color:#42A5F5;margin-bottom:12px;display:none;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px">
           <div>📍 <span id="ct-location-text">–</span></div>
           <button onclick="openInMaps(document.getElementById('ct-location-text').textContent)" style="background:#1565C0;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">🗺️ Maps</button>
         </div>
         <!-- Weekly schedule -->
-        <div id="ct-schedule-bar" style="display:none;background:white;border:1.5px solid var(--b2);border-radius:12px;padding:10px 14px;margin-bottom:12px">
+        <div id="ct-schedule-bar" style="display:none;background:var(--s1);border:1.5px solid var(--b2);border-radius:12px;padding:10px 14px;margin-bottom:12px">
           <div style="font-size:11px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📅 Weekly Schedule</div>
           <div id="ct-schedule-list" style="display:flex;flex-direction:column;gap:4px"></div>
         </div>
         <!-- Points hero card -->
-        <div style="background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;display:flex;align-items:center;gap:0;box-shadow:var(--sh1)">
+        <div style="background:var(--s1);border:2px solid var(--b2);border-radius:16px;padding:16px;display:flex;align-items:center;gap:0;box-shadow:var(--sh1)">
           <div style="flex:1;text-align:center;border-right:1.5px solid var(--b1)">
             <div style="font-family:var(--fd);font-size:36px;font-weight:900;color:var(--brand);line-height:1" id="ct-pts">0</div>
             <div style="font-size:10px;color:var(--mu);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Points Here</div>
@@ -1326,7 +1326,7 @@
           <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1.5px;color:var(--mu)">Checked in at</div>
           <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--tx)" id="spin-truck-name">–</div>
         </div>
-        <div style="background:white;border:2px solid var(--b2);border-radius:14px;padding:12px 16px;margin-bottom:14px;width:100%;box-shadow:var(--sh1);display:flex;align-items:center;justify-content:space-between">
+        <div style="background:var(--s1);border:2px solid var(--b2);border-radius:14px;padding:12px 16px;margin-bottom:14px;width:100%;box-shadow:var(--sh1);display:flex;align-items:center;justify-content:space-between">
           <div style="font-size:13px;font-weight:700;color:var(--mu)">⚡ Visit points earned</div>
           <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--gn)">+<span id="spin-visit-pts">50</span></div>
         </div>
@@ -1437,7 +1437,7 @@
     <div class="screen" id="s-c-discover">
       <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-home')">←</div><div><h1>🗺️ Discover Trucks</h1><p>Active food trucks using Food Truck Rewards</p></div></div>
       <div class="bp">
-        <select id="discover-state-filter" onchange="loadDiscover()" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--b2);background:white;font-family:var(--fb);font-size:14px;color:var(--tx);margin-bottom:14px;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23FF5722%22 stroke-width=%222.5%22><polyline points=%226 9 12 15 18 9%22/></svg>');background-repeat:no-repeat;background-position:right 14px center;padding-right:36px">
+        <select id="discover-state-filter" onchange="loadDiscover()" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--b2);background:var(--s2);font-family:var(--fb);font-size:14px;color:var(--tx);margin-bottom:14px;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23FF5722%22 stroke-width=%222.5%22><polyline points=%226 9 12 15 18 9%22/></svg>');background-repeat:no-repeat;background-position:right 14px center;padding-right:36px">
           <option value="">🗺️ All States</option>
           <option value="AL">Alabama</option>
           <option value="AK">Alaska</option>
@@ -1602,12 +1602,12 @@
       <div style="font-size:13px;color:var(--mu);font-weight:600;margin-top:4px">at <strong id="win-truck-name-top">–</strong></div>
     </div>
     <!-- Big win number -->
-    <div style="background:linear-gradient(135deg,#FFFDE7,#FFF3E0);border:2px solid #FFE082;border-radius:18px;padding:20px;text-align:center;margin-bottom:12px;box-shadow:0 4px 16px rgba(249,168,37,.15)">
-      <div style="font-family:var(--fd);font-size:58px;font-weight:900;color:#E65100;line-height:1;margin-bottom:2px" id="win-pts-big">+50</div>
+    <div style="background:rgba(249,168,37,.08);border:2px solid rgba(249,168,37,.25);border-radius:18px;padding:20px;text-align:center;margin-bottom:12px;box-shadow:0 4px 16px rgba(249,168,37,.1)">
+      <div style="font-family:var(--fd);font-size:58px;font-weight:900;color:var(--brand);line-height:1;margin-bottom:2px" id="win-pts-big">+50</div>
       <div style="font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:1px;font-weight:800">Bonus Points from Spin</div>
     </div>
     <!-- Breakdown -->
-    <div style="background:white;border:2px solid var(--b2);border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:var(--sh1)">
+    <div style="background:var(--s1);border:2px solid var(--b2);border-radius:14px;padding:14px;margin-bottom:16px;box-shadow:var(--sh1)">
       <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--mu);margin-bottom:10px">Today's Earnings Breakdown</div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
         <div style="font-size:13px;font-weight:600;color:var(--mu)">⚡ Visit + order points</div>
@@ -1615,7 +1615,7 @@
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div style="font-size:13px;font-weight:600;color:var(--mu)">🎰 Spin bonus</div>
-        <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:#E65100" id="win-spin-pts">+50 bonus pts</div>
+        <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--brand)" id="win-spin-pts">+50 bonus pts</div>
       </div>
       <div style="height:1.5px;background:var(--b1);margin-bottom:10px"></div>
       <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1684,9 +1684,7 @@
 /* ════════════════════════════════════
    CONFIG
 ════════════════════════════════════ */
-const API_PRIMARY  = 'https://truckloyal-api.onrender.com';
-const API_FALLBACK = 'https://truckloyal-api-production.up.railway.app';
-let   API          = API_PRIMARY;
+const API = 'https://truckloyal-api.onrender.com';
 
 /* ════════════════════════════════════
    STATE
@@ -1761,30 +1759,17 @@ async function apiFetch(path, opts={}) {
   if (S.vendorToken) headers['Authorization'] = `Bearer ${S.vendorToken}`;
   if (S.customer?.token) headers['X-Customer-Token'] = S.customer.token;
 
-  const tryFetch = async (base) => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 8000);
-    try {
-      const r = await fetch(base + path, {headers, ...opts, signal: ctrl.signal});
-      const d = await r.json();
-      return {ok: r.ok, status: r.status, data: d};
-    } catch { return null; }
-    finally { clearTimeout(timer); }
-  };
-
-  let res = await tryFetch(API);
-  if (res) return res;
-
-  // Primary timed out or failed — try the other server
-  const alt = (API === API_PRIMARY) ? API_FALLBACK : API_PRIMARY;
-  res = await tryFetch(alt);
-  if (res) {
-    API = alt;
-    showToast(alt === API_FALLBACK ? '⚠️ Switched to backup server' : '✅ Back on main server');
-    return res;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const r = await fetch(API + path, {headers, ...opts, signal: ctrl.signal});
+    const d = await r.json();
+    return {ok: r.ok, status: r.status, data: d};
+  } catch {
+    return {ok: false, status: 0, data: {error: 'Check your connection and try again'}};
+  } finally {
+    clearTimeout(timer);
   }
-
-  return {ok: false, status: 0, data: {error: 'Check your connection and try again'}};
 }
 const apiGet  = p => apiFetch(p,{method:'GET'});
 const apiPost = (p,b) => apiFetch(p,{method:'POST',body:JSON.stringify(b)});
@@ -3621,7 +3606,7 @@ async function renderHistory(){
         return `
         <div class="hist-item">
           <div class="hist-left">
-            <div class="hist-ico" style="background:#E8F5E9">⚡</div>
+            <div class="hist-ico" style="background:rgba(76,175,80,.15)">⚡</div>
             <div>
               <div class="hist-desc">Check-in · <strong>${truckName}</strong></div>
               <div class="hist-date">${fmtHistDate(item.created_at)}${spinNote}</div>
@@ -3633,7 +3618,7 @@ async function renderHistory(){
         return `
         <div class="hist-item">
           <div class="hist-left">
-            <div class="hist-ico" style="background:#FFF3E0">${item.rewards?.emoji||'🎁'}</div>
+            <div class="hist-ico" style="background:rgba(255,87,34,.15)">${item.rewards?.emoji||'🎁'}</div>
             <div>
               <div class="hist-desc">${item.rewards?.name||'Reward'} · <strong>${truckName}</strong></div>
               <div class="hist-date">${fmtHistDate(item.created_at)} · Code: ${item.code||'–'}</div>
@@ -3893,7 +3878,7 @@ async function searchTrucks(query) {
     el.innerHTML = res.data.data.map(t => {
       const already = S.myTrucks.find(mt => mt.id === t.id || mt.slug === t.slug);
       return `
-      <div style="display:flex;align-items:center;gap:12px;background:white;border:2px solid ${already?'var(--brand)':'var(--b2)'};border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh1)"
+      <div style="display:flex;align-items:center;gap:12px;background:var(--s1);border:2px solid ${already?'var(--brand)':'var(--b2)'};border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh1)"
         onclick="${already ? `openTruck(${S.myTrucks.findIndex(mt=>mt.id===t.id||mt.slug===t.slug)});goC('s-c-truck')` : `joinTruckFromSearch('${t.slug}','${(t.truck_name||'').replace(/'/g,"\\'")}')` }">
         <div style="font-size:26px;width:44px;height:44px;background:var(--s2);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${t.emoji||'🚚'}</div>
         <div style="flex:1">
@@ -4171,7 +4156,7 @@ async function sendVendorReset(){
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   const btn = document.getElementById('v-forgot-btn');
   btn.disabled=true; btn.textContent='Sending...';
-  // Use apiFetch so Railway→Render failover applies; always show success (security best practice)
+  // Always show success (security best practice — don't reveal if email exists)
   await apiPost('/api/auth/forgot-password',{email, user_type:'vendor'});
   btn.disabled=false; btn.textContent='Send Reset Link';
   form.style.display='none';
@@ -4189,7 +4174,7 @@ async function sendCustomerReset(){
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   const btn = document.getElementById('c-forgot-btn');
   btn.disabled=true; btn.textContent='Sending...';
-  // Use apiFetch so Railway→Render failover applies; always show success (security best practice)
+  // Always show success (security best practice — don't reveal if email exists)
   await apiPost('/api/auth/forgot-password',{email, user_type:'customer'});
   btn.disabled=false; btn.textContent='Send Reset Link';
   form.style.display='none';
@@ -4540,7 +4525,7 @@ async function loadDiscover(){
           <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap">
             ${stars ? `<span style="font-size:12px;color:var(--gd);font-weight:700">${stars} ${t.avg_rating}</span>` : ''}
             <span style="font-size:12px;color:var(--mu);font-weight:600">👥 ${t.member_count||0} members</span>
-            ${hasLoc ? `<button onclick="openInMaps('${mapsAddr.replace(/'/g,"\\'")}')" style="background:#E3F2FD;color:#1565C0;border:1.5px solid #90CAF9;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">🗺️ Maps</button>` : ''}
+            ${hasLoc ? `<button onclick="openInMaps('${mapsAddr.replace(/'/g,"\\'")}')" style="background:rgba(66,165,245,.1);color:#42A5F5;border:1.5px solid rgba(66,165,245,.25);border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">🗺️ Maps</button>` : ''}
           </div>
         </div>
         ${actionBtn}
