@@ -1,20 +1,20 @@
 /* ── SPLASH (must load before body renders) ── */
-html,body{background:#111111 !important}
-#splash-cover{position:fixed;inset:0;background:#111111;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity .5s ease;gap:40px}
+html,body{background:#141414 !important}
+#splash-cover{position:fixed;inset:0;background:#141414;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity .5s ease;gap:40px}
 #splash-cover.hidden{opacity:0;pointer-events:none}
 #splash-spinner{width:40px;height:40px;border:3px solid rgba(255,255,255,.15);border-top-color:#FF5722;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ── DESIGN TOKENS ── */
 :root {
-  --bg:#111111;--s1:#1A1A1A;--s2:#242424;--s3:#2E2E2E;
-  --b1:rgba(255,255,255,0.06);--b2:rgba(255,255,255,0.10);--b3:rgba(255,255,255,0.18);
-  --tx:#FFFFFF;--mu:rgba(255,255,255,0.5);--fa:rgba(255,255,255,0.15);
+  --bg:#141414;--s1:#1F1F1F;--s2:#2A2A2A;--s3:#333333;
+  --b1:rgba(255,255,255,0.08);--b2:rgba(255,255,255,0.13);--b3:rgba(255,255,255,0.22);
+  --tx:#FFFFFF;--mu:rgba(255,255,255,0.55);--fa:rgba(255,255,255,0.18);
   --or:#FF5722;--gd:#F9A825;--gn:#4CAF50;--rd:#F44336;--bl:#42A5F5;
   --brand:#FF5722;--brand2:#FF8C00;
-  --sh1:0 1px 4px rgba(0,0,0,.5);
-  --sh2:0 4px 16px rgba(0,0,0,.6);
-  --sh3:0 8px 32px rgba(0,0,0,.7);
+  --sh1:0 1px 4px rgba(0,0,0,.4);
+  --sh2:0 4px 16px rgba(0,0,0,.5);
+  --sh3:0 8px 32px rgba(0,0,0,.6);
   --nav:76px;--sb:env(safe-area-inset-bottom,0px);
   --fd:'Nunito',sans-serif;--fd-weight:900;--fb:'Nunito',sans-serif;
 }
@@ -29,11 +29,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 
 .topbar{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 18px 7px;padding-top:calc(5px + env(safe-area-inset-top,0px));background:#1A1A1A;flex-shrink:0;z-index:60;box-shadow:0 2px 12px rgba(0,0,0,.5);gap:4px;border-bottom:1.5px solid var(--b1)}
 .tl-logo{font-family:var(--fd);font-weight:900;font-size:17px;letter-spacing:.3px;color:var(--brand);white-space:nowrap}
-.topbar.auth-mode{padding:calc(3px + env(safe-area-inset-top,0px)) 18px 3px;gap:0;box-shadow:none;border-bottom:none;background:#1A1A1A}
+.topbar.auth-mode{padding:calc(3px + env(safe-area-inset-top,0px)) 18px 3px;gap:0;box-shadow:none;border-bottom:none;background:linear-gradient(160deg,#CC3D11 0%,#FF5722 100%)}
 .topbar.auth-mode .tl-logo{display:none}
 .mode-tog{display:flex;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.12);border-radius:99px;padding:3px;gap:2px}
 .mb{padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:var(--fb);transition:all .2s;background:transparent;color:rgba(255,255,255,.5);white-space:nowrap}
 .mb.on{background:var(--brand);color:white;box-shadow:0 2px 8px rgba(255,87,34,.4)}
+.topbar.auth-mode .mb.on{background:rgba(255,255,255,.25);color:white;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.topbar.auth-mode .mb{color:rgba(255,255,255,.7)}
 .scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:none}
 .scroll::-webkit-scrollbar{display:none}
 /* FIX: padding-bottom for safe-area must come after the shorthand so it isn't overridden */
@@ -159,14 +161,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .auth-switch span{color:var(--brand);cursor:pointer;font-weight:800}
 
 /* LOGIN SPLIT LAYOUT */
-.auth-header{width:100%;background:linear-gradient(160deg,#1C1C1C 0%,#222222 60%,#1A1A1A 100%);padding:8px 28px 52px;display:flex;flex-direction:column;align-items:center;text-align:center;border-bottom:2px solid rgba(255,87,34,.2)}
-.auth-header .auth-logo{width:80px;height:80px;border-radius:50%;background:rgba(255,87,34,.15);border:2.5px solid rgba(255,87,34,.35);display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:14px;filter:none;animation:float 3s ease-in-out infinite}
-.auth-header .auth-title{color:var(--brand);font-size:24px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px}
-.auth-header .auth-sub{color:var(--mu);margin-bottom:0;font-weight:500;font-size:13px}
-.auth-tabs{display:flex;background:rgba(255,255,255,.08);border-radius:50px;padding:4px;margin-top:18px;gap:3px;width:100%;max-width:240px}
+.auth-header{width:100%;background:linear-gradient(160deg,#CC3D11 0%,#FF5722 60%,#E84B1A 100%);padding:8px 28px 52px;display:flex;flex-direction:column;align-items:center;text-align:center;border-bottom:none;position:relative;overflow:hidden}
+.auth-header::after{content:'🚚';position:absolute;right:-10px;bottom:-14px;font-size:90px;opacity:.1;pointer-events:none}
+.auth-header .auth-logo{width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.15);border:2.5px solid rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:14px;filter:none;animation:float 3s ease-in-out infinite}
+.auth-header .auth-title{color:white;font-size:24px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;text-shadow:0 1px 4px rgba(0,0,0,.2)}
+.auth-header .auth-sub{color:rgba(255,255,255,.8);margin-bottom:0;font-weight:500;font-size:13px}
+.auth-tabs{display:flex;background:rgba(0,0,0,.2);border-radius:50px;padding:4px;margin-top:18px;gap:3px;width:100%;max-width:240px;border:1.5px solid rgba(255,255,255,.2)}
 .auth-tab{flex:1;padding:9px 0;border-radius:50px;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--fb);transition:all .2s}
-.auth-tab.active{background:var(--brand);color:white;box-shadow:0 2px 10px rgba(255,87,34,.4)}
-.auth-tab.inactive{background:transparent;color:rgba(255,255,255,.6)}
+.auth-tab.active{background:rgba(255,255,255,.25);color:white;box-shadow:0 2px 10px rgba(0,0,0,.2)}
+.auth-tab.inactive{background:transparent;color:rgba(255,255,255,.7)}
 .auth-body{background:var(--s1);border-radius:28px 28px 0 0;margin-top:-28px;padding:28px 24px 52px;flex:1;width:100%;box-sizing:border-box;box-shadow:0 -4px 24px rgba(0,0,0,.4)}
 .auth-body-title{font-family:var(--fd);font-weight:900;font-size:22px;color:var(--tx);margin-bottom:4px}
 .auth-body-sub{font-size:13px;color:var(--mu);font-weight:500;margin-bottom:20px}
