@@ -36,12 +36,13 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .mb.on{background:white;color:var(--brand);box-shadow:var(--sh1)}
 .scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;overscroll-behavior:none}
 .scroll::-webkit-scrollbar{display:none}
-/* FIX: padding-bottom for safe-area must come after the shorthand so it isn't overridden */
-.bnav{display:flex;align-items:center;justify-content:space-around;background:white;border-top:1.5px solid var(--b1);height:var(--nav);flex-shrink:0;box-shadow:0 -4px 20px rgba(180,100,40,.07);padding:0 8px;padding-bottom:var(--sb)}
+/* BOTTOM NAV — dark brushstroke */
+.bnav{display:flex;align-items:center;justify-content:space-around;background:#1A1A1A;border-top:none;height:var(--nav);flex-shrink:0;padding:0 8px;padding-bottom:var(--sb);position:relative;z-index:50}
+.bnav::before{content:'';position:absolute;bottom:100%;left:0;right:0;height:32px;background:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 430 32' preserveAspectRatio='none'><path d='M0,32 L0,24 C55,24 75,8 115,14 C155,20 175,28 215,21 C255,14 278,3 318,9 C350,14 375,22 430,17 L430,32 Z' fill='%231A1A1A'/></svg>") no-repeat;background-size:100% 100%}
 .ni{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;border:none;background:transparent;padding:8px 0 4px;-webkit-tap-highlight-color:transparent;gap:0}
-.ni-bubble{display:flex;align-items:center;justify-content:center;width:54px;height:36px;border-radius:18px;border:1.5px solid var(--b2);background:transparent;font-size:24px;line-height:1;margin-bottom:4px;transition:all .18s ease}
-.ni-label{font-size:10px;font-weight:700;font-family:var(--fb);color:var(--mu);transition:color .15s ease;white-space:nowrap}
-.ni.on .ni-bubble{border-color:var(--brand);background:rgba(255,87,34,.1)}
+.ni-bubble{display:flex;align-items:center;justify-content:center;width:54px;height:36px;border-radius:18px;border:1.5px solid rgba(255,255,255,.12);background:transparent;font-size:24px;line-height:1;margin-bottom:4px;transition:all .18s ease}
+.ni-label{font-size:10px;font-weight:700;font-family:var(--fb);color:rgba(255,255,255,.5);transition:color .15s ease;white-space:nowrap}
+.ni.on .ni-bubble{border-color:var(--brand);background:rgba(255,87,34,.15)}
 .ni.on .ni-label{color:var(--brand)}
 .ni:active .ni-bubble{transform:scale(.92)}
 .screen{display:none;min-height:100%}
