@@ -424,48 +424,50 @@
           <div style="font-size:11px;color:rgba(255,255,255,.75);cursor:pointer;font-weight:700;padding:4px 10px;background:rgba(255,255,255,.15);border-radius:99px" onclick="loadVendorHome();showToast('↻ Refreshed')">↻ Refresh</div>
         </div>
       </div>
-      <div style="padding:14px 20px 0">
-        <!-- Demo mode banner -->
-        <div class="stats g3">
-          <div class="sc"><div class="sv" style="color:var(--brand)" id="v-stat-visits">0</div><div class="sl">Visits Today</div></div>
-          <div class="sc"><div class="sv" style="color:var(--gn)" id="v-stat-members">0</div><div class="sl">Members</div></div>
-          <div class="sc"><div class="sv" style="color:var(--gd)" id="v-stat-rdm">0</div><div class="sl">Redeemed</div></div>
-        </div>
-      </div>
-      <div class="qa-grid">
-        <!-- PRIMARY ACTION: At the Window — award points + confirm rewards in one screen -->
-        <div class="qa wide accent-gn" onclick="goV('s-v-award')">
-          <div class="qa-ico">🪟</div>
-          <div><div class="qa-lbl" style="color:var(--gn)">At the Window</div><div class="qa-sub">Award points &amp; confirm rewards at checkout</div></div>
-        </div>
-        <div class="qa" onclick="goV('s-v-rewards')"><div class="qa-ico">🎁</div><div class="qa-lbl">Rewards</div><div class="qa-sub">What customers earn</div></div>
-        <div class="qa" onclick="goV('s-v-spin')"><div class="qa-ico">🎰</div><div class="qa-lbl">Spin Prizes</div><div class="qa-sub">Bonus points on wheel</div></div>
-        <div class="qa" onclick="goV('s-v-notify')"><div class="qa-ico">📣</div><div class="qa-lbl">Notify</div><div class="qa-sub">Message your members</div></div>
-        <div class="qa" onclick="goV('s-v-promos')"><div class="qa-ico">🎉</div><div class="qa-lbl">Promos</div><div class="qa-sub">Flash deals & codes</div></div>
-        <div class="qa" onclick="goV('s-v-schedule')"><div class="qa-ico">📅</div><div class="qa-lbl">Schedule</div><div class="qa-sub">Weekly locations</div></div>
-        <div class="qa" onclick="goV('s-v-feed')"><div class="qa-ico">📸</div><div class="qa-lbl">Feed Posts</div><div class="qa-sub">Share updates</div></div>
-        <div class="qa" onclick="goV('s-v-reviews-screen')"><div class="qa-ico">⭐</div><div class="qa-lbl">Reviews</div><div class="qa-sub">What customers say</div></div>
-        <div class="qa" onclick="goV('s-v-points')"><div class="qa-ico">⚙️</div><div class="qa-lbl">Points Rules</div><div class="qa-sub">Rates & bonuses</div></div>
-        <div class="qa" onclick="goV('s-v-brand')"><div class="qa-ico">🎨</div><div class="qa-lbl">Brand</div><div class="qa-sub">Emoji, colors & name</div></div>
-      </div>
-      <div style="padding:0 20px 20px">
-        <!-- Today's location — posted here, shows on customer dashboard -->
-        <div class="card">
-          <div class="card-title">📍 Today's Location</div>
-          <div style="font-size:12px;color:var(--mu);margin-bottom:8px;line-height:1.6">Post where you're parked <strong>right now</strong>. Customers see this on their truck page. <strong>Resets automatically at midnight</strong> — or tap Clear to remove it early.</div>
-          <div class="field" style="margin-bottom:10px">
-            <input type="text" id="v-location-input" placeholder="e.g. Downtown Market, 5th & Main" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
-          </div>
-          <div class="field" style="margin-bottom:10px">
-            <label style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px">ZIP Code (helps customers find you)</label>
-            <input type="text" id="v-location-zip" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-sm btn-p" style="flex:1" onclick="saveLocation()">📍 Post Location</button>
-            <button class="btn btn-sm btn-s" onclick="clearLocation()" style="flex:0 0 auto">✕ Clear</button>
+      <!-- White card: stats + quick actions + location -->
+      <div style="background:white;border-radius:24px 24px 0 0;margin:-4px 0 0;box-shadow:0 -2px 16px rgba(180,100,40,0.08)">
+        <div style="padding:14px 20px 0">
+          <div class="stats g3">
+            <div class="sc"><div class="sv" style="color:var(--brand)" id="v-stat-visits">0</div><div class="sl">Visits Today</div></div>
+            <div class="sc"><div class="sv" style="color:var(--gn)" id="v-stat-members">0</div><div class="sl">Members</div></div>
+            <div class="sc"><div class="sv" style="color:var(--gd)" id="v-stat-rdm">0</div><div class="sl">Redeemed</div></div>
           </div>
         </div>
-      </div>
+        <div class="qa-grid">
+          <!-- PRIMARY ACTION: At the Window — award points + confirm rewards in one screen -->
+          <div class="qa wide accent-gn" onclick="goV('s-v-award')">
+            <div class="qa-ico">🪟</div>
+            <div><div class="qa-lbl" style="color:var(--gn)">At the Window</div><div class="qa-sub">Award points &amp; confirm rewards at checkout</div></div>
+          </div>
+          <div class="qa" onclick="goV('s-v-rewards')"><div class="qa-ico">🎁</div><div class="qa-lbl">Rewards</div><div class="qa-sub">What customers earn</div></div>
+          <div class="qa" onclick="goV('s-v-spin')"><div class="qa-ico">🎰</div><div class="qa-lbl">Spin Prizes</div><div class="qa-sub">Bonus points on wheel</div></div>
+          <div class="qa" onclick="goV('s-v-notify')"><div class="qa-ico">📣</div><div class="qa-lbl">Notify</div><div class="qa-sub">Message your members</div></div>
+          <div class="qa" onclick="goV('s-v-promos')"><div class="qa-ico">🎉</div><div class="qa-lbl">Promos</div><div class="qa-sub">Flash deals & codes</div></div>
+          <div class="qa" onclick="goV('s-v-schedule')"><div class="qa-ico">📅</div><div class="qa-lbl">Schedule</div><div class="qa-sub">Weekly locations</div></div>
+          <div class="qa" onclick="goV('s-v-feed')"><div class="qa-ico">📸</div><div class="qa-lbl">Feed Posts</div><div class="qa-sub">Share updates</div></div>
+          <div class="qa" onclick="goV('s-v-reviews-screen')"><div class="qa-ico">⭐</div><div class="qa-lbl">Reviews</div><div class="qa-sub">What customers say</div></div>
+          <div class="qa" onclick="goV('s-v-points')"><div class="qa-ico">⚙️</div><div class="qa-lbl">Points Rules</div><div class="qa-sub">Rates & bonuses</div></div>
+          <div class="qa" onclick="goV('s-v-brand')"><div class="qa-ico">🎨</div><div class="qa-lbl">Brand</div><div class="qa-sub">Emoji, colors & name</div></div>
+        </div>
+        <div style="padding:0 20px 20px">
+          <!-- Today's location — posted here, shows on customer dashboard -->
+          <div class="card">
+            <div class="card-title">📍 Today's Location</div>
+            <div style="font-size:12px;color:var(--mu);margin-bottom:8px;line-height:1.6">Post where you're parked <strong>right now</strong>. Customers see this on their truck page. <strong>Resets automatically at midnight</strong> — or tap Clear to remove it early.</div>
+            <div class="field" style="margin-bottom:10px">
+              <input type="text" id="v-location-input" placeholder="e.g. Downtown Market, 5th & Main" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
+            </div>
+            <div class="field" style="margin-bottom:10px">
+              <label style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px">ZIP Code (helps customers find you)</label>
+              <input type="text" id="v-location-zip" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
+            </div>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-sm btn-p" style="flex:1" onclick="saveLocation()">📍 Post Location</button>
+              <button class="btn btn-sm btn-s" onclick="clearLocation()" style="flex:0 0 auto">✕ Clear</button>
+            </div>
+          </div>
+        </div>
+      </div><!-- end white card -->
     </div>
 
     <!-- VENDOR: AWARD POINTS (used at the window every day) -->
