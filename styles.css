@@ -15,7 +15,7 @@ html,body{background:#FF5722 !important}
   --sh1:0 1px 4px rgba(180,100,40,.10);
   --sh2:0 4px 16px rgba(180,100,40,.13);
   --sh3:0 8px 32px rgba(180,100,40,.18);
-  --nav:76px;--sb:env(safe-area-inset-bottom,0px);
+  --nav:62px;--sb:env(safe-area-inset-bottom,0px);
   --fd:'Nunito',sans-serif;--fd-weight:900;--fb:'Nunito',sans-serif;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
@@ -161,8 +161,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .auth-switch span{color:var(--brand);cursor:pointer;font-weight:800}
 
 /* LOGIN SPLIT LAYOUT */
-.auth-header{width:100%;background:linear-gradient(160deg,#FF5722 0%,#FF6F3C 60%,#FF8A65 100%);padding:8px 28px 52px;display:flex;flex-direction:column;align-items:center;text-align:center}
-.auth-header .auth-logo{width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,.2);border:2.5px solid rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:14px;filter:none;animation:float 3s ease-in-out infinite}
+.auth-header{width:100%;background:linear-gradient(160deg,#FF5722 0%,#FF6F3C 60%,#FF8A65 100%);padding:4px 28px 44px;display:flex;flex-direction:column;align-items:center;text-align:center}
+.auth-header .auth-logo{width:54px;height:54px;border-radius:50%;background:rgba(255,255,255,.2);border:2.5px solid rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:8px;filter:none;animation:float 3s ease-in-out infinite}
 .auth-header .auth-title{color:white;font-size:24px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;text-shadow:0 1px 6px rgba(0,0,0,.15)}
 .auth-header .auth-sub{color:rgba(255,255,255,.82);margin-bottom:0;font-weight:500;font-size:13px}
 .auth-tabs{display:flex;background:rgba(255,255,255,.2);border-radius:50px;padding:4px;margin-top:18px;gap:3px;width:100%;max-width:240px}
