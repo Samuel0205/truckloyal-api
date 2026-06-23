@@ -74,13 +74,16 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
+_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png'}
+
 @app.after_request
 def add_security_headers(response):
     response.headers["X-Content-Type-Options"]  = "nosniff"
     response.headers["X-Frame-Options"]          = "DENY"
     response.headers["X-XSS-Protection"]         = "1; mode=block"
     response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
-    response.headers["Cache-Control"]             = "no-store"
+    if request.path not in _STATIC_PATHS:
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -339,6 +342,43 @@ def serve_styles():
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
+    return resp
+
+
+@app.route("/manifest.json")
+def serve_manifest():
+    from flask import Response
+    import json
+    manifest = {
+        "name": "TruckLoyal",
+        "short_name": "TruckLoyal",
+        "description": "Food truck loyalty rewards — earn points, get rewards",
+        "start_url": "/app",
+        "display": "standalone",
+        "background_color": "#FF5722",
+        "theme_color": "#FF5722",
+        "orientation": "portrait",
+        "icons": [
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ]
+    }
+    resp = Response(json.dumps(manifest), mimetype='application/manifest+json')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
+@app.route("/icon-192.png")
+def serve_icon_192():
+    resp = send_from_directory('.', 'icon-192.png')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/icon-512.png")
+def serve_icon_512():
+    resp = send_from_directory('.', 'icon-512.png')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
     return resp
 
 
