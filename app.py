@@ -74,7 +74,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy'}
+_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms'}
 
 @app.after_request
 def add_security_headers(response):
@@ -457,6 +457,87 @@ def privacy_policy():
   <div class="card">
     <h2>10. Contact</h2>
     <p>TruckLoyal &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a></p>
+  </div>
+</div>
+</body>
+</html>"""
+    resp = Response(html, mimetype='text/html')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
+@app.route("/terms")
+def terms_of_service():
+    from flask import Response
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms of Service — TruckLoyal</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FFF8F0;color:#2D1B0E;line-height:1.7;font-size:15px}
+  .header{background:#FF5722;color:white;padding:28px 24px 20px;text-align:center}
+  .header h1{font-size:22px;font-weight:900;margin-bottom:4px}
+  .header p{font-size:13px;opacity:.85}
+  .body{max-width:680px;margin:0 auto;padding:20px 20px 60px}
+  .card{background:white;border:1.5px solid rgba(180,120,60,.15);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(180,100,40,.08)}
+  h2{font-size:15px;font-weight:800;margin-bottom:10px;color:#FF5722}
+  p{margin-bottom:8px;color:#2D1B0E}
+  p:last-child{margin-bottom:0}
+  strong{font-weight:700}
+  a{color:#FF5722;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔥 TruckLoyal</h1>
+  <p>Terms of Service &mdash; Last updated: April 2026</p>
+</div>
+<div class="body">
+  <div class="card">
+    <h2>1. Agreement to Terms</h2>
+    <p>By creating a vendor account on TruckLoyal ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service. These Terms apply to all vendors who sign up for a paid subscription.</p>
+  </div>
+  <div class="card">
+    <h2>2. Subscription &amp; Billing</h2>
+    <p><strong>Free Trial:</strong> New vendor accounts receive a 14-day free trial beginning on the date of account creation. No charge is made during the trial period.</p>
+    <p><strong>Billing Cycle:</strong> After the trial period ends, your payment method will be charged <strong>$9.99 USD</strong> on the same date each month.</p>
+    <p><strong>Automatic Renewal:</strong> Your subscription automatically renews monthly until cancelled. By providing your payment method, you authorize TruckLoyal to charge your card on a recurring monthly basis.</p>
+    <p><strong>Failed Payments:</strong> If your payment fails, you have a 5-day grace period to update your payment method before your account is suspended.</p>
+    <p><strong>Price Changes:</strong> We reserve the right to change subscription pricing with at least 30 days written notice to your registered email address.</p>
+  </div>
+  <div class="card">
+    <h2>3. Cancellation Policy</h2>
+    <p><strong>How to Cancel:</strong> You may cancel at any time via Settings &rarr; Subscription &rarr; Cancel within the app, or by emailing <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a>.</p>
+    <p><strong>Effect of Cancellation:</strong> Your account remains active through the end of your current billing period. You will not be charged for the next month.</p>
+    <p><strong>No Partial Refunds:</strong> We do not issue refunds for partial months of service or unused features.</p>
+    <p><strong>Trial Cancellation:</strong> Cancel during your 14-day trial and you will not be charged.</p>
+  </div>
+  <div class="card">
+    <h2>4. Refund Policy</h2>
+    <p>All subscription fees are non-refundable except as required by applicable law. If you believe you were charged in error, contact us within 30 days at <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a>.</p>
+    <p>Chargebacks initiated without contacting us first may result in immediate account suspension.</p>
+  </div>
+  <div class="card">
+    <h2>5. Service &amp; Data</h2>
+    <p><strong>Your Data:</strong> You own your customer data. We do not sell your data or your customers' data to third parties.</p>
+    <p><strong>Data Retention:</strong> Upon cancellation, your data is retained for 30 days then permanently deleted.</p>
+    <p><strong>Account Termination:</strong> We reserve the right to suspend or terminate accounts that violate these Terms, engage in fraudulent activity, or fail to pay after the grace period.</p>
+  </div>
+  <div class="card">
+    <h2>6. Limitation of Liability</h2>
+    <p>TruckLoyal is provided "as is" without warranties of any kind. To the maximum extent permitted by law, TruckLoyal and its operators shall not be liable for any indirect, incidental, or consequential damages.</p>
+    <p>Our total liability shall not exceed the amount you paid us in the 12 months preceding the claim.</p>
+  </div>
+  <div class="card">
+    <h2>7. Governing Law</h2>
+    <p>These Terms are governed by the laws of the State of Ohio, United States. Any disputes shall be resolved in the courts of Ohio.</p>
+  </div>
+  <div class="card">
+    <h2>8. Contact</h2>
+    <p>TruckLoyal &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a><br><br>For billing questions, cancellations, or disputes, email us. We respond within 2 business days.</p>
   </div>
 </div>
 </body>
