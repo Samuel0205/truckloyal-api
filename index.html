@@ -2827,6 +2827,7 @@ async function customerSignup(){
   localStorage.setItem('tl_ctoken', ctoken);
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
+  requestPushPermission();
   showToast('🎉 Account created! Scan a food truck QR to start earning.');
 }
 
@@ -2856,6 +2857,7 @@ async function customerLogin(){
   }
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
+  requestPushPermission();
   // Fetch fresh truck data in background (includes profile_picture_url)
   apiGet('/api/customer/'+S.customer.id+'/trucks').then(tr=>{
     if(tr.ok && tr.data.data){
@@ -3856,6 +3858,39 @@ function confetti(){
 }
 
 /* ════════════════════════════════════
+   PUSH NOTIFICATIONS — WebView bridge
+════════════════════════════════════ */
+function requestPushPermission() {
+  if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'request_push_token' }));
+  }
+}
+
+async function savePushToken(token) {
+  if (!token || !S.customer?.id) return;
+  const stored = localStorage.getItem('tl_push_token');
+  if (stored === token) return; // already saved this token
+  try {
+    await fetch(API + '/api/customer/' + S.customer.id + '/push-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Token': S.customer.token || '' },
+      body: JSON.stringify({ token })
+    });
+    localStorage.setItem('tl_push_token', token);
+  } catch(e) {}
+}
+
+function onNativeMessage(event) {
+  try {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'push_token' && msg.token) savePushToken(msg.token);
+    if (msg.type === 'mailto' && msg.url) window.location.href = msg.url;
+  } catch(e) {}
+}
+window.addEventListener('message', onNativeMessage);    // Android WebView
+document.addEventListener('message', onNativeMessage); // iOS WebView
+
+/* ════════════════════════════════════
    INIT
 ════════════════════════════════════ */
 (function init(){
@@ -3871,6 +3906,7 @@ function confetti(){
   if(S.customer){
     S.cScreen='s-c-home';
     if(S.activeTruck) S.cScreen='s-c-truck';
+    requestPushPermission();
   }
   drawWheel(0);
 })();
