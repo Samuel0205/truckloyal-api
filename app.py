@@ -74,7 +74,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms'}
+_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js'}
 
 @app.after_request
 def add_security_headers(response):
@@ -379,6 +379,17 @@ def serve_icon_192():
 def serve_icon_512():
     resp = send_from_directory('.', 'icon-512.png')
     resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/sw.js")
+def serve_sw():
+    resp = send_from_directory('.', 'sw.js')
+    resp.headers['Content-Type'] = 'application/javascript'
+    # Allow the worker to control the whole site (root scope)
+    resp.headers['Service-Worker-Allowed'] = '/'
+    # Never cache the worker itself so updates roll out immediately
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
 

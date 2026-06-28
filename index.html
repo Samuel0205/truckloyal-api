@@ -3883,6 +3883,15 @@ function confetti(){
 }
 
 /* ════════════════════════════════════
+   SERVICE WORKER — required for installability
+════════════════════════════════════ */
+if ('serviceWorker' in navigator && !window.ReactNativeWebView) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  });
+}
+
+/* ════════════════════════════════════
    PWA INSTALL BANNER
 ════════════════════════════════════ */
 (function(){
@@ -3967,34 +3976,57 @@ function showIOSSheet(isRealSafari) {
           </div>
         </div>`;
     } else {
-      // In-app browser — must reopen in Safari first
+      // Chrome iOS / in-app browser — iPhone only allows install from Safari
       steps.innerHTML = `
-        <div style="background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:12px;padding:12px;font-size:12px;color:#E65100;font-weight:600;line-height:1.5;margin-bottom:4px">⚠️ You're in an in-app browser. The app can only be installed from <strong>Safari</strong>.</div>
+        <div style="background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:12px;padding:12px;font-size:12px;color:#E65100;font-weight:600;line-height:1.5;margin-bottom:4px">⚠️ On iPhone, apps can only be added to your home screen from <strong>Safari</strong> — not Chrome or in-app browsers. Apple's rule, not ours!</div>
+        <button onclick="copyAppLink()" style="width:100%;background:var(--tx);color:white;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><span id="copy-link-label">🔗 Copy App Link</span></button>
         <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
           <div style="font-size:28px;flex-shrink:0">1️⃣</div>
           <div>
-            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap the ••• or Share menu</div>
-            <div style="font-size:12px;color:var(--mu);margin-top:2px">Usually top-right or bottom of this screen</div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Copy the link above, then open Safari</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">The blue compass icon on your home screen</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
           <div style="font-size:28px;flex-shrink:0">2️⃣</div>
           <div>
-            <div style="font-weight:800;font-size:14px;color:var(--tx)">Choose "Open in Safari"</div>
-            <div style="font-size:12px;color:var(--mu);margin-top:2px">This reopens TruckLoyal in the Safari app</div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Paste the link &amp; go</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">Tap Safari's address bar, paste, press Go</div>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
           <div style="font-size:28px;flex-shrink:0">3️⃣</div>
           <div>
-            <div style="font-weight:800;font-size:14px;color:var(--tx)">In Safari: Share → Add to Home Screen</div>
-            <div style="font-size:12px;color:var(--mu);margin-top:2px">Tap Share ⬆️, then "Add to Home Screen"</div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Share ⬆️ → "Add to Home Screen"</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">In Safari, tap Share then Add to Home Screen</div>
           </div>
         </div>`;
     }
   }
   const sheet = document.getElementById('ios-install-sheet');
   if (sheet) sheet.style.display = 'flex';
+}
+
+function copyAppLink() {
+  const url = 'https://truckloyal-api.onrender.com/app';
+  const label = document.getElementById('copy-link-label');
+  const done = () => { if (label) { label.textContent = '✅ Copied! Now open Safari'; } };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopy(url, done));
+  } else {
+    fallbackCopy(url, done);
+  }
+}
+
+function fallbackCopy(text, cb) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    cb();
+  } catch(e) {}
 }
 
 function closeIOSSheet() {
