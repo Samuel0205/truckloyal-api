@@ -41,22 +41,7 @@
         <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--tx)">Install TruckLoyal</div>
         <div style="font-size:13px;color:var(--mu);margin-top:4px">Add to your home screen in 2 steps</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:24px">
-        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
-          <div style="font-size:28px;flex-shrink:0">1️⃣</div>
-          <div>
-            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap the Share button</div>
-            <div style="font-size:12px;color:var(--mu);margin-top:2px">The box with an arrow at the bottom of Safari</div>
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
-          <div style="font-size:28px;flex-shrink:0">2️⃣</div>
-          <div>
-            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap "Add to Home Screen"</div>
-            <div style="font-size:12px;color:var(--mu);margin-top:2px">Scroll down in the share sheet and tap Add</div>
-          </div>
-        </div>
-      </div>
+      <div id="ios-install-steps" style="display:flex;flex-direction:column;gap:14px;margin-bottom:24px"></div>
       <button onclick="closeIOSSheet()" style="width:100%;background:#FF5722;color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:800;font-family:var(--fd);cursor:pointer">Got it</button>
     </div>
   </div>
@@ -3907,19 +3892,27 @@ function confetti(){
   const dismissed    = localStorage.getItem('tl_install_dismissed');
   if (isStandalone || isWebView || dismissed) return;
 
-  const isIOS    = /iphone|ipad|ipod/i.test(navigator.userAgent);
-  const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+  const ua       = navigator.userAgent;
+  const isIOS    = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+  // Real Safari only — excludes Chrome (CriOS), Firefox (FxiOS), and most in-app browsers
+  const isRealSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
 
-  if (isIOS && isSafari) {
-    // iOS Safari — can't auto-prompt, show manual instruction banner
+  if (isIOS) {
+    // iOS can NEVER auto-install — always manual via real Safari only
     const banner = document.getElementById('install-banner');
     const btn    = document.getElementById('install-btn');
+    const sub    = document.getElementById('install-sub');
     if (banner && btn) {
-      btn.textContent = 'How to Install';
-      btn.onclick = () => {
-        const sheet = document.getElementById('ios-install-sheet');
-        if (sheet) sheet.style.display = 'flex';
-      };
+      if (isRealSafari) {
+        btn.textContent = 'How to Install';
+        if (sub) sub.textContent = 'Add to your home screen for the full app experience';
+        btn.onclick = () => showIOSSheet(true);
+      } else {
+        // In-app browser or Chrome/Firefox iOS — install is impossible here
+        btn.textContent = 'Install';
+        if (sub) sub.textContent = 'Open in Safari to add this to your home screen';
+        btn.onclick = () => showIOSSheet(false);
+      }
       banner.style.display = 'flex';
     }
   } else {
@@ -3952,6 +3945,56 @@ function dismissInstallBanner() {
   const banner = document.getElementById('install-banner');
   if (banner) banner.style.display = 'none';
   localStorage.setItem('tl_install_dismissed', '1');
+}
+
+function showIOSSheet(isRealSafari) {
+  const steps = document.getElementById('ios-install-steps');
+  if (steps) {
+    if (isRealSafari) {
+      steps.innerHTML = `
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">1️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap the Share button</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">The box with an arrow ⬆️ at the bottom of Safari</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">2️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap "Add to Home Screen"</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">Scroll down in the share sheet, then tap Add</div>
+          </div>
+        </div>`;
+    } else {
+      // In-app browser — must reopen in Safari first
+      steps.innerHTML = `
+        <div style="background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:12px;padding:12px;font-size:12px;color:#E65100;font-weight:600;line-height:1.5;margin-bottom:4px">⚠️ You're in an in-app browser. The app can only be installed from <strong>Safari</strong>.</div>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">1️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap the ••• or Share menu</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">Usually top-right or bottom of this screen</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">2️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Choose "Open in Safari"</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">This reopens TruckLoyal in the Safari app</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">3️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">In Safari: Share → Add to Home Screen</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">Tap Share ⬆️, then "Add to Home Screen"</div>
+          </div>
+        </div>`;
+    }
+  }
+  const sheet = document.getElementById('ios-install-sheet');
+  if (sheet) sheet.style.display = 'flex';
 }
 
 function closeIOSSheet() {
