@@ -74,7 +74,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js'}
+_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get'}
 
 @app.after_request
 def add_security_headers(response):
@@ -389,6 +389,14 @@ def serve_sw():
     # Allow the worker to control the whole site (root scope)
     resp.headers['Service-Worker-Allowed'] = '/'
     # Never cache the worker itself so updates roll out immediately
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+@app.route("/install")
+@app.route("/get")
+def serve_install():
+    resp = send_from_directory('.', 'install.html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
