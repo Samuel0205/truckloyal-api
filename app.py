@@ -74,13 +74,16 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
+_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get'}
+
 @app.after_request
 def add_security_headers(response):
     response.headers["X-Content-Type-Options"]  = "nosniff"
     response.headers["X-Frame-Options"]          = "DENY"
     response.headers["X-XSS-Protection"]         = "1; mode=block"
     response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
-    response.headers["Cache-Control"]             = "no-store"
+    if request.path not in _STATIC_PATHS:
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -339,6 +342,227 @@ def serve_styles():
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
+    return resp
+
+
+@app.route("/manifest.json")
+def serve_manifest():
+    from flask import Response
+    import json
+    manifest = {
+        "name": "TruckLoyal",
+        "short_name": "TruckLoyal",
+        "description": "Food truck loyalty rewards — earn points, get rewards",
+        "start_url": "/app",
+        "display": "standalone",
+        "background_color": "#FF5722",
+        "theme_color": "#FF5722",
+        "orientation": "portrait",
+        "icons": [
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ]
+    }
+    resp = Response(json.dumps(manifest), mimetype='application/manifest+json')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
+@app.route("/icon-192.png")
+def serve_icon_192():
+    resp = send_from_directory('.', 'icon-192.png')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/icon-512.png")
+def serve_icon_512():
+    resp = send_from_directory('.', 'icon-512.png')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/sw.js")
+def serve_sw():
+    resp = send_from_directory('.', 'sw.js')
+    resp.headers['Content-Type'] = 'application/javascript'
+    # Allow the worker to control the whole site (root scope)
+    resp.headers['Service-Worker-Allowed'] = '/'
+    # Never cache the worker itself so updates roll out immediately
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+@app.route("/install")
+@app.route("/get")
+def serve_install():
+    resp = send_from_directory('.', 'install.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+@app.route("/privacy")
+def privacy_policy():
+    from flask import Response
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — TruckLoyal</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FFF8F0;color:#2D1B0E;line-height:1.7;font-size:15px}
+  .header{background:#FF5722;color:white;padding:28px 24px 20px;text-align:center}
+  .header h1{font-size:22px;font-weight:900;margin-bottom:4px}
+  .header p{font-size:13px;opacity:.85}
+  .body{max-width:680px;margin:0 auto;padding:20px 20px 60px}
+  .card{background:white;border:1.5px solid rgba(180,120,60,.15);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(180,100,40,.08)}
+  h2{font-size:15px;font-weight:800;margin-bottom:10px;color:#FF5722}
+  p{margin-bottom:8px;color:#2D1B0E}
+  p:last-child{margin-bottom:0}
+  strong{font-weight:700}
+  a{color:#FF5722;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔥 TruckLoyal</h1>
+  <p>Privacy Policy &mdash; Last updated: April 2026</p>
+</div>
+<div class="body">
+  <div class="card">
+    <h2>1. Information We Collect</h2>
+    <p><strong>Vendor accounts:</strong> Name, business name, email address, password (hashed — never stored in plain text), and payment method (processed and stored securely by Stripe — we never see your full card number).</p>
+    <p><strong>Customer accounts:</strong> Name, phone number, email address, visit history, and points balance. This data is used solely to operate the loyalty program on your behalf.</p>
+  </div>
+  <div class="card">
+    <h2>2. How We Use Your Information</h2>
+    <p>We use your information to operate the Service, process payments, send billing receipts, provide customer support, and improve the platform. We do not use your data or your customers' data for advertising.</p>
+    <p>We may send you service-related emails such as payment receipts, trial expiration reminders, and important account notices. You cannot opt out of transactional emails while your account is active.</p>
+  </div>
+  <div class="card">
+    <h2>3. Data Sharing</h2>
+    <p>We do not sell, rent, or share your personal information or your customers' personal information with third parties for marketing purposes.</p>
+    <p><strong>Payment processing:</strong> Payment information is shared with Stripe, Inc. for billing purposes. Stripe's privacy policy applies to that data.</p>
+    <p><strong>Infrastructure:</strong> We use Supabase for database hosting and Render for application hosting. These providers process data on our behalf under data processing agreements.</p>
+  </div>
+  <div class="card">
+    <h2>4. Data Security</h2>
+    <p>All data is transmitted over HTTPS (TLS encryption). Passwords are hashed using bcrypt and are never stored in plain text. Payment data is handled entirely by Stripe and subject to PCI-DSS compliance. We perform regular security reviews of our infrastructure.</p>
+  </div>
+  <div class="card">
+    <h2>5. Data Retention &amp; Deletion</h2>
+    <p>Active vendor accounts and associated customer data are retained as long as the account is active. Upon cancellation, all data is retained for 30 days then permanently deleted.</p>
+    <p>You may request immediate deletion of your account and data by emailing <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a>. We will complete deletion within 14 business days.</p>
+  </div>
+  <div class="card">
+    <h2>6. Your Rights</h2>
+    <p>You have the right to access, correct, or delete your personal data at any time. Contact us at <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a> to exercise these rights.</p>
+    <p>If you are in the European Economic Area (EEA), you have additional rights under GDPR including the right to data portability and the right to lodge a complaint with your local data protection authority.</p>
+  </div>
+  <div class="card">
+    <h2>7. Push Notifications</h2>
+    <p>If you grant permission, we may send push notifications to your device about loyalty rewards, points earned, and messages from food trucks you follow. You can withdraw this permission at any time in your device settings.</p>
+  </div>
+  <div class="card">
+    <h2>8. Cookies &amp; Local Storage</h2>
+    <p>This application uses browser localStorage to maintain your session and preferences. We do not use third-party tracking cookies or advertising pixels.</p>
+  </div>
+  <div class="card">
+    <h2>9. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. We will notify you of significant changes by email at least 14 days before they take effect. Continued use of the Service after changes constitutes acceptance.</p>
+  </div>
+  <div class="card">
+    <h2>10. Contact</h2>
+    <p>TruckLoyal &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a></p>
+  </div>
+</div>
+</body>
+</html>"""
+    resp = Response(html, mimetype='text/html')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
+@app.route("/terms")
+def terms_of_service():
+    from flask import Response
+    html = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Terms of Service — TruckLoyal</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FFF8F0;color:#2D1B0E;line-height:1.7;font-size:15px}
+  .header{background:#FF5722;color:white;padding:28px 24px 20px;text-align:center}
+  .header h1{font-size:22px;font-weight:900;margin-bottom:4px}
+  .header p{font-size:13px;opacity:.85}
+  .body{max-width:680px;margin:0 auto;padding:20px 20px 60px}
+  .card{background:white;border:1.5px solid rgba(180,120,60,.15);border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(180,100,40,.08)}
+  h2{font-size:15px;font-weight:800;margin-bottom:10px;color:#FF5722}
+  p{margin-bottom:8px;color:#2D1B0E}
+  p:last-child{margin-bottom:0}
+  strong{font-weight:700}
+  a{color:#FF5722;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🔥 TruckLoyal</h1>
+  <p>Terms of Service &mdash; Last updated: April 2026</p>
+</div>
+<div class="body">
+  <div class="card">
+    <h2>1. Agreement to Terms</h2>
+    <p>By creating a vendor account on TruckLoyal ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service. These Terms apply to all vendors who sign up for a paid subscription.</p>
+  </div>
+  <div class="card">
+    <h2>2. Subscription &amp; Billing</h2>
+    <p><strong>Free Trial:</strong> New vendor accounts receive a 14-day free trial beginning on the date of account creation. No charge is made during the trial period.</p>
+    <p><strong>Billing Cycle:</strong> After the trial period ends, your payment method will be charged <strong>$9.99 USD</strong> on the same date each month.</p>
+    <p><strong>Automatic Renewal:</strong> Your subscription automatically renews monthly until cancelled. By providing your payment method, you authorize TruckLoyal to charge your card on a recurring monthly basis.</p>
+    <p><strong>Failed Payments:</strong> If your payment fails, you have a 5-day grace period to update your payment method before your account is suspended.</p>
+    <p><strong>Price Changes:</strong> We reserve the right to change subscription pricing with at least 30 days written notice to your registered email address.</p>
+  </div>
+  <div class="card">
+    <h2>3. Cancellation Policy</h2>
+    <p><strong>How to Cancel:</strong> You may cancel at any time via Settings &rarr; Subscription &rarr; Cancel within the app, or by emailing <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a>.</p>
+    <p><strong>Effect of Cancellation:</strong> Your account remains active through the end of your current billing period. You will not be charged for the next month.</p>
+    <p><strong>No Partial Refunds:</strong> We do not issue refunds for partial months of service or unused features.</p>
+    <p><strong>Trial Cancellation:</strong> Cancel during your 14-day trial and you will not be charged.</p>
+  </div>
+  <div class="card">
+    <h2>4. Refund Policy</h2>
+    <p>All subscription fees are non-refundable except as required by applicable law. If you believe you were charged in error, contact us within 30 days at <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a>.</p>
+    <p>Chargebacks initiated without contacting us first may result in immediate account suspension.</p>
+  </div>
+  <div class="card">
+    <h2>5. Service &amp; Data</h2>
+    <p><strong>Your Data:</strong> You own your customer data. We do not sell your data or your customers' data to third parties.</p>
+    <p><strong>Data Retention:</strong> Upon cancellation, your data is retained for 30 days then permanently deleted.</p>
+    <p><strong>Account Termination:</strong> We reserve the right to suspend or terminate accounts that violate these Terms, engage in fraudulent activity, or fail to pay after the grace period.</p>
+  </div>
+  <div class="card">
+    <h2>6. Limitation of Liability</h2>
+    <p>TruckLoyal is provided "as is" without warranties of any kind. To the maximum extent permitted by law, TruckLoyal and its operators shall not be liable for any indirect, incidental, or consequential damages.</p>
+    <p>Our total liability shall not exceed the amount you paid us in the 12 months preceding the claim.</p>
+  </div>
+  <div class="card">
+    <h2>7. Governing Law</h2>
+    <p>These Terms are governed by the laws of the State of Ohio, United States. Any disputes shall be resolved in the courts of Ohio.</p>
+  </div>
+  <div class="card">
+    <h2>8. Contact</h2>
+    <p>TruckLoyal &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a><br><br>For billing questions, cancellations, or disputes, email us. We respond within 2 business days.</p>
+  </div>
+</div>
+</body>
+</html>"""
+    resp = Response(html, mimetype='text/html')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
     return resp
 
 

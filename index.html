@@ -3,10 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>TruckLoyal — Food Truck Rewards</title>
+<meta name="description" content="Earn points and get rewards at your favorite food trucks">
+<meta name="theme-color" content="#FF5722">
+<link rel="manifest" href="/manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Food Truck Rewards</title>
-<meta name="theme-color" content="#FFF8F0">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="TruckLoyal">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
 </head>
@@ -16,6 +21,31 @@
   <div id="splash-spinner"></div>
 </div>
 <div id="app">
+
+  <!-- PWA install banner — hidden by default, shown by JS when appropriate -->
+  <div id="install-banner" style="display:none;align-items:center;gap:10px;background:#1A1A1A;padding:10px 14px;flex-shrink:0;z-index:70">
+    <div style="font-size:28px;flex-shrink:0">🔥</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:800;color:white;line-height:1.2">Install TruckLoyal</div>
+      <div id="install-sub" style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px">Add to your home screen for the full app experience</div>
+    </div>
+    <button id="install-btn" onclick="triggerInstall()" style="background:#FF5722;color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;font-family:var(--fb);cursor:pointer;white-space:nowrap;flex-shrink:0">Add App</button>
+    <button onclick="dismissInstallBanner()" style="background:transparent;border:none;color:rgba(255,255,255,.4);font-size:20px;cursor:pointer;padding:0 2px;flex-shrink:0;line-height:1">×</button>
+  </div>
+
+  <!-- iOS install instructions sheet — shown on iOS Safari -->
+  <div id="ios-install-sheet" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:flex-end">
+    <div style="background:white;border-radius:24px 24px 0 0;padding:24px 24px 40px;width:100%;max-width:430px;margin:0 auto">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:48px;margin-bottom:8px">🔥</div>
+        <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--tx)">Install TruckLoyal</div>
+        <div style="font-size:13px;color:var(--mu);margin-top:4px">Add to your home screen in 2 steps</div>
+      </div>
+      <div id="ios-install-steps" style="display:flex;flex-direction:column;gap:14px;margin-bottom:24px"></div>
+      <button onclick="closeIOSSheet()" style="width:100%;background:#FF5722;color:white;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:800;font-family:var(--fd);cursor:pointer">Got it</button>
+    </div>
+  </div>
+
   <div class="topbar">
     <div class="tl-logo">🔥 Food Truck Rewards</div>
     <div class="mode-tog">
@@ -411,7 +441,7 @@
 
     <!-- VENDOR HOME -->
     <div class="screen" id="s-v-home">
-      <div class="vh-hero">
+      <div class="vh-hero" style="padding-bottom:36px">
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px">
           <div id="v-hero-pic" style="width:64px;height:64px;border-radius:50%;border:3px solid rgba(255,255,255,.7);overflow:hidden;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;box-shadow:0 4px 14px rgba(0,0,0,.18)">🚚</div>
           <div>
@@ -425,7 +455,7 @@
         </div>
       </div>
       <!-- White card: stats + quick actions + location -->
-      <div style="background:white;border-radius:24px 24px 0 0;margin:-4px 0 0;box-shadow:0 -2px 16px rgba(180,100,40,0.08)">
+      <div style="background:white;border-radius:24px 24px 0 0;margin:-28px 0 0;box-shadow:0 -2px 16px rgba(180,100,40,0.08)">
         <div style="padding:14px 20px 0">
           <div class="stats g3">
             <div class="sc"><div class="sv" style="color:var(--brand)" id="v-stat-visits">0</div><div class="sl">Visits Today</div></div>
@@ -2822,6 +2852,7 @@ async function customerSignup(){
   localStorage.setItem('tl_ctoken', ctoken);
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
+  requestPushPermission();
   showToast('🎉 Account created! Scan a food truck QR to start earning.');
 }
 
@@ -2851,6 +2882,7 @@ async function customerLogin(){
   }
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
+  requestPushPermission();
   // Fetch fresh truck data in background (includes profile_picture_url)
   apiGet('/api/customer/'+S.customer.id+'/trucks').then(tr=>{
     if(tr.ok && tr.data.data){
@@ -3851,6 +3883,192 @@ function confetti(){
 }
 
 /* ════════════════════════════════════
+   SERVICE WORKER — required for installability
+════════════════════════════════════ */
+if ('serviceWorker' in navigator && !window.ReactNativeWebView) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
+  });
+}
+
+/* ════════════════════════════════════
+   PWA INSTALL BANNER
+════════════════════════════════════ */
+(function(){
+  // Don't show if: already installed as PWA, inside native WebView, or user dismissed
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isWebView    = !!window.ReactNativeWebView;
+  const dismissed    = localStorage.getItem('tl_install_dismissed');
+  if (isStandalone || isWebView || dismissed) return;
+
+  const ua       = navigator.userAgent;
+  const isIOS    = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+  // Real Safari only — excludes Chrome (CriOS), Firefox (FxiOS), and most in-app browsers
+  const isRealSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
+
+  if (isIOS) {
+    // iOS can NEVER auto-install — always manual via real Safari only
+    const banner = document.getElementById('install-banner');
+    const btn    = document.getElementById('install-btn');
+    const sub    = document.getElementById('install-sub');
+    if (banner && btn) {
+      if (isRealSafari) {
+        btn.textContent = 'How to Install';
+        if (sub) sub.textContent = 'Add to your home screen for the full app experience';
+        btn.onclick = () => showIOSSheet(true);
+      } else {
+        // In-app browser or Chrome/Firefox iOS — install is impossible here
+        btn.textContent = 'Install';
+        if (sub) sub.textContent = 'Open in Safari to add this to your home screen';
+        btn.onclick = () => showIOSSheet(false);
+      }
+      banner.style.display = 'flex';
+    }
+  } else {
+    // Android Chrome — intercept native install prompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      window._installPrompt = e;
+      const banner = document.getElementById('install-banner');
+      if (banner) banner.style.display = 'flex';
+    });
+
+    // Hide banner if user installs from elsewhere
+    window.addEventListener('appinstalled', () => {
+      dismissInstallBanner();
+    });
+  }
+})();
+
+function triggerInstall() {
+  if (window._installPrompt) {
+    window._installPrompt.prompt();
+    window._installPrompt.userChoice.then(r => {
+      if (r.outcome === 'accepted') dismissInstallBanner();
+      window._installPrompt = null;
+    });
+  }
+}
+
+function dismissInstallBanner() {
+  const banner = document.getElementById('install-banner');
+  if (banner) banner.style.display = 'none';
+  localStorage.setItem('tl_install_dismissed', '1');
+}
+
+function showIOSSheet(isRealSafari) {
+  const steps = document.getElementById('ios-install-steps');
+  if (steps) {
+    if (isRealSafari) {
+      steps.innerHTML = `
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">1️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap the Share button</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">The box with an arrow ⬆️ at the bottom of Safari</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">2️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Tap "Add to Home Screen"</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">Scroll down in the share sheet, then tap Add</div>
+          </div>
+        </div>`;
+    } else {
+      // Chrome iOS / in-app browser — iPhone only allows install from Safari
+      steps.innerHTML = `
+        <div style="background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:12px;padding:12px;font-size:12px;color:#E65100;font-weight:600;line-height:1.5;margin-bottom:4px">⚠️ On iPhone, apps can only be added to your home screen from <strong>Safari</strong> — not Chrome or in-app browsers. Apple's rule, not ours!</div>
+        <button onclick="copyAppLink()" style="width:100%;background:var(--tx);color:white;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><span id="copy-link-label">🔗 Copy App Link</span></button>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">1️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Copy the link above, then open Safari</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">The blue compass icon on your home screen</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">2️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Paste the link &amp; go</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">Tap Safari's address bar, paste, press Go</div>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:14px;background:#FFF8F0;border-radius:14px;padding:14px">
+          <div style="font-size:28px;flex-shrink:0">3️⃣</div>
+          <div>
+            <div style="font-weight:800;font-size:14px;color:var(--tx)">Share ⬆️ → "Add to Home Screen"</div>
+            <div style="font-size:12px;color:var(--mu);margin-top:2px">In Safari, tap Share then Add to Home Screen</div>
+          </div>
+        </div>`;
+    }
+  }
+  const sheet = document.getElementById('ios-install-sheet');
+  if (sheet) sheet.style.display = 'flex';
+}
+
+function copyAppLink() {
+  const url = 'https://truckloyal-api.onrender.com/app';
+  const label = document.getElementById('copy-link-label');
+  const done = () => { if (label) { label.textContent = '✅ Copied! Now open Safari'; } };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopy(url, done));
+  } else {
+    fallbackCopy(url, done);
+  }
+}
+
+function fallbackCopy(text, cb) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    cb();
+  } catch(e) {}
+}
+
+function closeIOSSheet() {
+  const sheet = document.getElementById('ios-install-sheet');
+  if (sheet) sheet.style.display = 'none';
+  dismissInstallBanner();
+}
+
+/* ════════════════════════════════════
+   PUSH NOTIFICATIONS — WebView bridge
+════════════════════════════════════ */
+function requestPushPermission() {
+  if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'request_push_token' }));
+  }
+}
+
+async function savePushToken(token) {
+  if (!token || !S.customer?.id) return;
+  const stored = localStorage.getItem('tl_push_token');
+  if (stored === token) return; // already saved this token
+  try {
+    await fetch(API + '/api/customer/' + S.customer.id + '/push-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Customer-Token': S.customer.token || '' },
+      body: JSON.stringify({ token })
+    });
+    localStorage.setItem('tl_push_token', token);
+  } catch(e) {}
+}
+
+function onNativeMessage(event) {
+  try {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'push_token' && msg.token) savePushToken(msg.token);
+    if (msg.type === 'mailto' && msg.url) window.location.href = msg.url;
+  } catch(e) {}
+}
+window.addEventListener('message', onNativeMessage);    // Android WebView
+document.addEventListener('message', onNativeMessage); // iOS WebView
+
+/* ════════════════════════════════════
    INIT
 ════════════════════════════════════ */
 (function init(){
@@ -3866,6 +4084,7 @@ function confetti(){
   if(S.customer){
     S.cScreen='s-c-home';
     if(S.activeTruck) S.cScreen='s-c-truck';
+    requestPushPermission();
   }
   drawWheel(0);
 })();
