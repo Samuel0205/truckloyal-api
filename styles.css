@@ -242,8 +242,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 /* FILTER CHIPS */
 .c-chips{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
 .c-chips::-webkit-scrollbar{display:none}
-.c-chip{flex-shrink:0;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;border:1.5px solid var(--b2);background:white;color:var(--mu);cursor:pointer;transition:all .2s;white-space:nowrap}
-.c-chip.on{background:rgba(255,87,34,.1);border-color:rgba(255,87,34,.35);color:var(--brand)}
+.c-chip{flex-shrink:0;padding:7px 15px;border-radius:20px;font-size:12px;font-weight:800;border:1.5px solid var(--b2);background:white;color:var(--mu);cursor:pointer;transition:all .2s;white-space:nowrap;box-shadow:0 1px 4px rgba(180,100,40,.08)}
+.c-chip:active{transform:scale(.95)}
+.c-chip.on{background:linear-gradient(135deg,var(--brand) 0%,#FF8A50 100%);border-color:transparent;color:white;box-shadow:0 3px 12px rgba(255,87,34,.32)}
 
 /* CUSTOMER QR */
 .my-qr-wrap{background:white;border-radius:20px;padding:20px;display:inline-flex;flex-direction:column;align-items:center;gap:10px;border:3px solid var(--b2);box-shadow:var(--sh3)}

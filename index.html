@@ -1202,7 +1202,10 @@
         </div>
 
         <!-- White card section: filter chips + truck list -->
-        <div style="background:white;border-radius:24px 24px 0 0;margin:12px -20px 0;padding:16px 20px 0;box-shadow:0 -2px 16px rgba(180,100,40,0.08)">
+        <div style="background:linear-gradient(180deg,#FFFFFF 0%,#FFFBF6 55%,#FFF6EC 100%);border-radius:26px 26px 0 0;margin:12px -20px 0;padding:11px 20px 0;box-shadow:0 -4px 22px rgba(180,100,40,0.12);position:relative">
+
+        <!-- Grabber handle -->
+        <div style="width:44px;height:5px;border-radius:99px;background:rgba(180,120,60,.18);margin:0 auto 16px"></div>
 
         <!-- Filter chips -->
         <div class="c-chips" id="c-filter-chips">
@@ -1212,9 +1215,12 @@
         </div>
 
         <!-- Section header -->
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px">
-          <div style="font-family:var(--fd);font-size:18px;font-weight:900;color:var(--tx)" id="c-trucks-section-title">My Trucks</div>
-          <div style="font-size:12px;color:var(--brand);font-weight:700;cursor:pointer" onclick="goC('s-c-scan')">+ Add Truck</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <div style="width:4px;height:19px;border-radius:99px;background:linear-gradient(180deg,var(--brand),#FF8A50)"></div>
+            <div style="font-family:var(--fd);font-size:18px;font-weight:900;color:var(--tx)" id="c-trucks-section-title">My Trucks</div>
+          </div>
+          <div style="font-size:12px;color:var(--brand);font-weight:800;cursor:pointer;background:rgba(255,87,34,.1);padding:6px 13px;border-radius:99px;border:1.5px solid rgba(255,87,34,.18)" onclick="goC('s-c-scan')">+ Add Truck</div>
         </div>
 
         <!-- Empty state -->
