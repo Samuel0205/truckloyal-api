@@ -47,7 +47,10 @@
   </div>
 
   <div class="topbar">
-    <div class="tl-logo">🔥 Food Truck Rewards</div>
+    <div class="tl-logo">Food Truck Rewards</div>
+    <button class="tb-menu" onclick="openMenu()" aria-label="Menu">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
     <div class="mode-tog">
       <button class="mb on" id="mb-v" onclick="setMode('vendor')">🏪 Vendor</button>
       <button class="mb" id="mb-c" onclick="setMode('customer')">👤 Customer</button>
@@ -1201,11 +1204,8 @@
           </div>
         </div>
 
-        <!-- White card section: filter chips + truck list -->
-        <div style="background:linear-gradient(180deg,#FFFFFF 0%,#FFFBF6 55%,#FFF6EC 100%);border-radius:26px 26px 0 0;margin:12px -20px 0;padding:11px 20px 0;box-shadow:0 -4px 22px rgba(180,100,40,0.12);position:relative">
-
-        <!-- Grabber handle -->
-        <div style="width:44px;height:5px;border-radius:99px;background:rgba(180,120,60,.18);margin:0 auto 16px"></div>
+        <!-- Trucks section -->
+        <div style="background:#fff;border-radius:26px 26px 0 0;margin:12px -20px 0;padding:18px 20px 0;box-shadow:0 -3px 18px rgba(180,100,40,0.08)">
 
         <!-- Filter chips -->
         <div class="c-chips" id="c-filter-chips">
@@ -1217,10 +1217,10 @@
         <!-- Section header -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
           <div style="display:flex;align-items:center;gap:9px">
-            <div style="width:4px;height:19px;border-radius:99px;background:linear-gradient(180deg,var(--brand),#FF8A50)"></div>
-            <div style="font-family:var(--fd);font-size:18px;font-weight:900;color:var(--tx)" id="c-trucks-section-title">My Trucks</div>
+            <div style="width:4px;height:18px;border-radius:99px;background:linear-gradient(180deg,var(--brand),#FF8A50)"></div>
+            <div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx);text-transform:uppercase;letter-spacing:.4px" id="c-trucks-section-title">My Trucks</div>
           </div>
-          <div style="font-size:12px;color:var(--brand);font-weight:800;cursor:pointer;background:rgba(255,87,34,.1);padding:6px 13px;border-radius:99px;border:1.5px solid rgba(255,87,34,.18)" onclick="goC('s-c-scan')">+ Add Truck</div>
+          <div style="font-size:11px;color:var(--brand);font-weight:800;cursor:pointer;background:#fff;padding:7px 14px;border-radius:99px;border:1.5px solid rgba(255,87,34,.45);text-transform:uppercase;letter-spacing:.3px" onclick="goC('s-c-scan')">+ Add Truck</div>
         </div>
 
         <!-- Empty state -->
@@ -1838,6 +1838,14 @@ function show(id){
   if(el) el.classList.add('on');
   document.getElementById('scroll').scrollTop=0;
   document.querySelector('.topbar').classList.toggle('auth-mode',AUTH_SCREENS.has(id));
+}
+
+function openMenu(){
+  if(S.mode==='vendor'){
+    if(S.vendorToken&&S.vendor) goV('s-v-settings');
+  } else {
+    if(S.customer) goC('s-c-profile');
+  }
 }
 
 function setMode(mode){
