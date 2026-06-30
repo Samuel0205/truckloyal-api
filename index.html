@@ -3392,11 +3392,12 @@ async function renderTruckDash(){
   const checkinBtn=document.getElementById('ct-checkin-btn');
   if(checkinBtn){
     if(t.is_active===false){
-      // Truck's loyalty program is paused/inactive — no spin available
-      checkinBtn.textContent='⏸ Loyalty Program Paused';
-      checkinBtn.style.background='#EEEEEE';
-      checkinBtn.style.color='#8a8a8a';
+      // Truck's loyalty program isn't active yet — show an inviting message
+      checkinBtn.textContent='✨ Try this truck out to earn rewards!';
+      checkinBtn.style.background='linear-gradient(135deg,#FFE0B2,#FFF3E0)';
+      checkinBtn.style.color='#E65100';
       checkinBtn.style.boxShadow='none';
+      checkinBtn.style.opacity='1';
       checkinBtn.disabled=true;
     } else if(spunToday){
       // Fully done for today
