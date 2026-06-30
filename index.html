@@ -1373,17 +1373,26 @@
           <div style="font-size:13px;font-weight:700;color:var(--mu)">⚡ Visit points earned</div>
           <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--gn)">+<span id="spin-visit-pts">50</span></div>
         </div>
-        <div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--mu);margin-bottom:8px;width:100%;text-align:left">🎰 Spin to win bonus points:</div>
-        <div class="spp-grid" id="spp-grid"></div>
-        <div style="font-size:11px;color:var(--mu);margin-bottom:12px;text-align:center;font-weight:600">Every spin wins · 1 spin per day per truck</div>
-        <div class="wheel-area">
-          <div class="wheel-ptr">▼</div>
-          <canvas id="spin-canvas" width="280" height="280"></canvas>
+        <!-- Shown when this truck has no spin prizes set up yet -->
+        <div id="spin-no-prizes" style="display:none;width:100%;text-align:center;background:white;border:2px solid var(--b2);border-radius:16px;padding:30px 22px;box-shadow:var(--sh1);margin-top:6px">
+          <div style="font-size:46px;margin-bottom:10px">🎁</div>
+          <div style="font-family:var(--fd);font-size:19px;font-weight:900;color:var(--tx);margin-bottom:6px">Check back later for updated rewards</div>
+          <div style="font-size:13px;color:var(--mu);font-weight:600;line-height:1.6">This truck hasn't set up its spin prizes yet. Your visit points are saved — come back soon to spin for bonus points!</div>
         </div>
-        <button class="btn btn-p" id="spin-btn" style="max-width:280px;font-size:17px;padding:16px 20px" onclick="doSpin()">🎰 SPIN THE WHEEL</button>
-        <div style="font-size:11px;color:var(--mu);margin-top:10px;line-height:1.7;text-align:center;font-weight:600">
-          Bonus points added to your balance at <span id="spin-truck-name2">this truck</span>.<br>
-          Use points to redeem rewards from the truck's page.
+
+        <div id="spin-content" style="width:100%;display:flex;flex-direction:column;align-items:center">
+          <div style="font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:var(--mu);margin-bottom:8px;width:100%;text-align:left">🎰 Spin to win bonus points:</div>
+          <div class="spp-grid" id="spp-grid"></div>
+          <div style="font-size:11px;color:var(--mu);margin-bottom:12px;text-align:center;font-weight:600">Every spin wins · 1 spin per day per truck</div>
+          <div class="wheel-area">
+            <div class="wheel-ptr">▼</div>
+            <canvas id="spin-canvas" width="280" height="280"></canvas>
+          </div>
+          <button class="btn btn-p" id="spin-btn" style="max-width:280px;font-size:17px;padding:16px 20px" onclick="doSpin()">🎰 SPIN THE WHEEL</button>
+          <div style="font-size:11px;color:var(--mu);margin-top:10px;line-height:1.7;text-align:center;font-weight:600">
+            Bonus points added to your balance at <span id="spin-truck-name2">this truck</span>.<br>
+            Use points to redeem rewards from the truck's page.
+          </div>
         </div>
       </div>
     </div>
@@ -2301,8 +2310,9 @@ async function loadVRewards(){
 
 async function loadVPrizes(){
   const r=await apiGet('/api/vendor/prizes');
-  if(r.ok&&r.data.data?.length) S.prizes=r.data.data.map(p=>({...p,pts:p.pts||parseInt(p.prize_value)||50}));
-  else S.prizes=[...DEFAULT_PRIZES];
+  const real = (r.ok&&r.data.data?.length) ? r.data.data.map(p=>({...p,pts:p.pts||parseInt(p.prize_value)||50})) : [];
+  S.vendorHasPrizes = real.length>0;
+  S.prizes = real.length ? real : [...DEFAULT_PRIZES];
   renderVPrizes(); renderSpinPreview(); drawWheel(S.spinAngle);
 }
 
@@ -2321,7 +2331,15 @@ function renderVRewards(){
 function renderVPrizes(){
   const el=document.getElementById('v-prizes-list');
   if(!el) return;
-  if(!S.prizes.length){el.innerHTML='<div style="text-align:center;padding:20px;color:var(--mu)">No prizes yet</div>';return}
+  // No prizes set up yet — highlight the box to nudge the vendor to add some
+  if(!S.vendorHasPrizes){
+    el.innerHTML=`<div style="border:2px dashed var(--brand);background:rgba(255,87,34,.06);border-radius:16px;padding:24px 18px;text-align:center;box-shadow:0 0 0 4px rgba(255,87,34,.08);margin-bottom:14px">
+      <div style="font-size:38px;margin-bottom:8px">🎰</div>
+      <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx);margin-bottom:6px">No spin prizes yet</div>
+      <div style="font-size:13px;color:var(--mu);font-weight:600;line-height:1.55">Add at least one prize so customers can win bonus points when they check in. Until then they'll see <strong>"Check back later for updated rewards."</strong></div>
+    </div>`;
+    return;
+  }
   el.innerHTML=S.prizes.map((p,i)=>`
     <div class="li">
       <div class="li-icon">${p.emoji}</div>
@@ -3117,6 +3135,7 @@ async function openTruck(i){
   S.activeTruck=S.myTrucks[i];
   localStorage.setItem('tl_active_truck',JSON.stringify(S.activeTruck));
   S.rewards=[...DEFAULT_REWARDS]; S.prizes=[...DEFAULT_PRIZES];
+  S.activeTruckHasPrizes=true;   // assume yes until config says otherwise
 
   // Load truck's real rewards and prizes before navigating
   if(S.activeTruck.id && S.activeTruck.slug){
@@ -3127,6 +3146,7 @@ async function openTruck(i){
         // API returns {vendor, rewards, prizes, tiers}
         if(cfg.rewards?.length) S.rewards=cfg.rewards;
         const np=normPrizes(cfg.prizes);
+        S.activeTruckHasPrizes = np.length>0;
         if(np.length) S.prizes=np;
       }
     } catch(e){}
@@ -3170,7 +3190,9 @@ async function joinTruckByCode(){
   }
   S.activeTruck=truck;
   S.rewards=truck.rewards||[...DEFAULT_REWARDS];
-  S.prizes=truck.prizes?.length?normPrizes(truck.prizes):[...DEFAULT_PRIZES];
+  const jnp=normPrizes(truck.prizes);
+  S.activeTruckHasPrizes = jnp.length>0;
+  S.prizes=jnp.length?jnp:[...DEFAULT_PRIZES];
   localStorage.setItem('tl_active_truck',JSON.stringify(truck));
   // Clear search
   const searchEl=document.getElementById('c-truck-search');
@@ -3727,6 +3749,16 @@ function normPrizes(arr){
 function renderSpinPreview(){
   const el=document.getElementById('spp-grid');
   if(!el) return;
+  // If this truck has no spin prizes set up, show "check back later" instead of the wheel
+  const hasPrizes = S.activeTruckHasPrizes !== false;
+  const noPrizesEl = document.getElementById('spin-no-prizes');
+  const contentEl  = document.getElementById('spin-content');
+  if(noPrizesEl) noPrizesEl.style.display = hasPrizes ? 'none' : 'block';
+  if(contentEl)  contentEl.style.display  = hasPrizes ? 'flex' : 'none';
+  if(!hasPrizes){
+    setText('spin-truck-name', S.activeTruck?.truck_name||'this truck');
+    return;
+  }
   const prizes=S.prizes.length?S.prizes:DEFAULT_PRIZES;
   // Use prize_value from API or pts fallback
   const withPts = prizes.map(p=>({...p, pts: parseInt(p.prize_value||p.pts||25)}));
