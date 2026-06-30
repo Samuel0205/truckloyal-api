@@ -293,13 +293,19 @@ def _calc_points(vendor: dict, order_total: float,
 def _get_customer_trucks(customer_id: str) -> list:
     ct_rows = sb.table("customer_trucks").select(
         "*, vendors(id, truck_name, tagline, emoji, slug, "
-        "color_primary, color_secondary, vendor_number, location_today, profile_picture_url)"
+        "color_primary, color_secondary, vendor_number, location_today, profile_picture_url, "
+        "plan_active, trial_ends_at, promo_expires_at, payment_failed_at)"
     ).eq("customer_id", customer_id).execute().data
 
     result = []
     for ct in ct_rows:
         vendor = ct.pop("vendors", {}) or {}
+        is_active = _vendor_is_active(vendor)
+        # Strip raw billing fields — only expose the computed status to customers
+        for k in ("plan_active", "trial_ends_at", "promo_expires_at", "payment_failed_at"):
+            vendor.pop(k, None)
         entry  = {**vendor,
+                  "is_active":       is_active,
                   "points_balance":  ct.get("points_balance", 0),
                   "points_total":    ct.get("points_total", 0),
                   "visit_count":     ct.get("visit_count", 0),
