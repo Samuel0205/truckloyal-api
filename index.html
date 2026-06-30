@@ -3126,7 +3126,8 @@ async function openTruck(i){
         const cfg=r.data.data;
         // API returns {vendor, rewards, prizes, tiers}
         if(cfg.rewards?.length) S.rewards=cfg.rewards;
-        if(cfg.prizes?.length) S.prizes=cfg.prizes;
+        const np=normPrizes(cfg.prizes);
+        if(np.length) S.prizes=np;
       }
     } catch(e){}
   }
@@ -3169,7 +3170,7 @@ async function joinTruckByCode(){
   }
   S.activeTruck=truck;
   S.rewards=truck.rewards||[...DEFAULT_REWARDS];
-  S.prizes=truck.prizes||[...DEFAULT_PRIZES];
+  S.prizes=truck.prizes?.length?normPrizes(truck.prizes):[...DEFAULT_PRIZES];
   localStorage.setItem('tl_active_truck',JSON.stringify(truck));
   // Clear search
   const searchEl=document.getElementById('c-truck-search');
@@ -3710,6 +3711,19 @@ function fmtHistDate(iso){
 /* ════════════════════════════════════
    SPIN WHEEL
 ════════════════════════════════════ */
+// Normalize prizes coming from the API (which use string prize_value and no
+// `pts` field) so every wheel slot has a real numeric value, emoji and name —
+// prevents blank/"+0 pts" wedges. Empty/invalid prizes are dropped so the
+// number of wheel slots always equals the truck's configured prizes.
+function normPrizes(arr){
+  return (arr||[])
+    .filter(p=>p && (p.name || p.prize_value!=null || p.pts!=null))
+    .map(p=>{
+      const pts=parseInt(p.prize_value!=null?p.prize_value:(p.pts!=null?p.pts:0))||0;
+      return {...p, pts, emoji:p.emoji||'⚡', name:p.name||('+'+pts+' Points')};
+    });
+}
+
 function renderSpinPreview(){
   const el=document.getElementById('spp-grid');
   if(!el) return;
@@ -3749,8 +3763,9 @@ function drawWheel(angle){
     ctx.textAlign='right';
     ctx.fillStyle='rgba(255,255,255,.95)';
     ctx.font='bold 12px "DM Sans",sans-serif';
-    ctx.fillText('+'+(seg.pts||0)+' pts',r-10,3);
-    ctx.font='16px serif';ctx.fillText(seg.emoji,r-62,5);
+    const segPts=parseInt(seg.pts||seg.prize_value||0)||0;
+    ctx.fillText('+'+segPts+' pts',r-10,3);
+    ctx.font='16px serif';ctx.fillText(seg.emoji||'⚡',r-62,5);
     ctx.restore();
   });
   ctx.beginPath();ctx.arc(cx,cy,18,0,Math.PI*2);
