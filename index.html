@@ -3121,7 +3121,7 @@ function renderMyTrucks(filter='all'){
             $${saved} saved
           </div>
           ${t.is_active===false
-            ? `<div class="tc-checked" style="background:rgba(120,120,120,.1);border-color:rgba(120,120,120,.22);color:#8a8a8a">⏸ Unavailable</div>`
+            ? ``
             : spunToday
               ? `<div class="tc-checked">✅ Done today</div>`
               : `<div class="tc-visits-badge" style="border-color:rgba(${hexRGB(p)},.25);color:${p}">Spin available →</div>`}
