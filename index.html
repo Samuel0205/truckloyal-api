@@ -3102,9 +3102,11 @@ function renderMyTrucks(filter='all'){
             <span style="font-size:13px">💰</span>
             $${saved} saved
           </div>
-          ${spunToday
-            ? `<div class="tc-checked">✅ Done today</div>`
-            : `<div class="tc-visits-badge" style="border-color:rgba(${hexRGB(p)},.25);color:${p}">Spin available →</div>`}
+          ${t.is_active===false
+            ? `<div class="tc-checked" style="background:rgba(120,120,120,.1);border-color:rgba(120,120,120,.22);color:#8a8a8a">⏸ Unavailable</div>`
+            : spunToday
+              ? `<div class="tc-checked">✅ Done today</div>`
+              : `<div class="tc-visits-badge" style="border-color:rgba(${hexRGB(p)},.25);color:${p}">Spin available →</div>`}
         </div>
       </div>
     </div>`;
@@ -3366,7 +3368,14 @@ async function renderTruckDash(){
   // Check-in button — show if already checked in today
   const checkinBtn=document.getElementById('ct-checkin-btn');
   if(checkinBtn){
-    if(spunToday){
+    if(t.is_active===false){
+      // Truck's loyalty program is paused/inactive — no spin available
+      checkinBtn.textContent='⏸ Loyalty Program Paused';
+      checkinBtn.style.background='#EEEEEE';
+      checkinBtn.style.color='#8a8a8a';
+      checkinBtn.style.boxShadow='none';
+      checkinBtn.disabled=true;
+    } else if(spunToday){
       // Fully done for today
       checkinBtn.textContent='✅ Checked In Today · Come Back Tomorrow!';
       checkinBtn.style.background='#E8F5E9';
@@ -3756,10 +3765,13 @@ function doSpin(){
   const btn=document.getElementById('spin-btn');
   btn.textContent='SPINNING...';btn.disabled=true;
   const segs=S.prizes.length?S.prizes:DEFAULT_PRIZES;
+  const apiWon=S.pendingWin;   // authoritative result already credited by the server
   let winIdx;
-  if(S.pendingWin){
-    const pName=S.pendingWin.prize_name;
+  if(apiWon){
+    const pName=apiWon.prize_name;
+    const pVal=String(apiWon.prize_value??apiWon.pts??'');
     winIdx=segs.findIndex(s=>s.name===pName);
+    if(winIdx<0 && pVal) winIdx=segs.findIndex(s=>String(s.prize_value??s.pts)===pVal);
     if(winIdx<0) winIdx=weightedRandom(segs);
   } else {
     winIdx=weightedRandom(segs);
@@ -3776,8 +3788,9 @@ function doSpin(){
     else{
       S.spinning=false;btn.textContent='SPIN THE WHEEL';btn.disabled=false;
       const won=segs[winIdx];
-      // Spin pts: check prize_value first (from API), then pts fallback
-      const wonPts=parseInt(won.prize_value||won.pts||25);
+      // Always award/show exactly what the server credited (apiWon). The wheel
+      // landing is cosmetic — never let a mismatched local segment change the number.
+      const wonPts=parseInt(apiWon ? (apiWon.prize_value||apiWon.pts||25) : (won.prize_value||won.pts||25));
       const visitPts=S.visitPtsEarned||50;
 
       // checkInBalance is the visit-pts-only balance captured at check-in;
