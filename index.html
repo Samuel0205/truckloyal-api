@@ -2928,7 +2928,7 @@ async function customerLogin(){
 
 function customerLogout(){
   S.customer=null; S.myTrucks=[]; S.activeTruck=null;
-  ['tl_customer','tl_my_trucks','tl_active_truck','tl_active_truck_pts','tl_ctoken','tl_c_remember','tl_c_remember_email'].forEach(k=>localStorage.removeItem(k));
+  ['tl_customer','tl_my_trucks','tl_active_truck','tl_active_truck_pts','tl_ctoken','tl_cpic','tl_c_remember','tl_c_remember_email'].forEach(k=>localStorage.removeItem(k));
   S.cScreen='s-c-login'; show('s-c-login'); renderNav([],'' );
   showToast('Signed out');
 }
@@ -4090,13 +4090,13 @@ function copyAppLink() {
   const label = document.getElementById('copy-link-label');
   const done = () => { if (label) { label.textContent = '✅ Copied! Now open Safari'; } };
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopy(url, done));
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopyCb(url, done));
   } else {
-    fallbackCopy(url, done);
+    fallbackCopyCb(url, done);
   }
 }
 
-function fallbackCopy(text, cb) {
+function fallbackCopyCb(text, cb) {
   try {
     const ta = document.createElement('textarea');
     ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';

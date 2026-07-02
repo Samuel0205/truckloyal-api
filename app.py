@@ -151,6 +151,34 @@ def admin_required(f):
     return decorated
 
 
+def customer_required(f):
+    """Validate the X-Customer-Token JWT and set request.customer_id.
+
+    Handlers must act on request.customer_id — never a customer_id taken
+    from the request body or URL — so a caller can only affect their own
+    account. For URL-scoped routes, compare the path id to
+    request.customer_id and reject a mismatch.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        tok = request.headers.get("X-Customer-Token", "")
+        if not tok:
+            return err("Please sign in to continue", 401)
+        try:
+            payload = jwt.decode(tok, JWT_SECRET, algorithms=[JWT_ALGO])
+            if payload.get("type") != "customer":
+                return err("Invalid token type", 401)
+            request.customer_id = payload["sub"]
+        except JWTError:
+            return err("Your session expired — please sign in again", 401)
+        # For /api/customer/<customer_id>/... routes, enforce ownership
+        url_cid = kwargs.get("customer_id")
+        if url_cid is not None and str(url_cid) != str(request.customer_id):
+            return err("Forbidden", 403)
+        return f(*args, **kwargs)
+    return decorated
+
+
 def vendor_active_required(f):
     """Checks vendor is paid/trial/grace before allowing access."""
     @wraps(f)
@@ -262,7 +290,8 @@ def _safe_vendor(v: dict) -> dict:
 
 
 def _safe_customer(c: dict) -> dict:
-    c.pop("password_hash", None)
+    for k in ("password_hash", "blocked_email", "is_blocked", "referred_by"):
+        c.pop(k, None)
     return c
 
 
@@ -577,6 +606,7 @@ def terms_of_service():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/admin/reset-locations", methods=["POST"])
+@rate_limit(10, 3600)
 def reset_locations():
     """Reset all stale location_today fields — call this daily at midnight via cron."""
     body = request.json or {}
@@ -1817,13 +1847,13 @@ def delete_customer_account():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/customer/join-truck", methods=["POST"])
+@customer_required
 def customer_join_truck():
     body        = request.json or {}
     slug        = (body.get("slug") or "").strip().lower()
-    customer_id = body.get("customer_id")
+    customer_id = request.customer_id
 
     if not slug:        return err("Truck code is required")
-    if not customer_id: return err("customer_id is required")
 
     vendor = sb.table("vendors").select("*").eq("slug", slug).execute().data
     if not vendor: return err("Truck not found", 404)
@@ -1871,12 +1901,14 @@ def customer_join_truck():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/customer/visit", methods=["POST"])
+@customer_required
+@rate_limit(60, 3600)
 def record_visit():
     body        = request.json or {}
-    customer_id = body.get("customer_id")
+    customer_id = request.customer_id
     vendor_id   = body.get("vendor_id")
-    if not customer_id or not vendor_id:
-        return err("customer_id and vendor_id required")
+    if not vendor_id:
+        return err("vendor_id required")
 
     customer = sb.table("customers").select("*").eq("id", customer_id).execute().data
     if not customer: return err("Customer not found", 404)
@@ -1976,12 +2008,14 @@ def record_visit():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/customer/redeem", methods=["POST"])
+@customer_required
+@rate_limit(30, 3600)
 def customer_redeem():
     body        = request.json or {}
-    customer_id = body.get("customer_id")
+    customer_id = request.customer_id
     reward_id   = body.get("reward_id")
-    if not customer_id or not reward_id:
-        return err("customer_id and reward_id required")
+    if not reward_id:
+        return err("reward_id required")
 
     reward = sb.table("rewards").select("*").eq("id", reward_id).execute().data
     if not reward: return err("Reward not found", 404)
@@ -2017,6 +2051,7 @@ def customer_redeem():
 
 
 @app.route("/api/customer/<customer_id>/history", methods=["GET"])
+@customer_required
 def customer_history(customer_id):
     visits = sb.table("visits").select(
         "*, spin_results!spin_results_visit_id_fkey(prize_name, prize_value)"
@@ -2028,6 +2063,7 @@ def customer_history(customer_id):
 
 
 @app.route("/api/customer/<customer_id>/trucks", methods=["GET"])
+@customer_required
 def customer_trucks_list(customer_id):
     return ok(_get_customer_trucks(customer_id))
 
@@ -2046,8 +2082,7 @@ def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) 
     gmail_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
 
     if not gmail_user or not gmail_pass:
-        print(f"[EMAIL] No GMAIL_USER/GMAIL_APP_PASSWORD set.")
-        print(f"[EMAIL DEBUG] Reset URL: {reset_url}")
+        print("[EMAIL] No GMAIL_USER/GMAIL_APP_PASSWORD set — cannot send reset email.")
         return False
 
     truck_or_name = "your Food Truck Rewards account"
@@ -2104,7 +2139,6 @@ def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) 
 
     except Exception as e:
         print(f"[EMAIL ERROR] {e}")
-        print(f"[EMAIL DEBUG] Reset URL: {reset_url}")
         return False
 
 
@@ -2168,6 +2202,7 @@ def forgot_password():
 
 
 @app.route("/api/auth/reset-password", methods=["POST"])
+@rate_limit(10, 900)
 def reset_password():
     body         = request.json or {}
     raw_token    = body.get("token", "").strip()
@@ -2218,6 +2253,7 @@ def reset_password():
 
 
 @app.route("/api/auth/verify-reset-token", methods=["POST"])
+@rate_limit(20, 900)
 def verify_reset_token():
     body      = request.json or {}
     raw_token = body.get("token", "").strip()
@@ -2278,10 +2314,11 @@ def stripe_webhook():
 
     elif etype == "customer.subscription.updated":
         active = obj["status"] in ("active", "trialing")
-        sb.table("vendors").update({
-            "plan_active": active,
-            "stripe_sub_id": obj["id"],
-        }).eq("stripe_customer_id", obj["customer"]).execute()
+        updates = {"plan_active": active, "stripe_sub_id": obj["id"]}
+        if active:
+            # Subscription is healthy again — clear any stale payment-failure flag
+            updates["payment_failed_at"] = None
+        sb.table("vendors").update(updates).eq("stripe_customer_id", obj["customer"]).execute()
 
     elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
         sb.table("vendors").update({
@@ -2379,6 +2416,7 @@ def get_notifications():
 
 
 @app.route("/api/customer/<customer_id>/push-token", methods=["POST"])
+@customer_required
 def save_push_token(customer_id):
     body  = request.json or {}
     token = body.get("token", "")
@@ -2455,9 +2493,10 @@ def get_truck_promos(slug):
 
 
 @app.route("/api/customer/apply-promo", methods=["POST"])
+@customer_required
 def apply_promo():
     body        = request.json or {}
-    customer_id = body.get("customer_id")
+    customer_id = request.customer_id
     vendor_id   = body.get("vendor_id")
     code        = (body.get("code") or "").strip().upper()
     if not all([customer_id, vendor_id, code]):
@@ -2549,9 +2588,10 @@ def trucks_nearby():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/customer/review", methods=["POST"])
+@customer_required
 def submit_review():
     body        = request.json or {}
-    customer_id = body.get("customer_id")
+    customer_id = request.customer_id
     vendor_id   = body.get("vendor_id")
     rating      = body.get("rating")
     comment     = (body.get("comment") or "").strip()[:300]
@@ -2616,11 +2656,11 @@ def vendor_reviews():
 # ══════════════════════════════════════════════════════
 
 @app.route("/api/customer/referral-complete", methods=["POST"])
+@customer_required
 def referral_complete():
     body        = request.json or {}
-    customer_id = body.get("customer_id")
+    customer_id = request.customer_id
     vendor_id   = body.get("vendor_id")
-    if not customer_id: return err("customer_id required")
 
     customer = sb.table("customers").select("referred_by, referral_rewarded")\
         .eq("id", customer_id).execute().data
@@ -2724,9 +2764,9 @@ def delete_post(post_id):
 
 
 @app.route("/api/customer/feed", methods=["GET"])
+@customer_required
 def customer_feed():
-    customer_id = request.args.get("customer_id")
-    if not customer_id: return err("customer_id required")
+    customer_id = request.customer_id
 
     trucks = sb.table("customer_trucks").select("vendor_id")\
         .eq("customer_id", customer_id).execute().data or []
