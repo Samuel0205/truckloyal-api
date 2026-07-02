@@ -2,23 +2,55 @@ services:
   - type: web
     name: truckloyal-api
     runtime: python
+    # Pin the runtime so builds are reproducible (app targets Python 3.11+)
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    # One worker keeps the in-memory rate limiter consistent; threads give
+    # concurrency for the I/O-bound Supabase/Stripe calls. Scale threads up
+    # before adding workers (multiple workers need a shared limiter — see app.py).
+    startCommand: gunicorn app:app --workers 1 --threads 8 --timeout 60
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      # Admin dashboard password — REQUIRED. Admin login is disabled until set.
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Optional dedicated secret for the daily location-reset cron.
+      # Falls back to ADMIN_PASSWORD when unset.
+      - key: CRON_SECRET
+        sync: false
+      # Comma-separated list of external origins allowed to call the API from a
+      # browser. The app itself is same-origin and needs nothing here; add your
+      # marketing/custom domain if it calls the API directly.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # Recurring $9.99/mo price id from Stripe — REQUIRED for subscriptions.
+      - key: STRIPE_PRICE_ID
+        sync: false
+      # Days of access after a failed payment before lock (default 5).
+      - key: GRACE_PERIOD_DAYS
+        sync: false
+      # Base URL used to build password-reset links in emails.
+      - key: APP_URL
+        sync: false
+      # Gmail account + app password used to send password-reset emails.
+      - key: GMAIL_USER
+        sync: false
+      - key: GMAIL_APP_PASSWORD
+        sync: false
+      # Twilio (SMS) — declared for future use; currently unused by app.py.
       - key: TWILIO_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
       - key: TWILIO_FROM_NUMBER
         sync: false
-      - key: STRIPE_SECRET_KEY
-        sync: false
-      - key: STRIPE_WEBHOOK_SECRET
-        sync: false
-
