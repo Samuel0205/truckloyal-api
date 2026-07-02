@@ -1316,8 +1316,8 @@
             <div style="font-size:10px;color:var(--mu);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Visits</div>
           </div>
           <div style="flex:1;text-align:center">
-            <div style="font-family:var(--fd);font-size:28px;font-weight:900;color:var(--gn);line-height:1" id="ct-saved">$0</div>
-            <div style="font-size:10px;color:var(--mu);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Saved</div>
+            <div style="font-family:var(--fd);font-size:28px;font-weight:900;color:var(--gn);line-height:1" id="ct-alltime">0</div>
+            <div style="font-size:10px;color:var(--mu);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">All-Time Pts</div>
           </div>
         </div>
       </div>
@@ -1457,7 +1457,7 @@
           <div class="tr"><div class="tr-info"><div class="tt">Total Points Earned</div></div><div style="font-family:var(--fd);font-size:18px;font-weight:800;color:var(--gd)" id="c-total-pts">0</div></div>
           <div class="tr"><div class="tr-info"><div class="tt">Total Visits</div></div><div style="font-family:var(--fd);font-size:18px;font-weight:800" id="c-total-visits">0</div></div>
           <div class="tr"><div class="tr-info"><div class="tt">Trucks Joined</div></div><div style="font-family:var(--fd);font-size:18px;font-weight:800" id="c-trucks-count">0</div></div>
-          <div class="tr"><div class="tr-info"><div class="tt">Money Saved</div></div><div style="font-family:var(--fd);font-size:18px;font-weight:800;color:var(--gd)" id="c-total-saved">$0.00</div></div>
+          <div class="tr"><div class="tr-info"><div class="tt">Best Streak</div></div><div style="font-family:var(--fd);font-size:18px;font-weight:800;color:var(--gd)" id="c-best-streak">0 days</div></div>
         </div>
 
         <div class="card">
@@ -3085,7 +3085,7 @@ function renderMyTrucks(filter='all'){
     const spunKey = 'spin_used_'+t.id+'_'+today;
     const spunToday = !!localStorage.getItem(spunKey);
     const visits  = t.visit_count||0;
-    const saved   = (t.total_saved||0).toFixed(0);
+    const streak  = t.current_streak||0;
     const loc     = t.location_today ? `📍 ${t.location_today}` : '';
     const bannerBg= t.profile_picture_url ? '' : (bgs[i%bgs.length]);
 
@@ -3116,10 +3116,10 @@ function renderMyTrucks(filter='all'){
             <span style="font-size:13px">🏪</span>
             ${visits} visit${visits!==1?'s':''}
           </div>
-          <div class="tc-meta-item">
-            <span style="font-size:13px">💰</span>
-            $${saved} saved
-          </div>
+          ${streak>0?`<div class="tc-meta-item">
+            <span style="font-size:13px">🔥</span>
+            ${streak}-day streak
+          </div>`:''}
           ${t.is_active===false
             ? ``
             : spunToday
@@ -3306,7 +3306,7 @@ async function renderTruckDash(){
   }
   setText('ct-pts',pts);
   setText('ct-visits',S.activeTruck.visit_count||0);
-  setText('ct-saved','$'+(S.activeTruck.total_saved||0).toFixed(0));
+  setText('ct-alltime',(S.activeTruck.points_total||pts).toLocaleString());
   setText('ct-pts-note',t.truck_name||'this truck');
 
   // Location + Today's Schedule Hours
@@ -3370,11 +3370,15 @@ async function renderTruckDash(){
   const nextTier=DEFAULT_TIERS.find(tr=>pts<tr.pts_threshold);
   setText('ct-tier',tier.icon+' '+tier.name);
   setText('ct-next-tier-lbl',nextTier?'Next: '+nextTier.icon+' '+nextTier.name:'👑 Max Tier!');
+  const fill=document.getElementById('ct-prog-fill');
   if(nextTier){
     const pct=((pts-tier.pts_threshold)/(nextTier.pts_threshold-tier.pts_threshold))*100;
     setText('ct-pts-away',(nextTier.pts_threshold-pts)+' pts away');
-    const fill=document.getElementById('ct-prog-fill');
     if(fill){fill.style.width=Math.min(pct,100)+'%';fill.style.background=`linear-gradient(90deg,${p},${t.color_secondary||'#F5B800'})`}
+  } else {
+    // Max tier — clear the stale "pts away" from the last truck and fill the bar
+    setText('ct-pts-away','You made it to the top!');
+    if(fill){fill.style.width='100%';fill.style.background=`linear-gradient(90deg,${p},${t.color_secondary||'#F5B800'})`}
   }
 
   // Streak
@@ -3522,8 +3526,7 @@ async function openRedeem(i){
   showLoad('Generating reward code...');
   const res=await apiPost('/api/customer/redeem',{
     customer_id:S.customer.id,
-    reward_id:r.id,
-    reward_value:5.0
+    reward_id:r.id
   });
   hideLoad();
 
@@ -3603,11 +3606,11 @@ function renderProfile(){
   setText('c-prof-email',c.email||'');
   const totalPts=S.myTrucks.reduce((s,t)=>s+(t.points_total||t.points_balance||0),0);
   const totalVisits=S.myTrucks.reduce((s,t)=>s+(t.visit_count||0),0);
-  const totalSaved=S.myTrucks.reduce((s,t)=>s+(t.total_saved||0),0);
+  const bestStreak=S.myTrucks.reduce((s,t)=>Math.max(s,t.longest_streak||t.current_streak||0),0);
   setText('c-total-pts',totalPts);
   setText('c-total-visits',totalVisits);
   setText('c-trucks-count',S.myTrucks.length);
-  setText('c-total-saved','$'+totalSaved.toFixed(2));
+  setText('c-best-streak',bestStreak+' day'+(bestStreak!==1?'s':''));
   if(c.referral_code){setText('c-ref-link','foodtruckrewards.app/join?ref='+c.referral_code)}
   if(c.birthday){setVal('c-birthday',c.birthday)}
 }

@@ -2007,7 +2007,6 @@ def customer_redeem():
 
     sb.table("customer_trucks").update({
         "points_balance": ct["points_balance"] - reward["pts_required"],
-        "total_saved":    float(ct.get("total_saved") or 0) + float(body.get("reward_value") or 5.0),
     }).eq("id", ct["id"]).execute()
 
     return ok({
