@@ -30,8 +30,13 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# ── CORS — restrict to your domains only ──────────────────
-CORS(app, origins="*")
+# ── CORS — restrict to configured origins ─────────────────
+# The app is served from this same Flask process (same-origin), so the app
+# itself never needs CORS. ALLOWED_ORIGINS lets you whitelist any external
+# site (e.g. a marketing domain) that must call the API from a browser.
+_default_origins = "https://truckloyal-api.onrender.com"
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",") if o.strip()]
+CORS(app, origins=ALLOWED_ORIGINS)
 
 sb: Client = create_client(
     os.environ["SUPABASE_URL"],
@@ -44,14 +49,33 @@ JWT_EXPIRY         = 30   # days
 GRACE_PERIOD_DAYS  = int(os.environ.get("GRACE_PERIOD_DAYS", 5))
 MONTHLY_PRICE      = 9.99
 STRIPE_PRICE_ID    = os.environ.get("STRIPE_PRICE_ID", "")
-ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "changeme123")
+# No insecure default — if unset, admin login and the cron are disabled (fail closed).
+ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "")
+# Cron/automation secret; falls back to ADMIN_PASSWORD if a dedicated one isn't set.
+CRON_SECRET        = os.environ.get("CRON_SECRET", "") or ADMIN_PASSWORD
+# Max base64 image payload (~5 MB of image → ~6.8 MB base64). Blocks memory-DoS uploads.
+MAX_IMAGE_B64      = 7_000_000
 
 
 # ══════════════════════════════════════════════════════
 #  RATE LIMITING — simple in-memory per IP
 # ══════════════════════════════════════════════════════
 
+# NOTE: this store lives in one process's memory. It is correct with a single
+# gunicorn worker (any number of threads share it — see render.yaml). If you
+# scale to multiple workers/instances, move this to Redis so limits are shared;
+# otherwise each worker keeps its own counters.
 _rate_store = defaultdict(list)
+_rate_last_sweep = [0.0]
+
+def _sweep_rate_store(now: float):
+    """Drop empty/stale keys so the store can't grow unbounded across many IPs."""
+    if now - _rate_last_sweep[0] < 300:   # at most once every 5 min
+        return
+    _rate_last_sweep[0] = now
+    stale = [k for k, v in _rate_store.items() if not v or now - v[-1] > 3600]
+    for k in stale:
+        _rate_store.pop(k, None)
 
 def rate_limit(max_calls: int, window_seconds: int):
     """Decorator — limits an endpoint to max_calls per window per IP."""
@@ -61,6 +85,7 @@ def rate_limit(max_calls: int, window_seconds: int):
             ip  = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
             key = f"{f.__name__}:{ip}"
             now = time.time()
+            _sweep_rate_store(now)
             _rate_store[key] = [t for t in _rate_store[key] if now - t < window_seconds]
             if len(_rate_store[key]) >= max_calls:
                 return jsonify({"error": "Too many requests — please slow down"}), 429
@@ -610,7 +635,7 @@ def terms_of_service():
 def reset_locations():
     """Reset all stale location_today fields — call this daily at midnight via cron."""
     body = request.json or {}
-    if body.get("secret") != ADMIN_PASSWORD:
+    if not CRON_SECRET or body.get("secret") != CRON_SECRET:
         return err("Unauthorized", 401)
 
     today = date.today().isoformat()
@@ -628,6 +653,8 @@ def reset_locations():
 @rate_limit(5, 900)
 def admin_login():
     body = request.json or {}
+    if not ADMIN_PASSWORD:
+        return err("Admin access is not configured on this server", 503)
     if body.get("password") != ADMIN_PASSWORD:
         return err("Invalid password", 401)
     return ok({"token": make_admin_token()})
@@ -790,8 +817,10 @@ def update_promo_code(code_id):
     body    = request.json or {}
     allowed = ["is_active", "free_months", "max_uses"]
     updates = {k: v for k, v in body.items() if k in allowed}
-    row = sb.table("promo_codes").update(updates).eq("id", code_id).execute().data[0]
-    return ok(row)
+    rows = sb.table("promo_codes").update(updates).eq("id", code_id).execute().data
+    if not rows:
+        return err("Promo code not found", 404)
+    return ok(rows[0])
 
 
 @app.route("/api/admin/promo-codes/<code_id>", methods=["DELETE"])
@@ -917,15 +946,12 @@ def vendor_login():
 
     pw_hash = vendor.get("password_hash")
     if not pw_hash:
-        print(f"[LOGIN FAIL] No password_hash for vendor: {email}")
         return err("Account setup incomplete. Please contact support.", 401)
 
     try:
         if not bcrypt.checkpw(password.encode(), pw_hash.encode()):
-            print(f"[LOGIN FAIL] Wrong password for: {email}")
             return err("Invalid email or password", 401)
-    except Exception as e:
-        print(f"[LOGIN ERROR] bcrypt error for {email}: {e}")
+    except Exception:
         return err("Login error — please contact support", 500)
 
     is_active = _vendor_is_active(vendor)
@@ -942,7 +968,10 @@ def vendor_login():
 @app.route("/api/vendor/me", methods=["GET"])
 @vendor_required
 def vendor_me():
-    vendor = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data[0]
+    rows = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
+    if not rows:
+        return err("Account not found — please sign in again", 404)
+    vendor = rows[0]
 
     last_loc_date = vendor.get("location_updated_date", "")
     if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
@@ -1273,8 +1302,10 @@ def update_tier(tier_id):
     body    = request.json or {}
     allowed = ["name", "icon", "pts_threshold", "perks"]
     updates = {k: v for k, v in body.items() if k in allowed}
-    row = sb.table("tiers").update(updates).eq("id", tier_id).eq("vendor_id", request.vendor_id).execute().data[0]
-    return ok(row)
+    rows = sb.table("tiers").update(updates).eq("id", tier_id).eq("vendor_id", request.vendor_id).execute().data
+    if not rows:
+        return err("Tier not found", 404)
+    return ok(rows[0])
 
 
 # ── Stats ──
@@ -1406,6 +1437,7 @@ def find_customer():
 
 @app.route("/api/vendor/award-points", methods=["POST"])
 @vendor_active_required
+@rate_limit(120, 3600)
 def award_points():
     body        = request.json or {}
     vendor_id   = request.vendor_id
@@ -1573,6 +1605,8 @@ def vendor_upload_picture():
     b64   = body.get("image_b64", "")
     if not b64:
         return err("image_b64 required")
+    if len(b64) > MAX_IMAGE_B64:
+        return err("Image too large — please use a photo under 5 MB", 413)
 
     try:
         import base64, uuid
@@ -1611,6 +1645,8 @@ def customer_upload_picture():
     b64  = body.get("image_b64", "")
     if not b64:
         return err("image_b64 required")
+    if len(b64) > MAX_IMAGE_B64:
+        return err("Image too large — please use a photo under 5 MB", 413)
 
     try:
         import base64, uuid
@@ -1776,14 +1812,12 @@ def customer_login():
     pw_hash  = customer.get("password_hash")
 
     if not pw_hash:
-        print(f"[CUSTOMER LOGIN] No password_hash for: {email}")
         return err("Account needs password setup. Please use forgot password.", 401)
 
     try:
         if not bcrypt.checkpw(password.encode(), pw_hash.encode()):
             return err("Invalid email or password", 401)
-    except Exception as e:
-        print(f"[CUSTOMER LOGIN ERROR] {e}")
+    except Exception:
         return err("Login error — please try again", 500)
 
     trucks = _get_customer_trucks(customer["id"])
@@ -1848,6 +1882,7 @@ def delete_customer_account():
 
 @app.route("/api/customer/join-truck", methods=["POST"])
 @customer_required
+@rate_limit(30, 3600)
 def customer_join_truck():
     body        = request.json or {}
     slug        = (body.get("slug") or "").strip().lower()
@@ -2494,6 +2529,7 @@ def get_truck_promos(slug):
 
 @app.route("/api/customer/apply-promo", methods=["POST"])
 @customer_required
+@rate_limit(20, 3600)
 def apply_promo():
     body        = request.json or {}
     customer_id = request.customer_id
@@ -2589,6 +2625,7 @@ def trucks_nearby():
 
 @app.route("/api/customer/review", methods=["POST"])
 @customer_required
+@rate_limit(20, 3600)
 def submit_review():
     body        = request.json or {}
     customer_id = request.customer_id
