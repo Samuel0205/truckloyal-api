@@ -99,7 +99,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get'}
+_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get'}
 
 @app.after_request
 def add_security_headers(response):
@@ -382,6 +382,13 @@ def _stripe():
 # ══════════════════════════════════════════════════════
 
 @app.route("/")
+def landing():
+    resp = send_from_directory('.', 'landing.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+@app.route("/healthz")
 def health():
     return ok("Food Truck Rewards API v2 🚚")
 
