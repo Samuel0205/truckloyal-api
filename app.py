@@ -698,7 +698,7 @@ def admin_login():
 def admin_stats():
     vendors     = sb.table("vendors").select("id, plan_active, trial_ends_at, "
                   "payment_failed_at, promo_expires_at, created_at, "
-                  "truck_name, email, vendor_number, slug, owner_name").execute().data
+                  "truck_name, email, vendor_number, slug, owner_name, is_blocked").execute().data
     customers   = sb.table("customers").select("id", count="exact").execute()
     visits      = sb.table("visits").select("id", count="exact").execute()
     redemptions = sb.table("redemptions").select("id", count="exact").execute()
@@ -752,22 +752,31 @@ def admin_override_vendor(vendor_id):
     which blocks all @vendor_active_required features (rewards, prizes,
     notify/push, promos, analytics) and hides the truck from customers.
     """
-    body = request.json or {}
-    if "plan_active" not in body:
-        return err("plan_active is required")
+    body    = request.json or {}
+    updates = {}
+    action  = None
+    past    = (datetime.utcnow() - timedelta(days=1)).isoformat()
 
-    if bool(body["plan_active"]):
-        updates = {"plan_active": True, "payment_failed_at": None}
-        action  = "activated"
-    else:
-        past = (datetime.utcnow() - timedelta(days=1)).isoformat()
-        updates = {
-            "plan_active":      False,
-            "trial_ends_at":    past,
-            "promo_expires_at": past,
-            "payment_failed_at": None,
-        }
-        action = "deactivated"
+    if "is_blocked" in body:
+        blocked = bool(body["is_blocked"])
+        updates["is_blocked"] = blocked
+        if blocked:
+            # A hard block also shuts the program off entirely
+            updates.update({"plan_active": False, "trial_ends_at": past,
+                            "promo_expires_at": past, "payment_failed_at": None})
+        action = "blocked" if blocked else "unblocked"
+
+    if "plan_active" in body:
+        if bool(body["plan_active"]):
+            updates.update({"plan_active": True, "payment_failed_at": None, "is_blocked": False})
+            action = "activated"
+        else:
+            updates.update({"plan_active": False, "trial_ends_at": past,
+                            "promo_expires_at": past, "payment_failed_at": None})
+            action = "deactivated"
+
+    if not updates:
+        return err("plan_active or is_blocked is required")
 
     sb.table("vendors").update(updates).eq("id", vendor_id).execute()
     return ok(f"Vendor {action}")

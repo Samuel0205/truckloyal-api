@@ -145,6 +145,7 @@
           <button data-f="trial" onclick="setVFilter('trial',this)">Trial</button>
           <button data-f="grace" onclick="setVFilter('grace',this)">Grace</button>
           <button data-f="inactive" onclick="setVFilter('inactive',this)">Inactive</button>
+          <button data-f="blocked" onclick="setVFilter('blocked',this)">Blocked</button>
         </div>
       </div>
       <div class="tbl-wrap"><div class="tbl-scroll"><table>
@@ -237,15 +238,17 @@
     document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('on', p.id==='page-'+t); });
   }
 
-  /* ── Load everything ── */
+  /* ── Load everything (each section independent so one failure can't blank the rest) ── */
   async function loadAll(){
     try{
       var st = await api('GET','/api/admin/stats');
       S.vendors = st.vendors||[]; S.promos = st.promo_codes||[];
       renderStats(st); renderVendors(); renderPromos();
+    }catch(ex){ if(ex.message!=='Session expired') toast('⚠️ Stats: '+ex.message); }
+    try{
       S.customers = await api('GET','/api/admin/customers') || [];
       renderCustomers();
-    }catch(ex){ if(ex.message!=='Session expired') toast('⚠️ '+ex.message); }
+    }catch(ex){ if(ex.message!=='Session expired') toast('⚠️ Customers: '+ex.message); }
   }
 
   /* ── Overview ── */
@@ -298,6 +301,9 @@
       var toggleActive = v.plan_active
         ? '<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{plan_active:false})">Deactivate</button>'
         : '<button class="btn btn-sm btn-gn" onclick="overrideVendor(\''+v.id+'\',{plan_active:true})">Activate</button>';
+      var toggleBlock = v.is_blocked
+        ? '<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{is_blocked:false})">Unblock</button>'
+        : '<button class="btn btn-sm btn-rd" onclick="if(confirm(\'Block this vendor? Their program goes offline immediately.\'))overrideVendor(\''+v.id+'\',{is_blocked:true})">Block</button>';
       return '<tr>'+
         '<td><div class="t-main">'+esc(v.truck_name||'—')+'</div><div class="t-sub">'+esc(v.owner_name||'')+'</div></td>'+
         '<td><div class="t-sub">'+esc(v.email||'—')+'</div></td>'+
@@ -306,7 +312,7 @@
         '<td class="t-sub">'+fmtDate(v.created_at)+'</td>'+
         '<td><div class="row-act">'+
           '<button class="btn btn-sm btn-gh" onclick="viewVendor(\''+v.id+'\')">View</button>'+
-          toggleActive+
+          toggleActive+toggleBlock+
         '</div></td></tr>';
     }).join('');
   }
@@ -342,6 +348,8 @@
         '<div class="row-act" style="margin-top:18px;justify-content:flex-start">'+
           (v.plan_active?'<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{plan_active:false});closeModal(\'v-modal\')">Deactivate</button>'
                         :'<button class="btn btn-sm btn-gn" onclick="overrideVendor(\''+v.id+'\',{plan_active:true});closeModal(\'v-modal\')">Activate</button>')+
+          (v.is_blocked?'<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{is_blocked:false});closeModal(\'v-modal\')">Unblock</button>'
+                       :'<button class="btn btn-sm btn-rd" onclick="if(confirm(\'Block this vendor?\')){overrideVendor(\''+v.id+'\',{is_blocked:true});closeModal(\'v-modal\')}">Block</button>')+
         '</div>';
       document.getElementById('v-modal').classList.add('on');
     }catch(ex){ toast('⚠️ '+ex.message); }
