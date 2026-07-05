@@ -698,7 +698,7 @@ def admin_login():
 def admin_stats():
     vendors     = sb.table("vendors").select("id, plan_active, trial_ends_at, "
                   "payment_failed_at, promo_expires_at, created_at, "
-                  "truck_name, email, vendor_number, slug, is_blocked, owner_name").execute().data
+                  "truck_name, email, vendor_number, slug, owner_name").execute().data
     customers   = sb.table("customers").select("id", count="exact").execute()
     visits      = sb.table("visits").select("id", count="exact").execute()
     redemptions = sb.table("redemptions").select("id", count="exact").execute()
@@ -745,31 +745,31 @@ def admin_get_vendor(vendor_id):
 @app.route("/api/admin/vendor/<vendor_id>/override", methods=["POST"])
 @admin_required
 def admin_override_vendor(vendor_id):
-    """Manually activate, deactivate, or block a vendor."""
-    body    = request.json or {}
-    updates = {}
+    """Admin activate or fully deactivate a vendor's loyalty program.
 
-    if "plan_active" in body:
-        updates["plan_active"] = bool(body["plan_active"])
-        if updates["plan_active"]:
-            updates["payment_failed_at"] = None
-            updates["is_blocked"] = False
+    Deactivating is a real kill-switch: it expires every access window
+    (plan, trial, promo, grace) so _vendor_is_active() returns False —
+    which blocks all @vendor_active_required features (rewards, prizes,
+    notify/push, promos, analytics) and hides the truck from customers.
+    """
+    body = request.json or {}
+    if "plan_active" not in body:
+        return err("plan_active is required")
 
-    if "is_blocked" in body:
-        updates["is_blocked"]   = bool(body["is_blocked"])
-        updates["blocked_email"] = body.get("blocked_email", "")
-        if updates["is_blocked"]:
-            updates["plan_active"] = False
-            vendor = sb.table("vendors").select("email").eq("id", vendor_id).execute().data
-            if vendor:
-                updates["blocked_email"] = vendor[0]["email"]
+    if bool(body["plan_active"]):
+        updates = {"plan_active": True, "payment_failed_at": None}
+        action  = "activated"
+    else:
+        past = (datetime.utcnow() - timedelta(days=1)).isoformat()
+        updates = {
+            "plan_active":      False,
+            "trial_ends_at":    past,
+            "promo_expires_at": past,
+            "payment_failed_at": None,
+        }
+        action = "deactivated"
 
-    if updates:
-        sb.table("vendors").update(updates).eq("id", vendor_id).execute()
-
-    action = "blocked" if body.get("is_blocked") else \
-             "unblocked" if body.get("is_blocked") == False else \
-             "activated" if body.get("plan_active") else "deactivated"
+    sb.table("vendors").update(updates).eq("id", vendor_id).execute()
     return ok(f"Vendor {action}")
 
 
