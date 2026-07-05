@@ -99,7 +99,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png'}
+_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png'}
 
 @app.after_request
 def add_security_headers(response):
@@ -464,8 +464,9 @@ def serve_sw():
 @app.route("/tour-2.png")
 @app.route("/tour-3.png")
 @app.route("/tour-4.png")
+@app.route("/og-image.png")
 def serve_shot():
-    # App screenshots that cycle in the landing "See it in action" section.
+    # App screenshots for the landing carousel + the Open Graph share image.
     resp = send_from_directory('.', request.path.lstrip("/"))
     resp.headers['Cache-Control'] = 'public, max-age=86400'
     return resp
