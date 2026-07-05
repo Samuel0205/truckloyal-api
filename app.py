@@ -99,7 +99,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get'}
+_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get', '/shot-1.png', '/shot-2.png', '/shot-3.png'}
 
 @app.after_request
 def add_security_headers(response):
@@ -417,8 +417,8 @@ def serve_manifest():
     from flask import Response
     import json
     manifest = {
-        "name": "TruckLoyal",
-        "short_name": "TruckLoyal",
+        "name": "Food Truck Rewards",
+        "short_name": "Food Truck Rewards",
         "description": "Food truck loyalty rewards — earn points, get rewards",
         "start_url": "/app",
         "display": "standalone",
@@ -460,6 +460,17 @@ def serve_sw():
     return resp
 
 
+@app.route("/shot-1.png")
+@app.route("/shot-2.png")
+@app.route("/shot-3.png")
+def serve_shot():
+    # App-screenshot clips for the landing carousel. 404s gracefully (the page
+    # shows a fallback) until these files are added to the repo.
+    resp = send_from_directory('.', request.path.lstrip("/"))
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
 @app.route("/install")
 @app.route("/get")
 def serve_install():
@@ -476,7 +487,7 @@ def privacy_policy():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Privacy Policy — TruckLoyal</title>
+<title>Privacy Policy — Food Truck Rewards</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FFF8F0;color:#2D1B0E;line-height:1.7;font-size:15px}
@@ -494,7 +505,7 @@ def privacy_policy():
 </head>
 <body>
 <div class="header">
-  <h1>🔥 TruckLoyal</h1>
+  <h1>🔥 Food Truck Rewards</h1>
   <p>Privacy Policy &mdash; Last updated: April 2026</p>
 </div>
 <div class="body">
@@ -542,7 +553,7 @@ def privacy_policy():
   </div>
   <div class="card">
     <h2>10. Contact</h2>
-    <p>TruckLoyal &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a></p>
+    <p>Food Truck Rewards &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a></p>
   </div>
 </div>
 </body>
@@ -560,7 +571,7 @@ def terms_of_service():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Terms of Service — TruckLoyal</title>
+<title>Terms of Service — Food Truck Rewards</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#FFF8F0;color:#2D1B0E;line-height:1.7;font-size:15px}
@@ -578,19 +589,19 @@ def terms_of_service():
 </head>
 <body>
 <div class="header">
-  <h1>🔥 TruckLoyal</h1>
+  <h1>🔥 Food Truck Rewards</h1>
   <p>Terms of Service &mdash; Last updated: April 2026</p>
 </div>
 <div class="body">
   <div class="card">
     <h2>1. Agreement to Terms</h2>
-    <p>By creating a vendor account on TruckLoyal ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service. These Terms apply to all vendors who sign up for a paid subscription.</p>
+    <p>By creating a vendor account on Food Truck Rewards ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service. These Terms apply to all vendors who sign up for a paid subscription.</p>
   </div>
   <div class="card">
     <h2>2. Subscription &amp; Billing</h2>
     <p><strong>Free Trial:</strong> New vendor accounts receive a 14-day free trial beginning on the date of account creation. No charge is made during the trial period.</p>
     <p><strong>Billing Cycle:</strong> After the trial period ends, your payment method will be charged <strong>$9.99 USD</strong> on the same date each month.</p>
-    <p><strong>Automatic Renewal:</strong> Your subscription automatically renews monthly until cancelled. By providing your payment method, you authorize TruckLoyal to charge your card on a recurring monthly basis.</p>
+    <p><strong>Automatic Renewal:</strong> Your subscription automatically renews monthly until cancelled. By providing your payment method, you authorize Food Truck Rewards to charge your card on a recurring monthly basis.</p>
     <p><strong>Failed Payments:</strong> If your payment fails, you have a 5-day grace period to update your payment method before your account is suspended.</p>
     <p><strong>Price Changes:</strong> We reserve the right to change subscription pricing with at least 30 days written notice to your registered email address.</p>
   </div>
@@ -614,7 +625,7 @@ def terms_of_service():
   </div>
   <div class="card">
     <h2>6. Limitation of Liability</h2>
-    <p>TruckLoyal is provided "as is" without warranties of any kind. To the maximum extent permitted by law, TruckLoyal and its operators shall not be liable for any indirect, incidental, or consequential damages.</p>
+    <p>Food Truck Rewards is provided "as is" without warranties of any kind. To the maximum extent permitted by law, Food Truck Rewards and its operators shall not be liable for any indirect, incidental, or consequential damages.</p>
     <p>Our total liability shall not exceed the amount you paid us in the 12 months preceding the claim.</p>
   </div>
   <div class="card">
@@ -623,7 +634,7 @@ def terms_of_service():
   </div>
   <div class="card">
     <h2>8. Contact</h2>
-    <p>TruckLoyal &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a><br><br>For billing questions, cancellations, or disputes, email us. We respond within 2 business days.</p>
+    <p>Food Truck Rewards &mdash; Operated by Samuel McCune<br>Email: <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a><br><br>For billing questions, cancellations, or disputes, email us. We respond within 2 business days.</p>
   </div>
 </div>
 </body>
