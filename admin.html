@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin · Food Truck Rewards</title>
+<meta name="theme-color" content="#2D1B0E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --or:#FF5722; --gd:#F9A825; --gn:#1f8f3a; --rd:#C62828; --bl:#1565C0;
+    --tx:#2D1B0E; --mu:#7a6a5c; --bg:#F6F1EA; --card:#fff; --line:#e7ddd0; --dark:#2D1B0E;
+    --f:'Nunito',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--f);font-weight:700;background:var(--bg);color:var(--tx);line-height:1.5}
+  a{color:var(--or)}
+  .hidden{display:none!important}
+  button{font-family:var(--f);cursor:pointer}
+
+  /* Login */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;
+    background:linear-gradient(160deg,#2D1B0E,#4a2f18)}
+  .login-card{background:#fff;border-radius:22px;padding:34px 28px;width:100%;max-width:380px;box-shadow:0 24px 60px rgba(0,0,0,.35);text-align:center}
+  .login-card .lg{width:64px;height:64px;border-radius:18px;background:var(--or);display:flex;align-items:center;justify-content:center;font-size:34px;margin:0 auto 16px}
+  .login-card h1{font-size:22px;font-weight:900;margin-bottom:4px}
+  .login-card p{color:var(--mu);font-size:14px;margin-bottom:22px}
+  .in{width:100%;padding:14px 16px;border:2px solid var(--line);border-radius:12px;font-size:16px;font-family:var(--f);font-weight:700;outline:none;color:var(--tx)}
+  .in:focus{border-color:var(--or)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:12px;padding:13px 20px;font-weight:800;font-size:15px;background:var(--or);color:#fff;transition:filter .15s}
+  .btn:hover{filter:brightness(1.05)}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-sm{padding:7px 12px;font-size:13px;border-radius:9px}
+  .btn-gh{background:transparent;color:var(--tx);border:1.5px solid var(--line)}
+  .btn-rd{background:var(--rd)} .btn-gn{background:var(--gn)} .btn-dk{background:var(--dark)}
+  .err{color:var(--rd);font-size:13px;font-weight:800;margin-top:12px;min-height:18px}
+
+  /* Shell */
+  header{background:var(--dark);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:20}
+  .h-brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:17px}
+  .h-brand .ic{width:34px;height:34px;border-radius:10px;background:var(--or);display:flex;align-items:center;justify-content:center;font-size:18px}
+  .h-brand small{display:block;font-size:10px;font-weight:800;letter-spacing:2px;color:#c9a98e;text-transform:uppercase}
+  .tabs{display:flex;gap:4px;background:#fff;border-bottom:1px solid var(--line);padding:0 12px;position:sticky;top:62px;z-index:19;overflow-x:auto}
+  .tab{padding:14px 16px;font-weight:800;font-size:14px;color:var(--mu);border:none;background:transparent;border-bottom:3px solid transparent;white-space:nowrap}
+  .tab.on{color:var(--or);border-bottom-color:var(--or)}
+  main{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
+  .page{display:none} .page.on{display:block}
+
+  /* Stat cards */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:0 2px 8px rgba(120,80,40,.05)}
+  .stat .v{font-size:30px;font-weight:900;line-height:1}
+  .stat .l{font-size:11px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;margin-top:6px}
+  .stat.hi{background:linear-gradient(135deg,var(--or),#ff7d4d);color:#fff}
+  .stat.hi .l{color:rgba(255,255,255,.85)}
+
+  /* Toolbar */
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:18px 0 12px}
+  .toolbar .in{flex:1;min-width:180px;padding:11px 14px}
+  .seg{display:flex;gap:2px;background:#eee3d5;border-radius:10px;padding:3px}
+  .seg button{border:none;background:transparent;padding:7px 12px;border-radius:8px;font-weight:800;font-size:12.5px;color:var(--mu)}
+  .seg button.on{background:#fff;color:var(--or);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+
+  /* Table */
+  .tbl-wrap{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+  .tbl-scroll{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;min-width:640px}
+  th{text-align:left;font-size:11px;font-weight:900;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;padding:12px 14px;border-bottom:2px solid var(--line);white-space:nowrap;background:#faf6f0}
+  td{padding:12px 14px;border-bottom:1px solid var(--line);font-size:14px;font-weight:700;vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  .t-main{font-weight:900} .t-sub{font-size:12px;color:var(--mu);font-weight:700}
+  .empty{text-align:center;padding:40px 20px;color:var(--mu);font-weight:800}
+  .row-act{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+
+  /* Badges */
+  .badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:900;padding:4px 10px;border-radius:99px;white-space:nowrap}
+  .b-active{background:rgba(31,143,58,.12);color:var(--gn)}
+  .b-trial{background:rgba(21,101,192,.12);color:var(--bl)}
+  .b-promo{background:rgba(249,168,37,.16);color:#9a6a00}
+  .b-grace{background:rgba(198,40,40,.1);color:var(--rd)}
+  .b-inactive{background:#eee;color:#888}
+  .b-blocked{background:var(--rd);color:#fff}
+
+  /* Modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:40}
+  .modal.on{display:flex}
+  .sheet{background:#fff;border-radius:20px 20px 0 0;width:100%;max-width:560px;max-height:90vh;overflow-y:auto;padding:22px 20px 32px}
+  .sheet h3{font-size:20px;font-weight:900;margin-bottom:2px}
+  .sheet .close{float:right;background:#eee;border:none;width:32px;height:32px;border-radius:50%;font-size:16px;font-weight:900}
+  .kv{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .kv .k{color:var(--mu);font-weight:800} .kv .v{font-weight:800;text-align:right;word-break:break-word}
+  .field{margin-bottom:14px;text-align:left}
+  .field label{display:block;font-size:12px;font-weight:900;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+  @media(min-width:560px){ .modal{align-items:center} .sheet{border-radius:20px} }
+
+  /* Toast */
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(120px);background:var(--dark);color:#fff;padding:13px 22px;border-radius:12px;font-weight:800;font-size:14px;z-index:60;transition:transform .3s;box-shadow:0 10px 30px rgba(0,0,0,.3);max-width:90vw;text-align:center}
+  #toast.on{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login">
+  <form class="login-card" onsubmit="return doLogin(event)">
+    <div class="lg">🔒</div>
+    <h1>Admin Access</h1>
+    <p>Food Truck Rewards control panel</p>
+    <input class="in" type="password" id="pw" placeholder="Admin password" autocomplete="current-password" required>
+    <button class="btn" style="width:100%;margin-top:14px" id="login-btn">Sign In</button>
+    <div class="err" id="login-err"></div>
+  </form>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dash" class="hidden">
+  <header>
+    <div class="h-brand"><div class="ic">🔥</div><div>Food Truck Rewards<small>Admin</small></div></div>
+    <button class="btn btn-sm btn-gh" style="color:#fff;border-color:rgba(255,255,255,.3)" onclick="logout()">Sign out</button>
+  </header>
+
+  <div class="tabs">
+    <button class="tab on" data-tab="overview" onclick="showTab('overview')">Overview</button>
+    <button class="tab" data-tab="vendors" onclick="showTab('vendors')">Vendors</button>
+    <button class="tab" data-tab="customers" onclick="showTab('customers')">Customers</button>
+    <button class="tab" data-tab="promos" onclick="showTab('promos')">Promo Codes</button>
+  </div>
+
+  <main>
+    <!-- OVERVIEW -->
+    <div class="page on" id="page-overview">
+      <div class="stats" id="ov-stats"></div>
+      <div class="toolbar"><button class="btn btn-sm btn-gh" onclick="loadAll()">↻ Refresh</button></div>
+    </div>
+
+    <!-- VENDORS -->
+    <div class="page" id="page-vendors">
+      <div class="toolbar">
+        <input class="in" id="v-search" placeholder="Search trucks, email, #…" oninput="renderVendors()">
+        <div class="seg" id="v-filter">
+          <button class="on" data-f="all" onclick="setVFilter('all',this)">All</button>
+          <button data-f="active" onclick="setVFilter('active',this)">Active</button>
+          <button data-f="trial" onclick="setVFilter('trial',this)">Trial</button>
+          <button data-f="grace" onclick="setVFilter('grace',this)">Grace</button>
+          <button data-f="inactive" onclick="setVFilter('inactive',this)">Inactive</button>
+          <button data-f="blocked" onclick="setVFilter('blocked',this)">Blocked</button>
+        </div>
+      </div>
+      <div class="tbl-wrap"><div class="tbl-scroll"><table>
+        <thead><tr><th>Truck</th><th>Contact</th><th>#</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+        <tbody id="v-rows"></tbody>
+      </table></div></div>
+    </div>
+
+    <!-- CUSTOMERS -->
+    <div class="page" id="page-customers">
+      <div class="toolbar">
+        <input class="in" id="c-search" placeholder="Search name, email, phone…" oninput="renderCustomers()">
+        <div class="seg" id="c-filter">
+          <button class="on" data-f="all" onclick="setCFilter('all',this)">All</button>
+          <button data-f="active" onclick="setCFilter('active',this)">Active</button>
+          <button data-f="blocked" onclick="setCFilter('blocked',this)">Blocked</button>
+        </div>
+      </div>
+      <div class="tbl-wrap"><div class="tbl-scroll"><table>
+        <thead><tr><th>Customer</th><th>Contact</th><th>Visits</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+        <tbody id="c-rows"></tbody>
+      </table></div></div>
+    </div>
+
+    <!-- PROMOS -->
+    <div class="page" id="page-promos">
+      <div class="tbl-wrap" style="padding:18px;margin-bottom:16px">
+        <div style="font-weight:900;font-size:16px;margin-bottom:14px">➕ Create promo code</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end" id="promo-form-grid">
+          <div class="field" style="margin:0"><label>Code</label><input class="in" id="p-code" placeholder="LAUNCH50"></div>
+          <div class="field" style="margin:0"><label>Free months</label><input class="in" id="p-months" type="number" value="1" min="1"></div>
+          <div class="field" style="margin:0"><label>Max uses (blank = ∞)</label><input class="in" id="p-max" type="number" min="1" placeholder="∞"></div>
+          <button class="btn" id="p-create-btn" onclick="createPromo()">Create</button>
+        </div>
+      </div>
+      <div class="tbl-wrap"><div class="tbl-scroll"><table>
+        <thead><tr><th>Code</th><th>Free months</th><th>Uses</th><th>Status</th><th></th></tr></thead>
+        <tbody id="p-rows"></tbody>
+      </table></div></div>
+    </div>
+  </main>
+</div>
+
+<!-- Vendor detail modal -->
+<div class="modal" id="v-modal" onclick="if(event.target===this)closeModal('v-modal')">
+  <div class="sheet" id="v-modal-body"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  var API = location.origin;
+  var TOKEN = localStorage.getItem('ftr_admin_token') || '';
+  var S = { vendors:[], customers:[], promos:[], vFilter:'all', cFilter:'all' };
+
+  /* ── API helper ── */
+  async function api(method, path, body){
+    var opt = { method: method, headers: { 'Authorization':'Bearer '+TOKEN } };
+    if(body){ opt.headers['Content-Type']='application/json'; opt.body=JSON.stringify(body); }
+    var res = await fetch(API+path, opt);
+    var data = null; try{ data = await res.json(); }catch(e){}
+    if(res.status===401){ logout(); throw new Error('Session expired'); }
+    if(!res.ok){ throw new Error((data&&data.error)||('Error '+res.status)); }
+    return data ? data.data : null;
+  }
+
+  /* ── Auth ── */
+  async function doLogin(e){
+    e.preventDefault();
+    var btn=document.getElementById('login-btn'), err=document.getElementById('login-err');
+    err.textContent=''; btn.disabled=true; btn.textContent='Signing in…';
+    try{
+      var res = await fetch(API+'/api/admin/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:document.getElementById('pw').value})});
+      var data = await res.json();
+      if(!res.ok){ throw new Error(data.error||'Login failed'); }
+      TOKEN = data.data.token; localStorage.setItem('ftr_admin_token', TOKEN);
+      showDash();
+    }catch(ex){ err.textContent = ex.message; }
+    btn.disabled=false; btn.textContent='Sign In';
+    return false;
+  }
+  function logout(){ TOKEN=''; localStorage.removeItem('ftr_admin_token');
+    document.getElementById('dash').classList.add('hidden'); document.getElementById('login').classList.remove('hidden');
+    document.getElementById('pw').value=''; }
+  function showDash(){ document.getElementById('login').classList.add('hidden'); document.getElementById('dash').classList.remove('hidden'); loadAll(); }
+
+  /* ── Tabs ── */
+  function showTab(t){
+    document.querySelectorAll('.tab').forEach(function(b){ b.classList.toggle('on', b.dataset.tab===t); });
+    document.querySelectorAll('.page').forEach(function(p){ p.classList.toggle('on', p.id==='page-'+t); });
+  }
+
+  /* ── Load everything ── */
+  async function loadAll(){
+    try{
+      var st = await api('GET','/api/admin/stats');
+      S.vendors = st.vendors||[]; S.promos = st.promo_codes||[];
+      renderStats(st); renderVendors(); renderPromos();
+      S.customers = await api('GET','/api/admin/customers') || [];
+      renderCustomers();
+    }catch(ex){ if(ex.message!=='Session expired') toast('⚠️ '+ex.message); }
+  }
+
+  /* ── Overview ── */
+  function renderStats(s){
+    var money = '$'+(s.mrr||0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
+    var cards = [
+      ['hi', money, 'Monthly Revenue'],
+      ['', s.paying_vendors, 'Paying Vendors'],
+      ['', s.active_vendors, 'Active Vendors'],
+      ['', s.trial_vendors, 'On Trial'],
+      ['', s.grace_vendors, 'In Grace'],
+      ['', s.total_vendors, 'Total Vendors'],
+      ['', (s.total_customers||0).toLocaleString(), 'Customers'],
+      ['', (s.total_visits||0).toLocaleString(), 'Total Visits'],
+      ['', (s.total_redemptions||0).toLocaleString(), 'Redemptions'],
+    ];
+    document.getElementById('ov-stats').innerHTML = cards.map(function(c){
+      return '<div class="stat '+c[0]+'"><div class="v">'+c[1]+'</div><div class="l">'+c[2]+'</div></div>';
+    }).join('');
+  }
+
+  /* ── Vendor status ── */
+  function vStatus(v){
+    if(v.is_blocked) return {k:'blocked', label:'Blocked'};
+    if(v.plan_active) return {k:'active', label:'Active'};
+    var now = Date.now();
+    if(v.trial_ends_at && parseDate(v.trial_ends_at) > now) return {k:'trial', label:'Trial'};
+    if(v.promo_expires_at && parseDate(v.promo_expires_at) > now) return {k:'promo', label:'Promo'};
+    if(v.payment_failed_at){ var days=(now-parseDate(v.payment_failed_at))/86400000; if(days<=7) return {k:'grace', label:'Grace'}; }
+    return {k:'inactive', label:'Inactive'};
+  }
+  function parseDate(s){ if(!s) return 0; var t=Date.parse(s.replace(' ','T')); return isNaN(t)?0:t; }
+  function fmtDate(s){ var t=parseDate(s); if(!t) return '—'; var d=new Date(t); return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+
+  /* ── Vendors ── */
+  function setVFilter(f,el){ S.vFilter=f; el.parentNode.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b===el);}); renderVendors(); }
+  function renderVendors(){
+    var q=(document.getElementById('v-search').value||'').toLowerCase();
+    var rows = S.vendors.filter(function(v){
+      var st=vStatus(v).k;
+      if(S.vFilter!=='all' && st!==S.vFilter) return false;
+      if(q){ return (v.truck_name||'').toLowerCase().indexOf(q)>=0 || (v.email||'').toLowerCase().indexOf(q)>=0 || String(v.vendor_number||'').indexOf(q)>=0 || (v.owner_name||'').toLowerCase().indexOf(q)>=0; }
+      return true;
+    });
+    var tb=document.getElementById('v-rows');
+    if(!rows.length){ tb.innerHTML='<tr><td colspan="6" class="empty">No vendors match.</td></tr>'; return; }
+    tb.innerHTML = rows.map(function(v){
+      var st=vStatus(v);
+      var toggleActive = v.plan_active
+        ? '<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{plan_active:false})">Deactivate</button>'
+        : '<button class="btn btn-sm btn-gn" onclick="overrideVendor(\''+v.id+'\',{plan_active:true})">Activate</button>';
+      var toggleBlock = v.is_blocked
+        ? '<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{is_blocked:false})">Unblock</button>'
+        : '<button class="btn btn-sm btn-rd" onclick="confirmBlockVendor(\''+v.id+'\')">Block</button>';
+      return '<tr>'+
+        '<td><div class="t-main">'+esc(v.truck_name||'—')+'</div><div class="t-sub">'+esc(v.owner_name||'')+'</div></td>'+
+        '<td><div class="t-sub">'+esc(v.email||'—')+'</div></td>'+
+        '<td>#'+esc(v.vendor_number||'—')+'</td>'+
+        '<td><span class="badge b-'+st.k+'">'+st.label+'</span></td>'+
+        '<td class="t-sub">'+fmtDate(v.created_at)+'</td>'+
+        '<td><div class="row-act">'+
+          '<button class="btn btn-sm btn-gh" onclick="viewVendor(\''+v.id+'\')">View</button>'+
+          toggleActive+toggleBlock+
+        '</div></td></tr>';
+    }).join('');
+  }
+  async function overrideVendor(id, patch){
+    try{ await api('POST','/api/admin/vendor/'+id+'/override', patch); toast('✅ Updated'); await loadAll(); }
+    catch(ex){ toast('⚠️ '+ex.message); }
+  }
+  function confirmBlockVendor(id){ if(confirm('Block this vendor? Their program goes offline immediately.')) overrideVendor(id,{is_blocked:true}); }
+
+  async function viewVendor(id){
+    try{
+      var v = await api('GET','/api/admin/vendor/'+id);
+      var st = vStatus(v);
+      var rows = [
+        ['Truck', esc(v.truck_name||'—')],
+        ['Owner', esc(v.owner_name||'—')],
+        ['Email', esc(v.email||'—')],
+        ['Phone', esc(v.phone||'—')],
+        ['Vendor #', '#'+esc(v.vendor_number||'—')],
+        ['Slug', esc(v.slug||'—')],
+        ['Status', '<span class="badge b-'+st.k+'">'+st.label+'</span>'],
+        ['Members', (v.total_members||0)],
+        ['Total visits', (v.total_visits||0)],
+        ['Trial ends', fmtDate(v.trial_ends_at)],
+        ['Promo expires', fmtDate(v.promo_expires_at)],
+        ['Payment failed', fmtDate(v.payment_failed_at)],
+        ['Joined', fmtDate(v.created_at)],
+      ];
+      document.getElementById('v-modal-body').innerHTML =
+        '<button class="close" onclick="closeModal(\'v-modal\')">✕</button>'+
+        '<h3>'+esc(v.truck_name||'Vendor')+'</h3>'+
+        '<div class="t-sub" style="margin-bottom:14px">'+esc(v.email||'')+'</div>'+
+        rows.map(function(r){ return '<div class="kv"><span class="k">'+r[0]+'</span><span class="v">'+r[1]+'</span></div>'; }).join('')+
+        '<div class="row-act" style="margin-top:18px;justify-content:flex-start">'+
+          (v.plan_active?'<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{plan_active:false});closeModal(\'v-modal\')">Deactivate</button>'
+                        :'<button class="btn btn-sm btn-gn" onclick="overrideVendor(\''+v.id+'\',{plan_active:true});closeModal(\'v-modal\')">Activate</button>')+
+          (v.is_blocked?'<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{is_blocked:false});closeModal(\'v-modal\')">Unblock</button>'
+                       :'<button class="btn btn-sm btn-rd" onclick="if(confirm(\'Block this vendor?\')){overrideVendor(\''+v.id+'\',{is_blocked:true});closeModal(\'v-modal\')}">Block</button>')+
+        '</div>';
+      document.getElementById('v-modal').classList.add('on');
+    }catch(ex){ toast('⚠️ '+ex.message); }
+  }
+
+  /* ── Customers ── */
+  function setCFilter(f,el){ S.cFilter=f; el.parentNode.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b===el);}); renderCustomers(); }
+  function renderCustomers(){
+    var q=(document.getElementById('c-search').value||'').toLowerCase();
+    var rows = S.customers.filter(function(c){
+      if(S.cFilter==='active' && c.is_blocked) return false;
+      if(S.cFilter==='blocked' && !c.is_blocked) return false;
+      if(q){ return (c.name||'').toLowerCase().indexOf(q)>=0 || (c.email||'').toLowerCase().indexOf(q)>=0 || String(c.phone||'').indexOf(q)>=0; }
+      return true;
+    });
+    var tb=document.getElementById('c-rows');
+    if(!rows.length){ tb.innerHTML='<tr><td colspan="6" class="empty">No customers match.</td></tr>'; return; }
+    tb.innerHTML = rows.map(function(c){
+      var block = c.is_blocked
+        ? '<button class="btn btn-sm btn-gh" onclick="blockCustomer(\''+c.id+'\',false)">Unblock</button>'
+        : '<button class="btn btn-sm btn-rd" onclick="if(confirm(\'Block this customer?\'))blockCustomer(\''+c.id+'\',true)">Block</button>';
+      return '<tr>'+
+        '<td><div class="t-main">'+esc(c.name||'—')+'</div></td>'+
+        '<td><div class="t-sub">'+esc(c.email||'—')+'</div><div class="t-sub">'+esc(c.phone||'')+'</div></td>'+
+        '<td>'+(c.total_visits||0)+'</td>'+
+        '<td>'+(c.is_blocked?'<span class="badge b-blocked">Blocked</span>':'<span class="badge b-active">Active</span>')+'</td>'+
+        '<td class="t-sub">'+fmtDate(c.created_at)+'</td>'+
+        '<td><div class="row-act">'+block+'</div></td></tr>';
+    }).join('');
+  }
+  async function blockCustomer(id, blocked){
+    try{ await api('POST','/api/admin/customer/'+id+'/block', {is_blocked:blocked}); toast(blocked?'🚫 Blocked':'✅ Unblocked');
+      var c=S.customers.filter(function(x){return x.id===id;})[0]; if(c) c.is_blocked=blocked; renderCustomers(); }
+    catch(ex){ toast('⚠️ '+ex.message); }
+  }
+
+  /* ── Promo codes ── */
+  function renderPromos(){
+    var tb=document.getElementById('p-rows');
+    if(!S.promos.length){ tb.innerHTML='<tr><td colspan="5" class="empty">No promo codes yet.</td></tr>'; return; }
+    tb.innerHTML = S.promos.map(function(p){
+      var uses = (p.uses||0)+(p.max_uses?(' / '+p.max_uses):' / ∞');
+      var status = p.is_active?'<span class="badge b-active">Active</span>':'<span class="badge b-inactive">Off</span>';
+      var toggle = p.is_active
+        ? '<button class="btn btn-sm btn-gh" onclick="togglePromo(\''+p.id+'\',false)">Disable</button>'
+        : '<button class="btn btn-sm btn-gn" onclick="togglePromo(\''+p.id+'\',true)">Enable</button>';
+      return '<tr>'+
+        '<td><div class="t-main">'+esc(p.code)+'</div></td>'+
+        '<td>'+(p.free_months||1)+' mo</td>'+
+        '<td>'+uses+'</td>'+
+        '<td>'+status+'</td>'+
+        '<td><div class="row-act">'+toggle+
+          '<button class="btn btn-sm btn-rd" onclick="if(confirm(\'Delete '+esc(p.code)+'?\'))deletePromo(\''+p.id+'\')">Delete</button>'+
+        '</div></td></tr>';
+    }).join('');
+  }
+  async function createPromo(){
+    var code=document.getElementById('p-code').value.trim();
+    var months=parseInt(document.getElementById('p-months').value)||1;
+    var maxv=document.getElementById('p-max').value;
+    if(code.length<3){ toast('⚠️ Code must be 3+ characters'); return; }
+    var btn=document.getElementById('p-create-btn'); btn.disabled=true;
+    try{
+      var body={code:code, free_months:months}; if(maxv) body.max_uses=parseInt(maxv);
+      var p = await api('POST','/api/admin/promo-codes', body);
+      S.promos.unshift(p); renderPromos();
+      document.getElementById('p-code').value=''; document.getElementById('p-max').value='';
+      toast('✅ Promo created');
+    }catch(ex){ toast('⚠️ '+ex.message); }
+    btn.disabled=false;
+  }
+  async function togglePromo(id, active){
+    try{ var p=await api('PATCH','/api/admin/promo-codes/'+id, {is_active:active});
+      S.promos=S.promos.map(function(x){return x.id===id?p:x;}); renderPromos(); }
+    catch(ex){ toast('⚠️ '+ex.message); }
+  }
+  async function deletePromo(id){
+    try{ await api('DELETE','/api/admin/promo-codes/'+id); S.promos=S.promos.filter(function(x){return x.id!==id;}); renderPromos(); toast('🗑️ Deleted'); }
+    catch(ex){ toast('⚠️ '+ex.message); }
+  }
+
+  /* ── UI helpers ── */
+  function closeModal(id){ document.getElementById(id).classList.remove('on'); }
+  var toastT;
+  function toast(msg){ var t=document.getElementById('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(toastT); toastT=setTimeout(function(){t.classList.remove('on');},2600); }
+
+  /* ── Boot ── */
+  if(TOKEN) showDash();
+</script>
+</body>
+</html>
