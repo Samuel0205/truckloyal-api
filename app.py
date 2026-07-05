@@ -698,7 +698,7 @@ def admin_login():
 def admin_stats():
     vendors     = sb.table("vendors").select("id, plan_active, trial_ends_at, "
                   "payment_failed_at, promo_expires_at, created_at, "
-                  "truck_name, email, vendor_number, slug, is_blocked, owner_name").execute().data
+                  "truck_name, email, vendor_number, slug, owner_name").execute().data
     customers   = sb.table("customers").select("id", count="exact").execute()
     visits      = sb.table("visits").select("id", count="exact").execute()
     redemptions = sb.table("redemptions").select("id", count="exact").execute()
