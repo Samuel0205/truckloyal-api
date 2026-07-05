@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TruckLoyal — Food Truck Rewards</title>
+<meta name="description" content="Earn points and get rewards at your favorite food trucks. Install free — no app store needed.">
+<meta name="theme-color" content="#FF5722">
+<link rel="manifest" href="/manifest.json">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="TruckLoyal">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#FFF8F0;color:#2D1B0E;line-height:1.5}
+  .wrap{max-width:560px;margin:0 auto;padding:0 22px}
+  /* Hero */
+  .hero{background:linear-gradient(160deg,#FF5722 0%,#FF6F3C 55%,#FF8A65 100%);color:#fff;text-align:center;padding:54px 22px 46px;border-radius:0 0 34px 34px;box-shadow:0 8px 28px rgba(255,87,34,.28)}
+  .app-icon{width:104px;height:104px;border-radius:26px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:60px;margin:0 auto 20px;box-shadow:0 10px 28px rgba(0,0,0,.20)}
+  .hero h1{font-size:32px;font-weight:900;letter-spacing:.3px;margin-bottom:8px}
+  .hero p{font-size:16px;opacity:.95;font-weight:600;max-width:360px;margin:0 auto}
+  /* Install card */
+  .install-wrap{margin-top:-26px}
+  .install-btn{width:100%;background:#FF5722;color:#fff;border:none;border-radius:18px;padding:20px;font-size:19px;font-weight:900;cursor:pointer;box-shadow:0 10px 26px rgba(255,87,34,.4);display:flex;align-items:center;justify-content:center;gap:10px;transition:transform .1s}
+  .install-btn:active{transform:scale(.97)}
+  .install-sub{text-align:center;font-size:13px;color:rgba(45,27,14,.55);font-weight:600;margin-top:12px}
+  .steps{margin-top:16px;display:flex;flex-direction:column;gap:12px}
+  .step{display:flex;align-items:center;gap:14px;background:#fff;border:1.5px solid rgba(180,120,60,.15);border-radius:16px;padding:16px;box-shadow:0 2px 8px rgba(180,100,40,.07)}
+  .step-num{width:32px;height:32px;border-radius:50%;background:#FF5722;color:#fff;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .step-num.gold{background:#F9A825}
+  .step-t{font-weight:800;font-size:14px}
+  .step-s{font-size:12px;color:rgba(45,27,14,.55);margin-top:2px}
+  .warn{background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:14px;padding:13px;font-size:13px;color:#E65100;font-weight:700;line-height:1.5;text-align:center;margin-bottom:4px}
+  /* Features */
+  .section-title{font-size:13px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:rgba(45,27,14,.5);margin:40px 0 14px}
+  .feat{display:flex;align-items:center;gap:14px;background:#fff;border:1.5px solid rgba(180,120,60,.12);border-radius:16px;padding:16px;margin-bottom:10px;box-shadow:0 2px 8px rgba(180,100,40,.06)}
+  .feat .fi{font-size:26px;flex-shrink:0}
+  .feat .ft{font-weight:800;font-size:15px}
+  .feat .fs{font-size:12.5px;color:rgba(45,27,14,.55)}
+  /* Vendor CTA */
+  .vendor{margin-top:34px;background:#2D1B0E;color:#fff;border-radius:20px;padding:26px 22px;text-align:center}
+  .vendor h3{font-size:19px;font-weight:900;margin-bottom:6px}
+  .vendor p{font-size:13.5px;opacity:.8;margin-bottom:16px;line-height:1.6}
+  .vendor a{display:inline-block;background:#FF5722;color:#fff;text-decoration:none;font-weight:800;font-size:15px;padding:13px 26px;border-radius:12px}
+  /* Footer */
+  footer{text-align:center;padding:34px 22px 44px;font-size:12.5px;color:rgba(45,27,14,.5)}
+  footer a{color:#FF5722;text-decoration:none;font-weight:700}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+  <div class="hero">
+    <div class="app-icon">🔥</div>
+    <h1>TruckLoyal</h1>
+    <p>Earn points &amp; rewards at your favorite food trucks 🌮</p>
+  </div>
+
+  <div class="wrap">
+    <div class="install-wrap">
+      <div id="install-action"></div>
+    </div>
+
+    <div class="section-title">Why you'll love it</div>
+    <div class="feat"><span class="fi">⭐</span><div><div class="ft">Earn points every visit</div><div class="fs">Check in and rack up points at each truck</div></div></div>
+    <div class="feat"><span class="fi">🎁</span><div><div class="ft">Redeem free food &amp; rewards</div><div class="fs">Turn points into real perks</div></div></div>
+    <div class="feat"><span class="fi">🎰</span><div><div class="ft">Spin the wheel</div><div class="fs">Win bonus points on every check-in</div></div></div>
+    <div class="feat"><span class="fi">📍</span><div><div class="ft">Find your trucks</div><div class="fs">See where your favorites are parked today</div></div></div>
+
+    <div class="vendor">
+      <h3>🚚 Own a food truck?</h3>
+      <p>Launch a loyalty program in minutes. 14-day free trial, then $9.99/month.</p>
+      <a href="/app">Get started free →</a>
+    </div>
+  </div>
+
+  <footer>
+    TruckLoyal · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a><br>
+    <a href="mailto:flavoronwheels26@gmail.com">flavoronwheels26@gmail.com</a>
+  </footer>
+
+<script>
+  // Register the service worker so Android/Chrome offers a real install
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+  }
+
+  var deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferredPrompt = e;
+    var b = document.getElementById('android-install-btn');
+    if (b) { b.disabled = false; }
+  });
+  window.addEventListener('appinstalled', function(){ renderInstalled(); });
+
+  var ua = navigator.userAgent;
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+  var isAndroid = /android/i.test(ua);
+  var isRealSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  var el = document.getElementById('install-action');
+
+  function renderInstalled(){
+    el.innerHTML =
+      '<div class="step" style="border-color:#C5E1A5;background:#F1F8E9">' +
+        '<div class="step-num" style="background:#2E7D32">✓</div>' +
+        '<div><div class="step-t">App installed!</div>' +
+        '<div class="step-s">Open TruckLoyal from your home screen.</div></div></div>' +
+      '<div class="install-sub"><a href="/app" style="color:#FF5722;font-weight:800;text-decoration:none">Open the app now →</a></div>';
+  }
+
+  function renderAndroid(){
+    el.innerHTML =
+      '<button class="install-btn" id="android-install-btn" onclick="androidInstall()">⬇️&nbsp; Install App</button>' +
+      '<div class="install-sub">Free · installs in seconds · no app store needed</div>' +
+      '<div class="steps" id="android-manual"></div>';
+  }
+  window.androidInstall = function(){
+    if (deferredPrompt){
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(r){
+        if (r && r.outcome === 'accepted') renderInstalled();
+        deferredPrompt = null;
+      });
+    } else {
+      document.getElementById('android-manual').innerHTML =
+        '<div class="warn">Tap the ⋮ menu (top-right) then "Install app" or "Add to Home screen".</div>';
+    }
+  };
+
+  function renderIOSSafari(){
+    el.innerHTML =
+      '<div class="steps">' +
+        '<div class="warn">Tap <strong>Share</strong> then <strong>Add to Home Screen</strong> to install 👇</div>' +
+        '<div class="step"><div class="step-num">1</div><div><div class="step-t">Tap the Share button ⬆️</div><div class="step-s">The box with an arrow at the bottom of Safari</div></div></div>' +
+        '<div class="step"><div class="step-num gold">2</div><div><div class="step-t">Tap "Add to Home Screen"</div><div class="step-s">Scroll down, then tap Add</div></div></div>' +
+      '</div>';
+  }
+
+  function renderIOSOther(){
+    el.innerHTML =
+      '<div class="warn">On iPhone, apps install only from <strong>Safari</strong> — not Chrome or in-app browsers (Apple’s rule).</div>' +
+      '<button class="install-btn" style="margin-top:12px;background:#2D1B0E" onclick="copyLink(this)"><span id="copy-lbl">🔗&nbsp; Copy link for Safari</span></button>' +
+      '<div class="steps">' +
+        '<div class="step"><div class="step-num">1</div><div><div class="step-t">Copy the link, then open Safari</div><div class="step-s">The blue compass icon on your phone</div></div></div>' +
+        '<div class="step"><div class="step-num">2</div><div><div class="step-t">Paste the link &amp; go</div><div class="step-s">Tap Safari’s address bar, paste, press Go</div></div></div>' +
+        '<div class="step"><div class="step-num gold">3</div><div><div class="step-t">Share ⬆️ → "Add to Home Screen"</div><div class="step-s">In Safari, tap Share then Add to Home Screen</div></div></div>' +
+      '</div>';
+  }
+
+  function renderDesktop(){
+    el.innerHTML =
+      '<a href="/app" class="install-btn" style="text-decoration:none">Open the Web App →</a>' +
+      '<div class="install-sub">📱 On your phone, this page shows a one-tap Install button</div>';
+  }
+
+  window.copyLink = function(btn){
+    var url = location.origin + '/';
+    var lbl = document.getElementById('copy-lbl');
+    var done = function(){ if(lbl) lbl.textContent = '✅ Copied! Now open Safari'; };
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(url).then(done).catch(function(){ fb(url, done); });
+    } else { fb(url, done); }
+  };
+  function fb(t, cb){ try{ var a=document.createElement('textarea'); a.value=t; a.style.position='fixed'; a.style.opacity='0'; document.body.appendChild(a); a.select(); document.execCommand('copy'); document.body.removeChild(a); cb(); }catch(e){} }
+
+  if (isStandalone) renderInstalled();
+  else if (isAndroid) renderAndroid();
+  else if (isIOS && isRealSafari) renderIOSSafari();
+  else if (isIOS) renderIOSOther();
+  else renderDesktop();
+</script>
+</body>
+</html>
