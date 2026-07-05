@@ -479,6 +479,17 @@ def serve_install():
     return resp
 
 
+@app.route("/admin")
+@app.route("/admin/")
+def serve_admin():
+    # Admin dashboard shell. Contains no data — every action authenticates
+    # against /api/admin/* with the password-issued token.
+    resp = send_from_directory('.', 'admin.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['X-Robots-Tag'] = 'noindex, nofollow'
+    return resp
+
+
 @app.route("/privacy")
 def privacy_policy():
     from flask import Response
@@ -687,7 +698,7 @@ def admin_login():
 def admin_stats():
     vendors     = sb.table("vendors").select("id, plan_active, trial_ends_at, "
                   "payment_failed_at, promo_expires_at, created_at, "
-                  "truck_name, email, vendor_number, slug").execute().data
+                  "truck_name, email, vendor_number, slug, is_blocked, owner_name").execute().data
     customers   = sb.table("customers").select("id", count="exact").execute()
     visits      = sb.table("visits").select("id", count="exact").execute()
     redemptions = sb.table("redemptions").select("id", count="exact").execute()

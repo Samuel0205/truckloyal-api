@@ -191,7 +191,7 @@
       <a class="lnk" href="#features">Features</a>
       <a class="lnk" href="#pricing">Pricing</a>
       <a class="lnk" href="#get-app">Get the App</a>
-      <a class="btn btn-primary nav-cta" href="/app">Open App</a>
+      <a class="btn btn-primary nav-cta" href="#get-app" onclick="return goInstall(event)">Download App Now!</a>
     </div>
   </div>
 </header>
@@ -203,7 +203,7 @@
       <h1>Add a loyalty program to your <span class="hl">food truck</span> in minutes.</h1>
       <p class="hero-lead">Points, rewards, a spin wheel, push notifications, and real analytics — everything the big chains have, built for your truck. Just $9.99/month.</p>
       <div class="hero-ctas">
-        <a class="btn btn-primary" href="/app">Start Free Trial</a>
+        <a class="btn btn-primary" href="#get-app" onclick="return goInstall(event)">Start Free Trial</a>
         <a class="btn btn-outline" href="#how">See how it works</a>
       </div>
       <p class="hero-note">✓ <b>14-day free trial</b> &nbsp;·&nbsp; ✓ No credit card to start &nbsp;·&nbsp; ✓ Cancel anytime</p>
@@ -367,7 +367,7 @@
         <li>Analytics dashboard</li>
         <li>Schedule, location &amp; feed posts</li>
       </ul>
-      <a class="btn btn-primary" href="/app">Start Free Trial</a>
+      <a class="btn btn-primary" href="#get-app" onclick="return goInstall(event)">Start Free Trial</a>
       <div class="price-sub">No credit card to start · cancel anytime</div>
     </div>
   </div>
@@ -447,6 +447,16 @@
   window.androidInstall = function(){
     if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(r){ if(r&&r.outcome==='accepted') renderInstalled(); deferredPrompt=null; }); }
     else { cta.innerHTML = '<div class="warn">Tap the ⋮ menu (top-right) then “Install app” or “Add to Home screen”.</div>'; }
+  };
+  /* Top / Start-Trial buttons: fire the native install if we can, otherwise scroll to the Get-the-app section */
+  window.goInstall = function(e){
+    if (deferredPrompt){
+      if (e) e.preventDefault();
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(function(r){ if(r&&r.outcome==='accepted') renderInstalled(); deferredPrompt=null; });
+      return false;
+    }
+    return true; // let the href scroll to #get-app (with the install instructions)
   };
   function renderIOSSafari(){ cta.innerHTML = '<div class="warn">Tap <strong>Share</strong> ⬆️ then <strong>Add to Home Screen</strong> to install — see the iPhone steps below.</div>'; }
   function renderIOSOther(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" onclick="copyLink(this)"><span id="copy-lbl">🔗 Copy link for Safari</span></button><div class="sub">On iPhone, apps install from Safari only</div>'; }
