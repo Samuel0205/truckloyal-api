@@ -99,7 +99,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png'}
+_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/terms', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -477,6 +477,37 @@ def serve_shot():
 def serve_install():
     resp = send_from_directory('.', 'install.html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+SITE_URL = os.environ.get("SITE_URL", "https://foodtruckrewards.com")
+
+
+@app.route("/robots.txt")
+def robots_txt():
+    from flask import Response
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "Disallow: /api/\n"
+        f"Sitemap: {SITE_URL}/sitemap.xml\n"
+    )
+    resp = Response(body, mimetype="text/plain")
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    from flask import Response
+    paths = ["/", "/install", "/privacy", "/terms"]
+    urls = "".join(f"<url><loc>{SITE_URL}{p}</loc></url>" for p in paths)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+           f'{urls}</urlset>')
+    resp = Response(xml, mimetype="application/xml")
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
     return resp
 
 
