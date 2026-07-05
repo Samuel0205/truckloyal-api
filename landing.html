@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Food Truck Rewards — Add a loyalty program to your food truck</title>
-<meta name="description" content="Food Truck Rewards — a full loyalty program that runs from your phone. Points, rewards, spin wheel, and analytics.">
+<title>Food Truck Rewards — Add a Loyalty Program to Your Food Truck in Minutes</title>
+<meta name="description" content="Food Truck Rewards gives food truck owners a full loyalty rewards program — points, spin wheel, analytics, push notifications — for $9.99/month. 14-day free trial.">
 <meta name="theme-color" content="#FF5722">
 <link rel="manifest" href="/manifest.json">
 <meta name="mobile-web-app-capable" content="yes">
@@ -12,241 +12,452 @@
 <meta name="apple-mobile-web-app-title" content="Food Truck Rewards">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --or:#FF5722; --or2:#FF8A50; --gd:#F5B800; --gd-pill:#F9A825;
-    --tx:#2D1B0E; --mu:rgba(45,27,14,.55); --bg:#FFF8F0; --hdr:#FFF3EC;
-    --cream:#FFF3E6; --line:rgba(180,120,60,.14);
-    --f:'Nunito',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  :root {
+    --orange: #FF5722;
+    --gold: #F9A825;
+    --dark: #2D1B0E;
+    --cream: #FFF8F0;
+    --card: #ffffff;
+    --muted: #7a6a5c;
+    --line: #f0e4d6;
   }
-  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-  html{scroll-behavior:smooth}
-  body{font-family:var(--f);background:var(--bg);color:var(--tx);line-height:1.55;font-weight:700;
-    background-image:radial-gradient(circle,rgba(255,87,34,.05) 1px,transparent 1px);background-size:22px 22px}
-  .wrap{max-width:600px;margin:0 auto;padding:0 22px}
-  a{color:inherit;text-decoration:none}
-
-  /* Header */
-  header{position:sticky;top:0;z-index:50;background:rgba(255,243,236,.94);backdrop-filter:blur(10px);
-    border-bottom:1px solid var(--line);padding:calc(env(safe-area-inset-top,0px) + 13px) 22px 13px}
-  .hd{max-width:600px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
-  .brand{display:flex;align-items:center;gap:11px;min-width:0}
-  .brand .ic{width:44px;height:44px;border-radius:12px;background:var(--or);display:flex;align-items:center;
-    justify-content:center;font-size:23px;flex-shrink:0;box-shadow:0 4px 12px rgba(255,87,34,.30)}
-  .brand .nm{font-weight:900;font-size:19px;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .btn-open{background:var(--or);color:#fff;font-weight:800;font-size:16px;padding:12px 22px;border-radius:99px;
-    flex-shrink:0;box-shadow:0 6px 16px rgba(255,87,34,.32)}
-  .btn-open:active{transform:scale(.97)}
-
-  /* Shared */
-  section{padding:54px 0}
-  .eyebrow{font-weight:900;font-size:13px;letter-spacing:2.5px;text-transform:uppercase;color:var(--or);text-align:center;margin-bottom:12px}
-  h2.big{font-weight:900;font-size:33px;line-height:1.14;text-align:center;letter-spacing:.2px}
-  .lead{text-align:center;color:var(--mu);font-size:16.5px;font-weight:700;max-width:420px;margin:14px auto 0}
-  .pill{display:inline-flex;align-items:center;gap:8px;font-weight:800;font-size:16px;padding:10px 20px;border-radius:99px}
-  .pill.or{background:var(--or);color:#fff}
-  .pill.gd{background:var(--gd-pill);color:#3a2400}
-  .pill.soft{background:#FBEBCB;color:#8a5a00}
-
-  /* Clip (cycling screenshot) */
-  .clip{position:relative;width:262px;max-width:72vw;margin:0 auto}
-  .clip.hero-clip{aspect-ratio:805/1391}
-  .clip.tour-clip{aspect-ratio:890/1826}
-  .clip img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .7s ease}
-  .clip.tour-clip img{object-fit:cover;border-radius:30px;box-shadow:0 20px 44px rgba(60,30,10,.24)}
-  .clip img.on{opacity:1}
-
-  /* Hero */
-  .hero{padding:40px 0 6px;text-align:center}
-  .hero .clip{margin-bottom:28px;filter:drop-shadow(0 22px 40px rgba(60,30,10,.22))}
-  .hero h1{font-weight:900;font-size:37px;line-height:1.1;margin:16px 0 12px;letter-spacing:.2px}
-  .hero h1 .hl{color:var(--or)}
-  .hero p{color:var(--mu);font-size:16.5px;font-weight:700;max-width:400px;margin:0 auto 22px}
-  .btn{display:flex;align-items:center;justify-content:center;gap:9px;font-weight:900;font-size:18px;
-    padding:17px 24px;border-radius:15px;border:none;cursor:pointer;font-family:var(--f);transition:transform .1s;width:100%}
-  .btn:active{transform:scale(.97)}
-  .btn-p{background:var(--or);color:#fff;box-shadow:0 10px 24px rgba(255,87,34,.34)}
-  .btn-d{background:var(--tx);color:#fff}
-  .cta{max-width:340px;margin:0 auto}
-  .sub-note{font-size:13px;color:var(--mu);font-weight:800;margin-top:14px}
-
-  /* Steps */
-  .col-head{margin:28px 0 16px}
-  .stepcard{background:#fff;border:1.5px solid var(--line);border-radius:20px;padding:22px 20px;margin-bottom:14px;box-shadow:0 3px 12px rgba(180,100,40,.06)}
-  .stepcard .n{width:46px;height:46px;border-radius:14px;display:flex;align-items:center;justify-content:center;
-    font-weight:900;font-size:20px;color:#fff;margin-bottom:14px}
-  .stepcard.v .n{background:var(--or)}
-  .stepcard.c .n{background:var(--gd)}
-  .stepcard h4{font-weight:900;font-size:21px;margin-bottom:6px}
-  .stepcard p{color:var(--mu);font-weight:700;font-size:15px}
-
-  /* Install (inside customer step 1) */
-  #install-action{margin-top:14px}
-  #install-action .warn{background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:12px;padding:12px;font-size:13px;color:#E65100;font-weight:800;line-height:1.5;text-align:center;margin-bottom:10px}
-  #install-action .mini{display:flex;align-items:center;gap:11px;background:var(--bg);border:1.5px solid var(--line);border-radius:12px;padding:12px;margin-top:8px}
-  #install-action .mn{width:26px;height:26px;border-radius:8px;background:var(--gd);color:#fff;font-weight:900;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-  #install-action .mt{font-weight:800;font-size:13px}
-  #install-action .ms{font-size:12px;color:var(--mu)}
-
-  /* Features */
-  .feat{background:var(--cream);border:1.5px solid var(--line);border-radius:20px;padding:22px 20px;margin-bottom:14px}
-  .feat .fic{width:52px;height:52px;border-radius:15px;background:#fff;display:flex;align-items:center;justify-content:center;
-    font-size:26px;margin-bottom:14px;box-shadow:0 3px 10px rgba(180,100,40,.10)}
-  .feat h4{font-weight:900;font-size:21px;margin-bottom:6px}
-  .feat p{color:var(--mu);font-weight:700;font-size:15px}
-
-  /* Vendor band */
-  .band{background:linear-gradient(160deg,var(--or) 0%,#FF6F3C 60%,var(--or2) 100%);color:#fff;border-radius:26px;
-    padding:38px 26px;text-align:center;box-shadow:0 14px 34px rgba(255,87,34,.3)}
-  .band h3{font-weight:900;font-size:26px;margin-bottom:8px}
-  .band p{opacity:.95;font-weight:700;margin-bottom:22px}
-  .band .btn-w{display:inline-flex;align-items:center;gap:8px;background:#fff;color:var(--or);font-weight:900;font-size:18px;padding:16px 30px;border-radius:15px}
-
-  footer{text-align:center;padding:36px 22px 46px;font-size:13px;color:var(--mu);font-weight:800}
-  footer .fl{margin-top:8px}
-  footer a{color:var(--or);font-weight:900}
-
-  @media(min-width:560px){ .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px} .grid2 .stepcard,.grid2 .feat{margin-bottom:0} }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Nunito', -apple-system, sans-serif; font-weight: 700; background: var(--cream); color: var(--dark); line-height: 1.55; }
+  img { max-width: 100%; display: block; }
+  section { padding: 80px 20px; position: relative; }
+  .inner { max-width: 1080px; margin: 0 auto; }
+  h1, h2, h3 { font-weight: 900; line-height: 1.1; }
+  .btn { display: inline-block; text-decoration: none; font-weight: 800; font-size: 16px; padding: 15px 30px; border-radius: 999px; transition: transform .15s ease, box-shadow .15s ease; cursor: pointer; border: none; font-family: 'Nunito', sans-serif; }
+  .btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: var(--orange); color: #fff; box-shadow: 0 8px 22px rgba(255,87,34,0.32); }
+  .btn-primary:hover { box-shadow: 0 12px 28px rgba(255,87,34,0.42); }
+  .btn-outline { background: #fff; color: var(--orange); border: 2px solid var(--orange); }
+  .btn-gold { background: var(--gold); color: var(--dark); box-shadow: 0 8px 22px rgba(249,168,37,0.3); }
+  header { position: sticky; top: 0; z-index: 50; background: rgba(255,248,240,0.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .nav-inner { max-width: 1080px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 900; font-size: 20px; display: flex; align-items: center; gap: 8px; color: var(--dark); text-decoration: none; }
+  .logo .truck { width: 32px; height: 32px; border-radius: 9px; background: var(--orange); display: inline-flex; align-items: center; justify-content: center; font-size: 17px; }
+  .nav-links { display: flex; align-items: center; gap: 26px; }
+  .nav-links a.lnk { color: var(--dark); text-decoration: none; font-size: 15px; font-weight: 800; }
+  .nav-links a.lnk:hover { color: var(--orange); }
+  .nav-cta { font-size: 14px; padding: 10px 20px; }
+  #hero { padding-top: 70px; background: linear-gradient(180deg, #fff 0%, var(--cream) 100%); }
+  .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 50px; align-items: center; }
+  .pill { display: inline-flex; align-items: center; gap: 8px; background: rgba(249,168,37,0.18); color: #9a6a00; font-size: 13px; font-weight: 800; padding: 6px 14px; border-radius: 999px; margin-bottom: 20px; }
+  #hero h1 { font-size: clamp(34px, 5.5vw, 52px); margin-bottom: 18px; }
+  #hero h1 .hl { color: var(--orange); }
+  .hero-lead { font-size: 18px; color: var(--muted); font-weight: 700; margin-bottom: 30px; max-width: 480px; }
+  .hero-ctas { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
+  .hero-note { font-size: 14px; color: var(--muted); font-weight: 700; margin-top: 16px; }
+  .hero-note b { color: var(--dark); }
+  .phone { margin: 0 auto; width: 260px; background: var(--dark); border-radius: 36px; padding: 12px; box-shadow: 0 30px 60px rgba(45,27,14,0.28); }
+  .phone-screen { background: #FFF3EA; border-radius: 26px; overflow: hidden; }
+  /* two-up flip between customer + vendor views */
+  .ph-flip { position: relative; height: 486px; }
+  .ph-face { position: absolute; inset: 0; display: flex; flex-direction: column; padding-bottom: 14px; }
+  .ph-body { flex: 1; }
+  .ph-body.center { display: flex; flex-direction: column; justify-content: center; }
+  .face-customer { animation: flipA 9s ease-in-out infinite; }
+  .face-vendor   { animation: flipB 9s ease-in-out infinite; }
+  @keyframes flipA { 0%,42%{opacity:1} 50%,92%{opacity:0} 100%{opacity:1} }
+  @keyframes flipB { 0%,42%{opacity:0} 50%,92%{opacity:1} 100%{opacity:0} }
+  @media (prefers-reduced-motion: reduce) {
+    .face-customer, .face-vendor { animation: none; }
+    .face-vendor { opacity: 0; }
+  }
+  /* vendor dashboard view */
+  .pv-hero { background: linear-gradient(135deg, #FF5722, #ff7d4d); color: #fff; padding: 12px 14px 14px; }
+  .pv-lbl { font-size: 8.5px; font-weight: 900; letter-spacing: .12em; opacity: .85; }
+  .pv-name { font-size: 18px; font-weight: 900; line-height: 1.1; margin-top: 1px; }
+  .pv-live { display: inline-flex; align-items: center; gap: 5px; background: rgba(255,255,255,.22); border-radius: 999px; padding: 4px 10px; font-size: 9px; font-weight: 800; margin-top: 9px; }
+  .pv-live .dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; }
+  .pv-stats { display: flex; gap: 6px; padding: 9px 12px 0; }
+  .pv-stat { flex: 1; background: #fff; border-radius: 11px; padding: 9px 4px; text-align: center; box-shadow: 0 6px 14px rgba(45,27,14,.07); }
+  .pv-stat .v { font-size: 18px; font-weight: 900; line-height: 1; }
+  .pv-stat .l { font-size: 7.5px; font-weight: 800; color: var(--muted); margin-top: 3px; }
+  .pv-window { margin: 9px 12px 0; background: #eaf7ec; border: 1px solid #cdeccf; border-radius: 11px; padding: 9px 11px; display: flex; align-items: center; gap: 8px; }
+  .pv-window .ico { font-size: 17px; }
+  .pv-window .t1 { font-size: 11px; font-weight: 900; color: #1f8f3a; }
+  .pv-window .t2 { font-size: 8.5px; font-weight: 700; color: var(--muted); line-height: 1.25; }
+  .pv-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 9px 12px 0; }
+  .pv-tile { background: #fff; border-radius: 11px; padding: 10px; box-shadow: 0 6px 14px rgba(45,27,14,.07); }
+  .pv-tile .e { font-size: 17px; }
+  .pv-tile .t { font-size: 10.5px; font-weight: 900; color: var(--dark); margin-top: 4px; }
+  .pv-tile .s { font-size: 8px; font-weight: 700; color: var(--muted); margin-top: 1px; }
+  .ph-bar { background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; }
+  .ph-brand { color: var(--orange); font-weight: 900; font-size: 11.5px; letter-spacing: .01em; }
+  .ph-menu { display: flex; flex-direction: column; gap: 3px; width: 16px; }
+  .ph-menu i { height: 2px; background: var(--dark); border-radius: 2px; }
+  .ph-head { padding: 12px 14px 4px; }
+  .ph-tag { color: var(--muted); font-size: 10px; font-weight: 800; }
+  .ph-name { color: var(--dark); font-size: 18px; font-weight: 900; line-height: 1.12; }
+  .ph-card { background: #fff; border-radius: 14px; margin: 9px 12px 0; padding: 12px; box-shadow: 0 6px 14px rgba(45,27,14,0.07); }
+  .ph-stats { display: flex; text-align: center; }
+  .ph-stats > div { flex: 1; }
+  .ph-stats .b1 { border-right: 1px solid var(--line); }
+  .ph-stats .sv { font-size: 19px; font-weight: 900; line-height: 1; }
+  .ph-stats .sl { font-size: 8px; font-weight: 800; color: var(--muted); letter-spacing: .03em; margin-top: 4px; }
+  .ph-tierrow { display: flex; justify-content: space-between; align-items: flex-start; }
+  .ph-tierlbl { font-size: 8.5px; font-weight: 800; color: var(--muted); letter-spacing: .04em; }
+  .ph-tier { font-size: 16px; font-weight: 900; color: var(--dark); margin-top: 2px; }
+  .ph-next { text-align: right; font-size: 9px; font-weight: 800; color: var(--muted); line-height: 1.3; }
+  .ph-pbar { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; margin-top: 9px; }
+  .ph-pbar i { display: block; height: 100%; width: 60%; background: linear-gradient(90deg, var(--orange), var(--gold)); }
+  .ph-streakhead { display: flex; justify-content: space-between; align-items: center; }
+  .ph-streakhead .s1 { font-size: 12px; font-weight: 900; color: var(--dark); }
+  .ph-streakhead .s2 { font-size: 12px; font-weight: 900; color: var(--orange); }
+  .ph-days { display: flex; gap: 4px; margin-top: 9px; }
+  .ph-day { flex: 1; aspect-ratio: 1; background: #FBE9DC; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: var(--muted); }
+  .ph-day.on { background: var(--orange); color: #fff; }
+  .head { text-align: center; max-width: 600px; margin: 0 auto 50px; }
+  .head .kicker { color: var(--orange); font-size: 14px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 10px; }
+  .head h2 { font-size: clamp(28px, 4vw, 40px); margin-bottom: 12px; }
+  .head p { color: var(--muted); font-size: 16px; font-weight: 700; }
+  .track-label { display: inline-block; font-weight: 900; font-size: 15px; padding: 6px 16px; border-radius: 999px; margin-bottom: 22px; }
+  .track-label.vendor { background: var(--orange); color: #fff; }
+  .track-label.customer { background: var(--gold); color: var(--dark); }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 50px; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px 22px; }
+  .step .n { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; color: #fff; background: var(--orange); margin-bottom: 14px; }
+  .step.cust .n { background: var(--gold); color: var(--dark); }
+  .step h3 { font-size: 18px; margin-bottom: 6px; }
+  .step p { color: var(--muted); font-size: 14px; font-weight: 700; }
+  #features { background: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .feat { background: var(--cream); border: 1px solid var(--line); border-radius: 18px; padding: 26px 22px; transition: transform .2s ease, box-shadow .2s ease; }
+  .feat:hover { transform: translateY(-4px); box-shadow: 0 14px 30px rgba(45,27,14,0.08); }
+  .feat .ico { width: 48px; height: 48px; border-radius: 13px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 14px; background: rgba(255,87,34,0.12); }
+  .feat h3 { font-size: 18px; margin-bottom: 6px; }
+  .feat p { color: var(--muted); font-size: 14px; font-weight: 700; }
+  #pricing { background: linear-gradient(180deg, var(--cream), #fff); }
+  .price-card { max-width: 440px; margin: 0 auto; background: #fff; border: 2px solid var(--orange); border-radius: 24px; padding: 40px 34px; text-align: center; box-shadow: 0 20px 50px rgba(255,87,34,0.14); position: relative; }
+  .price-tag { font-size: 15px; font-weight: 800; color: var(--gold); margin-bottom: 6px; }
+  .price-amt { font-size: 56px; font-weight: 900; color: var(--dark); line-height: 1; }
+  .price-amt span { font-size: 18px; color: var(--muted); font-weight: 800; }
+  .price-trial { color: var(--orange); font-weight: 900; font-size: 16px; margin: 10px 0 26px; }
+  .price-list { list-style: none; text-align: left; margin-bottom: 30px; }
+  .price-list li { padding: 9px 0; font-size: 15px; font-weight: 700; display: flex; gap: 10px; border-bottom: 1px solid var(--line); }
+  .price-list li::before { content: '✓'; color: var(--orange); font-weight: 900; }
+  .price-card .btn { width: 100%; }
+  .price-sub { font-size: 13px; color: var(--muted); font-weight: 700; margin-top: 14px; }
+  footer { background: var(--dark); color: #fff8f0; padding: 50px 20px 36px; }
+  .foot-grid { max-width: 1080px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .foot-logo { font-size: 20px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
+  .foot-logo .truck { width: 32px; height: 32px; border-radius: 9px; background: var(--orange); display: inline-flex; align-items: center; justify-content: center; font-size: 17px; }
+  .foot-links { display: flex; gap: 24px; flex-wrap: wrap; }
+  .foot-links a { color: #f0d9c4; text-decoration: none; font-weight: 800; font-size: 15px; }
+  .foot-links a:hover { color: #fff; }
+  .foot-copy { max-width: 1080px; margin: 30px auto 0; font-size: 13px; color: #c9a98e; font-weight: 700; border-top: 1px solid rgba(255,255,255,0.12); padding-top: 20px; }
+  /* Get the App section */
+  #get-app { background: var(--cream); }
+  .getapp-cta { text-align: center; margin-bottom: 44px; }
+  .getapp-btn { font-size: 18px; padding: 18px 46px; }
+  .getapp-cta .sub { font-size: 13px; color: var(--muted); font-weight: 800; margin-top: 12px; }
+  .getapp-cta .warn { max-width: 460px; margin: 0 auto; background: #FFF3E0; border: 1px solid #FFCC80; border-radius: 14px; padding: 14px; color: #E65100; font-weight: 800; font-size: 14px; }
+  .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; max-width: 780px; margin: 0 auto; }
+  .install-card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 26px; }
+  .install-card h3 { font-size: 19px; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+  .install-card ol { list-style: none; counter-reset: s; }
+  .install-card li { counter-increment: s; position: relative; padding: 8px 0 8px 34px; font-size: 14px; font-weight: 700; color: var(--dark); }
+  .install-card li::before { content: counter(s); position: absolute; left: 0; top: 8px; width: 22px; height: 22px; background: var(--orange); color: #fff; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 900; }
+  .install-card.ios li::before { background: var(--gold); color: var(--dark); }
+  .getapp-note { text-align: center; max-width: 640px; margin: 30px auto 0; color: var(--muted); font-size: 15px; font-weight: 700; }
+  /* See it in action (demo) */
+  #demo { background: #fff; }
+  .demo-wrap { display: flex; justify-content: center; }
+  .demo-stage { position: relative; width: 300px; max-width: 80%; aspect-ratio: 890/1826; filter: drop-shadow(0 26px 54px rgba(45,27,14,0.28)); }
+  .demo-stage img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 28px; opacity: 0; transition: opacity .7s ease; }
+  .demo-stage img.on { opacity: 1; }
+  .demo-note { text-align: center; color: var(--muted); font-size: 13px; font-weight: 700; margin-top: 20px; }
+  @media (max-width: 800px) {
+    .hero-grid, .install-grid { grid-template-columns: 1fr; }
+    .hero-grid .phone-wrap { order: -1; }
+    .steps, .grid { grid-template-columns: 1fr; }
+    .nav-links .lnk { display: none; }
+    section { padding: 56px 16px; }
+  }
 </style>
 </head>
 <body>
 
-  <header>
-    <div class="hd">
-      <div class="brand"><div class="ic">🚚</div><div class="nm">Food Truck Rewards</div></div>
-      <a class="btn-open" href="/app">Open App</a>
-    </div>
-  </header>
-
-  <!-- HERO -->
-  <div class="wrap">
-    <div class="hero">
-      <div class="clip hero-clip" id="hero-clip">
-        <img data-hero src="/hero-1.png" alt="Food Truck Rewards app">
-        <img data-hero src="/hero-2.png" alt="Food Truck Rewards app">
-      </div>
-      <span class="pill soft">🔥 For food truck owners</span>
-      <h1>Add a <span class="hl">loyalty program</span> to your food truck</h1>
-      <p>Points, rewards, and a spin wheel that bring your regulars back — all run from your phone at the window.</p>
-      <div class="cta"><a class="btn btn-p" href="/app">Start your 14-day free trial →</a></div>
-      <div class="sub-note">$9.99/month after the trial · cancel anytime</div>
+<header>
+  <div class="nav-inner">
+    <a class="logo" href="#hero"><span class="truck">🚚</span> Food Truck Rewards</a>
+    <div class="nav-links">
+      <a class="lnk" href="#how">How it works</a>
+      <a class="lnk" href="#features">Features</a>
+      <a class="lnk" href="#pricing">Pricing</a>
+      <a class="lnk" href="#get-app">Get the App</a>
+      <a class="btn btn-primary nav-cta" href="/app">Open App</a>
     </div>
   </div>
+</header>
 
-  <!-- SEE IT IN ACTION -->
-  <section>
-    <div class="wrap">
-      <div class="eyebrow">See it in action</div>
-      <h2 class="big">Everything runs from your phone</h2>
-      <p class="lead">Your dashboard, customizable rewards, the spin wheel, and real analytics — a quick tour of the actual Food Truck Rewards app.</p>
-      <div class="clip tour-clip" id="tour-clip" style="margin-top:32px">
+<section id="hero">
+  <div class="inner hero-grid">
+    <div>
+      <span class="pill">🔥 For food truck owners</span>
+      <h1>Add a loyalty program to your <span class="hl">food truck</span> in minutes.</h1>
+      <p class="hero-lead">Points, rewards, a spin wheel, push notifications, and real analytics — everything the big chains have, built for your truck. Just $9.99/month.</p>
+      <div class="hero-ctas">
+        <a class="btn btn-primary" href="/app">Start Free Trial</a>
+        <a class="btn btn-outline" href="#how">See how it works</a>
+      </div>
+      <p class="hero-note">✓ <b>14-day free trial</b> &nbsp;·&nbsp; ✓ No credit card to start &nbsp;·&nbsp; ✓ Cancel anytime</p>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone">
+        <div class="phone-screen">
+          <div class="ph-flip">
+
+            <!-- Customer view -->
+            <div class="ph-face face-customer">
+              <div class="ph-bar">
+                <span class="ph-brand">FOOD TRUCK REWARDS</span>
+                <span class="ph-menu"><i></i><i></i><i></i></span>
+              </div>
+              <div class="ph-body center">
+                <div class="ph-head">
+                  <div class="ph-tag">Rewards that hit different</div>
+                  <div class="ph-name">Flavor on Wheels 🥩</div>
+                </div>
+                <div class="ph-card ph-stats">
+                  <div class="b1"><div class="sv" style="color:var(--orange)">1066</div><div class="sl">POINTS HERE</div></div>
+                  <div class="b1"><div class="sv" style="color:var(--dark)">6</div><div class="sl">VISITS</div></div>
+                  <div><div class="sv" style="color:#1f8f3a">$35</div><div class="sl">SAVED</div></div>
+                </div>
+                <div class="ph-card">
+                  <div class="ph-tierrow">
+                    <div>
+                      <div class="ph-tierlbl">YOUR TIER AT THIS TRUCK</div>
+                      <div class="ph-tier">⭐ VIP</div>
+                    </div>
+                    <div class="ph-next">Next 👑 Legend<br>434 pts away</div>
+                  </div>
+                  <div class="ph-pbar"><i></i></div>
+                </div>
+                <div class="ph-card">
+                  <div class="ph-streakhead"><span class="s1">🔥 Visit Streak</span><span class="s2">1 day</span></div>
+                  <div class="ph-days">
+                    <div class="ph-day">M</div><div class="ph-day on">T</div><div class="ph-day">W</div>
+                    <div class="ph-day">T</div><div class="ph-day">F</div><div class="ph-day">S</div><div class="ph-day">S</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Vendor dashboard view -->
+            <div class="ph-face face-vendor">
+              <div class="ph-bar">
+                <span class="ph-brand">FOOD TRUCK REWARDS</span>
+                <span class="ph-menu"><i></i><i></i><i></i></span>
+              </div>
+              <div class="ph-body">
+                <div class="pv-hero">
+                  <div class="pv-lbl">DASHBOARD</div>
+                  <div class="pv-name">Flavor on Wheels 🥩</div>
+                  <span class="pv-live"><span class="dot"></span> Program Live · 4 members</span>
+                </div>
+                <div class="pv-stats">
+                  <div class="pv-stat"><div class="v" style="color:var(--orange)">1</div><div class="l">VISITS TODAY</div></div>
+                  <div class="pv-stat"><div class="v" style="color:#1f8f3a">4</div><div class="l">MEMBERS</div></div>
+                  <div class="pv-stat"><div class="v" style="color:var(--gold)">15</div><div class="l">REDEEMED</div></div>
+                </div>
+                <div class="pv-window">
+                  <span class="ico">🪟</span>
+                  <div><div class="t1">At the Window</div><div class="t2">Award points &amp; confirm rewards at checkout</div></div>
+                </div>
+                <div class="pv-tiles">
+                  <div class="pv-tile"><div class="e">🎁</div><div class="t">Rewards</div><div class="s">What customers earn</div></div>
+                  <div class="pv-tile"><div class="e">🎰</div><div class="t">Spin Prizes</div><div class="s">Bonus points on wheel</div></div>
+                  <div class="pv-tile"><div class="e">📣</div><div class="t">Notify</div><div class="s">Message your members</div></div>
+                  <div class="pv-tile"><div class="e">🎉</div><div class="t">Promos</div><div class="s">Flash deals &amp; codes</div></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="demo">
+  <div class="inner">
+    <div class="head">
+      <div class="kicker">See it in action</div>
+      <h2>Everything runs from your phone</h2>
+      <p>Your dashboard, customizable rewards, the spin wheel, and real analytics — a quick tour of the actual Food Truck Rewards app.</p>
+    </div>
+    <div class="demo-wrap">
+      <div class="demo-stage" id="demo-stage">
         <img data-tour src="/tour-1.png" alt="Food Truck Rewards dashboard">
         <img data-tour src="/tour-2.png" alt="Food Truck Rewards rewards">
         <img data-tour src="/tour-3.png" alt="Food Truck Rewards spin wheel">
         <img data-tour src="/tour-4.png" alt="Food Truck Rewards analytics">
       </div>
     </div>
-  </section>
+    <div class="demo-note">A quick tour of the actual app.</div>
+  </div>
+</section>
 
-  <!-- HOW IT WORKS -->
-  <section style="background:var(--cream);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
-    <div class="wrap">
-      <div class="eyebrow">How it works</div>
-      <h2 class="big">Simple for you.<br>Simple for your customers.</h2>
-      <p class="lead">Set it up once, then run it from your phone at the window.</p>
-
-      <div class="col-head"><span class="pill or">🚚 For vendors</span></div>
-      <div class="grid2">
-        <div class="stepcard v"><div class="n">1</div><h4>Sign up</h4><p>Start your 14-day free trial and add your truck. No credit card needed to begin.</p></div>
-        <div class="stepcard v"><div class="n">2</div><h4>Customize</h4><p>Set your points, rewards, and spin wheel prizes to match your menu and margins.</p></div>
-        <div class="stepcard v"><div class="n">3</div><h4>Use it at the window</h4><p>Scan or search a customer and award points in seconds — even during a rush.</p></div>
-      </div>
-
-      <div class="col-head" style="margin-top:32px"><span class="pill gd">🌮 For customers</span></div>
-      <div class="grid2">
-        <div class="stepcard c" style="grid-column:1/-1">
-          <div class="n">1</div><h4>Get the app</h4>
-          <p>Add it to your home screen — free, no app store needed.</p>
-          <div id="install-action"></div>
-        </div>
-        <div class="stepcard c"><div class="n">2</div><h4>Visit trucks</h4><p>Show your rewards QR code at the window each time you order.</p></div>
-        <div class="stepcard c"><div class="n">3</div><h4>Earn rewards</h4><p>Rack up points, keep your streak alive, and redeem for free food.</p></div>
-      </div>
+<section id="how">
+  <div class="inner">
+    <div class="head">
+      <div class="kicker">How it works</div>
+      <h2>Simple for you. Simple for your customers.</h2>
+      <p>Set it up once, then run it from your phone at the window.</p>
     </div>
-  </section>
 
-  <!-- VENDOR DASHBOARD -->
-  <section>
-    <div class="wrap">
-      <div class="eyebrow">Vendor dashboard</div>
-      <h2 class="big">Everything you need to bring regulars back</h2>
-      <p class="lead">A full loyalty toolkit that runs entirely from your phone.</p>
-      <div class="grid2" style="margin-top:32px">
-        <div class="feat"><div class="fic">🏆</div><h4>Points &amp; rewards</h4><p>Fully customizable per truck. Set earn rates and build reward tiers that fit your menu.</p></div>
-        <div class="feat"><div class="fic">🎡</div><h4>Spin wheel</h4><p>Give customers a spin for bonus prizes — a fun reason to keep coming back.</p></div>
-        <div class="feat"><div class="fic">📲</div><h4>At the Window checkout</h4><p>Scan or search a customer and award points in seconds, even during a rush.</p></div>
-        <div class="feat"><div class="fic">🔔</div><h4>Push notifications</h4><p>Message your members directly when you're parked somewhere new or running a special.</p></div>
-        <div class="feat"><div class="fic">📊</div><h4>Analytics dashboard</h4><p>Track visits, members, and redemptions so you know what's actually working.</p></div>
-        <div class="feat"><div class="fic">📍</div><h4>Schedule &amp; location</h4><p>Post where you're parked so customers can find you wherever you go.</p></div>
-        <div class="feat" style="grid-column:1/-1"><div class="fic">📣</div><h4>Feed &amp; posts</h4><p>Share updates and specials right inside the app your members already use.</p></div>
-      </div>
+    <span class="track-label vendor">🚚 For vendors</span>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><h3>Sign up</h3><p>Start your 14-day free trial and add your truck. No credit card needed to begin.</p></div>
+      <div class="step"><div class="n">2</div><h3>Customize</h3><p>Set your points, rewards, and spin wheel prizes to match your menu and margins.</p></div>
+      <div class="step"><div class="n">3</div><h3>Use it at the window</h3><p>Scan or search a customer and award points in seconds — even during a rush.</p></div>
     </div>
-  </section>
 
-  <!-- BAND -->
-  <div class="wrap" style="padding-bottom:8px">
-    <div class="band">
-      <h3>🚚 Own a food truck?</h3>
-      <p>Launch your loyalty program in minutes. 14-day free trial, then $9.99/month.</p>
-      <a class="btn-w" href="/app">Get started free →</a>
+    <span class="track-label customer">🌮 For customers</span>
+    <div class="steps">
+      <div class="step cust"><div class="n">1</div><h3>Get the app</h3><p>Open the link and add it to your home screen — free, no app store needed.</p></div>
+      <div class="step cust"><div class="n">2</div><h3>Visit trucks</h3><p>Show your rewards QR code at the window each time you order.</p></div>
+      <div class="step cust"><div class="n">3</div><h3>Earn rewards</h3><p>Rack up points, keep your streak alive, and redeem for free food.</p></div>
     </div>
   </div>
+</section>
 
-  <footer>
-    Food Truck Rewards
-    <div class="fl"><a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> · <a href="mailto:flavoronwheels26@gmail.com">Contact</a></div>
-  </footer>
+<section id="features">
+  <div class="inner">
+    <div class="head">
+      <div class="kicker">Vendor dashboard</div>
+      <h2>Everything you need to bring regulars back</h2>
+      <p>A full loyalty toolkit that runs entirely from your phone.</p>
+    </div>
+    <div class="grid">
+      <div class="feat"><div class="ico">🏆</div><h3>Points &amp; rewards</h3><p>Fully customizable per truck. Set earn rates and build reward tiers that fit your menu.</p></div>
+      <div class="feat"><div class="ico">🎡</div><h3>Spin wheel</h3><p>Give customers a spin for bonus prizes — a fun reason to keep coming back.</p></div>
+      <div class="feat"><div class="ico">📲</div><h3>At the Window checkout</h3><p>Scan or search a customer and award points in seconds, even during a rush.</p></div>
+      <div class="feat"><div class="ico">🔔</div><h3>Push notifications</h3><p>Message your members directly when you're parked somewhere new or running a special.</p></div>
+      <div class="feat"><div class="ico">📊</div><h3>Analytics dashboard</h3><p>Track visits, members, and redemptions so you know what's actually working.</p></div>
+      <div class="feat"><div class="ico">📍</div><h3>Schedule &amp; location</h3><p>Post where you're parked so customers can find you wherever you go.</p></div>
+      <div class="feat"><div class="ico">📣</div><h3>Feed &amp; posts</h3><p>Share updates and specials right inside the app your members already use.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="pricing">
+  <div class="inner">
+    <div class="head">
+      <div class="kicker">Pricing</div>
+      <h2>One simple price</h2>
+      <p>Everything included. No setup fees, no per-customer costs.</p>
+    </div>
+    <div class="price-card">
+      <div class="price-tag">FOOD TRUCK REWARDS</div>
+      <div class="price-amt">$9.99<span>/month</span></div>
+      <div class="price-trial">14-day free trial</div>
+      <ul class="price-list">
+        <li>Unlimited members &amp; visits</li>
+        <li>Points, rewards &amp; reward tiers</li>
+        <li>Spin wheel bonus prizes</li>
+        <li>Push notifications to members</li>
+        <li>Analytics dashboard</li>
+        <li>Schedule, location &amp; feed posts</li>
+      </ul>
+      <a class="btn btn-primary" href="/app">Start Free Trial</a>
+      <div class="price-sub">No credit card to start · cancel anytime</div>
+    </div>
+  </div>
+</section>
+
+<section id="get-app">
+  <div class="inner">
+    <div class="head">
+      <div class="kicker">Get the app</div>
+      <h2>Add it to your home screen</h2>
+      <p>Free — no app store needed. Installs in seconds on Android and iPhone.</p>
+    </div>
+    <div class="getapp-cta" id="install-cta"></div>
+    <div class="install-grid">
+      <div class="install-card">
+        <h3>🤖 Android</h3>
+        <ol>
+          <li>Tap “Install App” above</li>
+          <li>Confirm “Install” in the pop-up</li>
+          <li>Open Food Truck Rewards from your home screen</li>
+        </ol>
+      </div>
+      <div class="install-card ios">
+        <h3>🍏 iPhone</h3>
+        <ol>
+          <li>Open this page in Safari</li>
+          <li>Tap the Share button ⬆️</li>
+          <li>Tap “Add to Home Screen”</li>
+        </ol>
+      </div>
+    </div>
+    <div class="getapp-note">Works on any Android or iPhone — no app store download required.</div>
+  </div>
+</section>
+
+<footer>
+  <div class="foot-grid">
+    <div class="foot-logo"><span class="truck">🚚</span> Food Truck Rewards</div>
+    <div class="foot-links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#pricing">Pricing</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
+      <a href="mailto:flavoronwheels26@gmail.com">Contact</a>
+    </div>
+  </div>
+  <div class="foot-copy">© Food Truck Rewards · Operated by Samuel McCune · A loyalty program built for food trucks.</div>
+</footer>
 
 <script>
-  /* Cycling screenshot clips */
-  function carousel(nodes, ms){
-    if(!nodes.length) return;
-    nodes[0].classList.add('on');
-    if(nodes.length<2) return;
-    var i=0;
-    setInterval(function(){ nodes[i].classList.remove('on'); i=(i+1)%nodes.length; nodes[i].classList.add('on'); }, ms);
-  }
-  carousel(document.querySelectorAll('[data-hero]'), 3400);
-  carousel(document.querySelectorAll('[data-tour]'), 3000);
+  /* "See it in action" cycles the 4 app screenshots */
+  (function(){
+    var imgs = document.querySelectorAll('[data-tour]');
+    if(!imgs.length) return;
+    imgs[0].classList.add('on');
+    if(imgs.length < 2) return;
+    var i = 0;
+    setInterval(function(){ imgs[i].classList.remove('on'); i=(i+1)%imgs.length; imgs[i].classList.add('on'); }, 3000);
+  })();
 
-  /* PWA install — same origin as /app, so the prompt fires here */
+  /* PWA install — same origin as /app, so the native prompt fires here */
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js', {scope:'/'}).catch(function(){});
-  var deferredPrompt=null;
-  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferredPrompt=e; var b=document.getElementById('android-install-btn'); if(b) b.disabled=false; });
+  var deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferredPrompt = e; var b=document.getElementById('android-install-btn'); if(b) b.disabled=false; });
   window.addEventListener('appinstalled', function(){ renderInstalled(); });
 
-  var ua=navigator.userAgent;
-  var isIOS=/iphone|ipad|ipod/i.test(ua)||(/Macintosh/.test(ua)&&'ontouchend' in document);
-  var isAndroid=/android/i.test(ua);
-  var isRealSafari=/Safari/.test(ua)&&!/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
-  var isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
-  var el=document.getElementById('install-action');
+  var ua = navigator.userAgent;
+  var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+  var isAndroid = /android/i.test(ua);
+  var isRealSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  var cta = document.getElementById('install-cta');
 
-  function renderInstalled(){ el.innerHTML='<div class="mini" style="border-color:#C5E1A5;background:#F1F8E9"><div class="mn" style="background:#2E7D32">✓</div><div><div class="mt">App installed!</div><div class="ms">Open it from your home screen.</div></div></div>'; }
-  function renderAndroid(){ el.innerHTML='<button class="btn btn-p" id="android-install-btn" onclick="androidInstall()">⬇️&nbsp; Install App</button><div id="android-manual"></div>'; }
-  window.androidInstall=function(){ if(deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(r){ if(r&&r.outcome==='accepted') renderInstalled(); deferredPrompt=null; }); } else { document.getElementById('android-manual').innerHTML='<div class="warn" style="margin-top:10px">Tap the ⋮ menu, then "Install app" or "Add to Home screen".</div>'; } };
-  function renderIOSSafari(){ el.innerHTML='<div class="warn">Tap <strong>Share</strong> ⬆️ then <strong>Add to Home Screen</strong></div><div class="mini"><div class="mn">1</div><div><div class="mt">Tap Share ⬆️</div><div class="ms">The box with an arrow in Safari</div></div></div><div class="mini"><div class="mn">2</div><div><div class="mt">Add to Home Screen</div><div class="ms">Scroll down, then tap Add</div></div></div>'; }
-  function renderIOSOther(){ el.innerHTML='<div class="warn">On iPhone, install from <strong>Safari</strong> only.</div><button class="btn btn-d" onclick="copyLink(this)"><span id="copy-lbl">🔗&nbsp; Copy link for Safari</span></button>'; }
-  function renderDesktop(){ el.innerHTML='<a class="btn btn-p" href="/app">Open the web app →</a>'; }
-  window.copyLink=function(btn){ var u=location.origin+'/'; var l=document.getElementById('copy-lbl'); var d=function(){ if(l) l.textContent='✅ Copied! Open Safari'; }; if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(d).catch(function(){fb(u,d);}); else fb(u,d); };
+  function renderInstalled(){ cta.innerHTML = '<div class="warn" style="background:#F1F8E9;border-color:#C5E1A5;color:#2E7D32">✓ App installed! Open Food Truck Rewards from your home screen.</div>'; }
+  function renderAndroid(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" id="android-install-btn" onclick="androidInstall()">⬇️ Install App</button><div class="sub">Free · installs in seconds · no app store</div>'; }
+  window.androidInstall = function(){
+    if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(r){ if(r&&r.outcome==='accepted') renderInstalled(); deferredPrompt=null; }); }
+    else { cta.innerHTML = '<div class="warn">Tap the ⋮ menu (top-right) then “Install app” or “Add to Home screen”.</div>'; }
+  };
+  function renderIOSSafari(){ cta.innerHTML = '<div class="warn">Tap <strong>Share</strong> ⬆️ then <strong>Add to Home Screen</strong> to install — see the iPhone steps below.</div>'; }
+  function renderIOSOther(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" onclick="copyLink(this)"><span id="copy-lbl">🔗 Copy link for Safari</span></button><div class="sub">On iPhone, apps install from Safari only</div>'; }
+  function renderDesktop(){ cta.innerHTML = '<a class="btn btn-primary getapp-btn" href="/app">Open the Web App →</a><div class="sub">📱 On your phone, this shows a one-tap Install button</div>'; }
+  window.copyLink = function(btn){ var u=location.origin+'/'; var l=document.getElementById('copy-lbl'); var d=function(){ if(l) l.textContent='✅ Copied! Open Safari'; }; if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(d).catch(function(){fb(u,d);}); else fb(u,d); };
   function fb(t,cb){ try{ var a=document.createElement('textarea'); a.value=t; a.style.position='fixed'; a.style.opacity='0'; document.body.appendChild(a); a.select(); document.execCommand('copy'); document.body.removeChild(a); cb(); }catch(e){} }
 
-  if(isStandalone) renderInstalled();
-  else if(isAndroid) renderAndroid();
-  else if(isIOS&&isRealSafari) renderIOSSafari();
-  else if(isIOS) renderIOSOther();
+  if (isStandalone) renderInstalled();
+  else if (isAndroid) renderAndroid();
+  else if (isIOS && isRealSafari) renderIOSSafari();
+  else if (isIOS) renderIOSOther();
   else renderDesktop();
 </script>
 </body>
