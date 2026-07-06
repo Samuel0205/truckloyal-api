@@ -972,7 +972,7 @@
               <svg width="130" height="130" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg"><rect width="160" height="160" fill="white"/><rect x="10" y="10" width="50" height="50" rx="4" fill="#111"/><rect x="16" y="16" width="38" height="38" rx="2" fill="white"/><rect x="22" y="22" width="26" height="26" rx="1" fill="#111"/><rect x="100" y="10" width="50" height="50" rx="4" fill="#111"/><rect x="106" y="16" width="38" height="38" rx="2" fill="white"/><rect x="112" y="22" width="26" height="26" rx="1" fill="#111"/><rect x="10" y="100" width="50" height="50" rx="4" fill="#111"/><rect x="16" y="106" width="38" height="38" rx="2" fill="white"/><rect x="22" y="112" width="26" height="26" rx="1" fill="#111"/><rect x="70" y="10" width="8" height="8" fill="#111"/><rect x="82" y="22" width="8" height="8" fill="#111"/><rect x="70" y="34" width="8" height="8" fill="#111"/><rect x="82" y="70" width="8" height="8" fill="#111"/><rect x="100" y="70" width="8" height="8" fill="#111"/><rect x="70" y="100" width="8" height="8" fill="#111"/><rect x="136" y="136" width="8" height="8" fill="#111"/></svg>
             </div>
           </div>
-          <div style="background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--mu);margin-bottom:12px;word-break:break-all;text-align:center" id="v-qr-url">foodtruckrewards.app/yourtruck</div>
+          <div style="background:var(--s2);border:1px solid var(--b2);border-radius:10px;padding:10px 14px;font-size:12px;color:var(--mu);margin-bottom:12px;word-break:break-all;text-align:center" id="v-qr-url">foodtruckrewards.com/yourtruck</div>
           <div class="callout co-bl" style="margin-bottom:12px">
             <div class="co-icon">💡</div>
             <div><div class="co-title">3 ways customers find you</div><div class="co-desc">1. Scan this QR code<br>2. Enter your truck number (#<span id="v-num-inline">––––</span>)<br>3. Search by your truck name in the app</div></div>
@@ -1056,6 +1056,7 @@
               </div>
             </div>
             <button class="btn btn-p" id="c-signup-btn" onclick="customerSignup()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Create My Account</button>
+            <div style="font-size:11px;color:var(--mu);text-align:center;margin-top:12px;line-height:1.5">By creating an account you agree to our <a href="/terms" target="_blank" style="color:var(--brand);font-weight:800;text-decoration:underline">Terms</a> &amp; <a href="/privacy" target="_blank" style="color:var(--brand);font-weight:800;text-decoration:underline">Privacy Policy</a>.</div>
             <div class="auth-switch">Already have an account? <span onclick="goC('s-c-login')">Sign in</span></div>
           </div>
         </div>
@@ -1736,7 +1737,9 @@
 /* ════════════════════════════════════
    CONFIG
 ════════════════════════════════════ */
-const API = 'https://truckloyal-api.onrender.com';
+// Same-origin: the app and API are served by one Flask app, so this works on
+// foodtruckrewards.com and the onrender URL alike (no cross-origin / CORS needed).
+const API = location.origin;
 
 /* ════════════════════════════════════
    STATE
@@ -2805,7 +2808,7 @@ async function renderVSettings(){
 
   const slug = S.vendor.slug||'yourtruck';
   const num  = S.vendor.vendor_number||'––––';
-  setText('v-qr-url','foodtruckrewards.app/'+slug);
+  setText('v-qr-url','foodtruckrewards.com/'+slug);
   setText('v-vendor-number','#'+num);
   setText('v-num-inline',num);
   if(S.vendor.trial_ends_at) setText('v-trial-end',new Date(S.vendor.trial_ends_at).toLocaleDateString());
@@ -2845,13 +2848,13 @@ async function renderVSettings(){
 
 function copyVendorLink(){
   const slug=S.vendor?.slug||'yourtruck';
-  const url='https://foodtruckrewards.app/'+slug;
+  const url='https://foodtruckrewards.com/'+slug;
   navigator.clipboard?.writeText(url).then(()=>showToast('📋 Link copied!'));
 }
 
 function shareVendorLink(){
   const slug=S.vendor?.slug||'yourtruck';
-  const url='https://foodtruckrewards.app/'+slug;
+  const url='https://foodtruckrewards.com/'+slug;
   const name=S.vendor?.truck_name||'our truck';
   if(navigator.share){
     navigator.share({title:'Join '+name+' Rewards',text:`Join ${name}'s loyalty program and earn free food! 🚚`,url});
@@ -3611,7 +3614,7 @@ function renderProfile(){
   setText('c-total-visits',totalVisits);
   setText('c-trucks-count',S.myTrucks.length);
   setText('c-best-streak',bestStreak+' day'+(bestStreak!==1?'s':''));
-  if(c.referral_code){setText('c-ref-link','foodtruckrewards.app/join?ref='+c.referral_code)}
+  if(c.referral_code){setText('c-ref-link','foodtruckrewards.com/join?ref='+c.referral_code)}
   if(c.birthday){setVal('c-birthday',c.birthday)}
 }
 
@@ -3627,7 +3630,7 @@ function shareMyQR(){
   if(!c) return;
   const rid=c.rewards_id||'FTR-000000';
   if(navigator.share){
-    navigator.share({title:'My Food Truck Rewards ID',text:'My rewards ID is '+rid+'. Scan it to give me points!',url:'https://foodtruckrewards.app'});
+    navigator.share({title:'My Food Truck Rewards ID',text:'My rewards ID is '+rid+'. Scan it to give me points!',url:'https://foodtruckrewards.com'});
   } else {
     navigator.clipboard?.writeText(rid).then(()=>showToast('📋 Rewards ID copied: '+rid));
   }
@@ -3636,7 +3639,7 @@ function shareMyQR(){
 function shareReferral(){
   const c=S.customer;
   if(!c){showToast('Sign in first');return}
-  const url='https://foodtruckrewards.app/join?ref='+(c.referral_code||'');
+  const url='https://foodtruckrewards.com/join?ref='+(c.referral_code||'');
   if(navigator.share){
     navigator.share({title:'Join Food Truck Rewards',text:'Join me on Food Truck Rewards — earn free food at local food trucks! We both get 100 bonus points when you join. 🚚🎰',url});
   } else {
@@ -4086,7 +4089,7 @@ function showIOSSheet(isRealSafari) {
 }
 
 function copyAppLink() {
-  const url = 'https://truckloyal-api.onrender.com/app';
+  const url = location.origin + '/app';
   const label = document.getElementById('copy-link-label');
   const done = () => { if (label) { label.textContent = '✅ Copied! Now open Safari'; } };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -5032,6 +5035,50 @@ function checkResetDeepLink(){
   });
 }
 
+// Handle an email-verification link (?verify_token=…) opened in the app
+function checkVerifyDeepLink(){
+  const href = window.location.href;
+  let token    = new URLSearchParams(window.location.search).get('verify_token');
+  let email    = new URLSearchParams(window.location.search).get('email');
+  let userType = new URLSearchParams(window.location.search).get('user_type') || 'customer';
+  if(!token){ const m=href.match(/[?&]verify_token=([^&\s]+)/); if(m) token=decodeURIComponent(m[1]); }
+  if(!email){ const m=href.match(/[?&]email=([^&\s]+)/); if(m) email=decodeURIComponent(m[1]); }
+  if(!token){ const m=href.match(/[?&]user_type=([^&\s]+)/); if(m) userType=m[1]; }
+  if(!token || !email) return;
+  history.replaceState(null,'',window.location.pathname);
+  fetch(API+'/api/auth/verify-email',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token, email, user_type:userType})
+  }).then(r=>r.json()).then(d=>{
+    if(d.ok){
+      showToast('✅ Email confirmed — thanks for verifying!');
+      if(S.customer) S.customer.email_verified=true;
+      if(S.vendor)   S.vendor.email_verified=true;
+      const b=document.getElementById('verify-banner'); if(b) b.remove();
+    } else { showToast('⚠️ '+(d.error||'Could not confirm email')); }
+  }).catch(()=>{});
+}
+
+// A gentle "confirm your email" bar for logged-in, unverified accounts
+function maybeShowVerifyBanner(){
+  const cust = S.customer && S.customer.email_verified===false;
+  const vend = S.vendor   && S.vendor.email_verified===false;
+  if((!cust && !vend) || document.getElementById('verify-banner')) return;
+  const email = (cust ? S.customer.email : S.vendor.email) || '';
+  const ut    = vend ? 'vendor' : 'customer';
+  const bar=document.createElement('div');
+  bar.id='verify-banner';
+  bar.style.cssText='background:#FFF3E0;border-bottom:1.5px solid #FFCC80;color:#E65100;font-weight:800;font-size:12.5px;padding:9px 14px;display:flex;align-items:center;justify-content:center;gap:8px;flex-shrink:0;font-family:var(--fb)';
+  bar.innerHTML='📧 Confirm your email · <span id="vb-resend" style="text-decoration:underline;cursor:pointer">Resend</span><span id="vb-x" style="cursor:pointer;opacity:.55;margin-left:6px">✕</span>';
+  const tb=document.querySelector('.topbar');
+  if(tb) tb.parentNode.insertBefore(bar, tb.nextSibling);
+  const rs=document.getElementById('vb-resend');
+  if(rs) rs.onclick=function(){ const el=this; el.textContent='Sending…';
+    fetch(API+'/api/auth/resend-verification',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,user_type:ut})})
+      .then(()=>{el.textContent='Sent ✓';}).catch(()=>{el.textContent='Resend';}); };
+  const x=document.getElementById('vb-x'); if(x) x.onclick=function(){ bar.remove(); };
+}
+
 
 function downloadVendorQR(){
   const slug = S.vendor?.slug || 'yourtruck';
@@ -5039,7 +5086,7 @@ function downloadVendorQR(){
   const num = S.vendor?.vendor_number || '';
 
   // URL customers use to join — points to the app with truck slug
-  const joinUrl = `https://truckloyal-app.onrender.com?truck=${slug}`;
+  const joinUrl = `https://foodtruckrewards.com/app?truck=${slug}`;
 
   // Build a printable HTML page with the QR + branding
   const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(joinUrl)}&format=png&margin=10`;
@@ -5087,7 +5134,7 @@ function downloadVendorQR(){
     </div>
     ${num ? `<div class="truck-num">Truck Code: #${num}</div>` : ''}
     <div class="divider">or find us in the app</div>
-    <div class="download-badge">🚚 foodtruckrewards.app</div>
+    <div class="download-badge">🚚 foodtruckrewards.com</div>
     <div class="footer">Powered by Food Truck Rewards · Free to join</div>
     <div class="action-btns">
       <button class="btn-print" onclick="window.print()">🖨️ Print</button>
@@ -5222,6 +5269,8 @@ function openVendorChangePassword(){
 })();
 setMode(S.mode);
 checkResetDeepLink();
+checkVerifyDeepLink();
+maybeShowVerifyBanner();
 // Hide splash screen after app initializes
 setTimeout(()=>{
   const sc=document.getElementById('splash-cover');
