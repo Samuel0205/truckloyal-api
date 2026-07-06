@@ -34,7 +34,7 @@ app = Flask(__name__)
 # The app is served from this same Flask process (same-origin), so the app
 # itself never needs CORS. ALLOWED_ORIGINS lets you whitelist any external
 # site (e.g. a marketing domain) that must call the API from a browser.
-_default_origins = "https://truckloyal-api.onrender.com"
+_default_origins = "https://foodtruckrewards.com,https://truckloyal-api.onrender.com"
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", _default_origins).split(",") if o.strip()]
 CORS(app, origins=ALLOWED_ORIGINS)
 
@@ -49,6 +49,11 @@ JWT_EXPIRY         = 30   # days
 GRACE_PERIOD_DAYS  = int(os.environ.get("GRACE_PERIOD_DAYS", 5))
 MONTHLY_PRICE      = 9.99
 STRIPE_PRICE_ID    = os.environ.get("STRIPE_PRICE_ID", "")
+# Public URL the installed app opens at — used in reset/verify emails and the
+# Stripe billing-portal return. Override with the APP_URL env var if the domain changes.
+APP_URL            = os.environ.get("APP_URL", "https://foodtruckrewards.com/app")
+# Contact/support email shown in the app and legal pages.
+SUPPORT_EMAIL      = os.environ.get("SUPPORT_EMAIL", "flavoronwheels26@gmail.com")
 # No insecure default — if unset, admin login and the cron are disabled (fail closed).
 ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "")
 # Cron/automation secret; falls back to ADMIN_PASSWORD if a dedicated one isn't set.
@@ -990,6 +995,8 @@ def vendor_signup():
     except Exception:
         pass
 
+    _send_verification("vendor", vendor["id"], email, owner_name or truck_name)
+
     token = make_vendor_token(vendor["id"])
     return ok({
         "token":              token,
@@ -1012,7 +1019,7 @@ def vendor_login():
     vendor = row[0]
 
     if vendor.get("is_blocked"):
-        return err("This account has been suspended. Contact support@foodtruckrewards.app", 403)
+        return err(f"This account has been suspended. Contact {SUPPORT_EMAIL}", 403)
 
     pw_hash = vendor.get("password_hash")
     if not pw_hash:
@@ -1151,7 +1158,7 @@ def billing_portal():
     try:
         session = stripe.billing_portal.Session.create(
             customer=vendor["stripe_customer_id"],
-            return_url="https://truckloyal-api.onrender.com/app",
+            return_url=APP_URL,
         )
         return ok({"url": session.url})
     except Exception as e:
@@ -1490,7 +1497,7 @@ def find_customer():
         if row: customer = row[0]
 
     if not customer:
-        return err("Customer not found. Ask them to sign up at foodtruckrewards.app", 404)
+        return err("Customer not found. Ask them to sign up at foodtruckrewards.com", 404)
 
     ct = sb.table("customer_trucks").select("*").eq("customer_id", customer["id"]).eq("vendor_id", vendor_id).execute().data
     return ok({
@@ -1854,6 +1861,8 @@ def customer_signup():
         "rewards_id": rid, "referral_code": ref_code, "referred_by": referred_by,
     }).execute().data[0]
 
+    _send_verification("customer", customer["id"], email, name)
+
     token = make_customer_token(customer["id"])
     return ok({"token": token, "customer": _safe_customer(customer), "trucks": []}), 201
 
@@ -1877,7 +1886,7 @@ def customer_login():
     customer = row[0]
 
     if customer.get("is_blocked"):
-        return err("This account has been suspended. Contact support@foodtruckrewards.app", 403)
+        return err(f"This account has been suspended. Contact {SUPPORT_EMAIL}", 403)
 
     pw_hash  = customer.get("password_hash")
 
@@ -2294,9 +2303,8 @@ def forgot_password():
             print(f"[RESET TOKEN] Could not store token: {e}")
             return SAFE_RESPONSE
 
-        # Reset link points to the API-served app URL
-        app_url   = os.environ.get("APP_URL", "https://truckloyal-api.onrender.com/app")
-        reset_url = f"{app_url}?reset_token={raw_token}&user_type={user_type}&email={email}"
+        # Reset link points to the app URL
+        reset_url = f"{APP_URL}?reset_token={raw_token}&user_type={user_type}&email={email}"
         name      = user.get(name_field, "")
         _send_reset_email(email, reset_url, user_type, name)
 
@@ -2330,6 +2338,8 @@ def reset_password():
 
     matched = None
     for t in tokens:
+        if t.get("purpose") == "verify":   # never let an email-verify token reset a password
+            continue
         exp = datetime.fromisoformat(t["expires_at"].replace("Z","").replace("+00:00","").split("+")[0].strip())
         if exp < now:
             continue
@@ -2385,9 +2395,155 @@ def verify_reset_token():
     return ok({"valid": False})
 
 
+# ══════════════════════════════════════════════════════
+#  EMAIL VERIFICATION
+# ══════════════════════════════════════════════════════
+
+def _send_verify_email(to_email: str, verify_url: str, name: str) -> bool:
+    """Send an email-verification message via Gmail SMTP (best effort)."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    gmail_user = os.environ.get("GMAIL_USER", "")
+    gmail_pass = os.environ.get("GMAIL_APP_PASSWORD", "")
+    if not gmail_user or not gmail_pass:
+        print("[EMAIL] No GMAIL creds — cannot send verification email.")
+        return False
+
+    hi = f"Hi {name}," if name else "Hi there,"
+    html_body = f"""<!DOCTYPE html>
+<html>
+<body style="font-family:Arial,sans-serif;background:#FFF8F0;padding:32px;margin:0">
+  <div style="max-width:480px;margin:0 auto;background:white;border-radius:16px;padding:32px;box-shadow:0 4px 20px rgba(0,0,0,.08)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="font-size:48px">🔥</div>
+      <h1 style="color:#FF5722;font-size:22px;margin:8px 0">Food Truck Rewards</h1>
+    </div>
+    <h2 style="color:#2D1B0E;font-size:18px;margin-bottom:8px">Confirm your email</h2>
+    <p style="color:#666;font-size:14px;line-height:1.6;margin-bottom:24px">
+      {hi} thanks for joining Food Truck Rewards! Please confirm this is your email
+      so you can receive rewards updates and recover your account if needed.
+    </p>
+    <div style="text-align:center;margin-bottom:24px">
+      <a href="{verify_url}"
+         style="background:#FF5722;color:white;padding:14px 32px;border-radius:10px;
+                text-decoration:none;font-weight:bold;font-size:15px;display:inline-block">
+        Confirm My Email
+      </a>
+    </div>
+    <p style="color:#999;font-size:12px;line-height:1.6">
+      This link expires in 48 hours. If you didn't create an account, you can ignore this email.
+    </p>
+    <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+    <p style="color:#ccc;font-size:11px;text-align:center">Food Truck Rewards · {SUPPORT_EMAIL}</p>
+  </div>
+</body>
+</html>"""
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Confirm your Food Truck Rewards email"
+        msg["From"]    = f"Food Truck Rewards <{gmail_user}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(html_body, "html"))
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(gmail_user, gmail_pass)
+            server.sendmail(gmail_user, to_email, msg.as_string())
+        return True
+    except Exception as e:
+        print(f"[VERIFY EMAIL ERROR] {e}")
+        return False
+
+
+def _send_verification(user_type: str, user_id: str, email: str, name: str = "") -> None:
+    """Create a verification token and email a confirm link. Never raises —
+    a signup must succeed even if email/DB isn't fully configured."""
+    try:
+        import secrets
+        raw_token  = secrets.token_urlsafe(32)
+        token_hash = bcrypt.hashpw(raw_token.encode(), bcrypt.gensalt()).decode()
+        expires_at = (datetime.utcnow() + timedelta(hours=48)).isoformat()
+        sb.table("password_reset_tokens").insert({
+            "user_type":  user_type,
+            "user_id":    user_id,
+            "email":      email,
+            "token_hash": token_hash,
+            "expires_at": expires_at,
+            "used":       False,
+            "purpose":    "verify",
+        }).execute()
+        verify_url = f"{APP_URL}?verify_token={raw_token}&user_type={user_type}&email={email}"
+        _send_verify_email(email, verify_url, name)
+    except Exception as e:
+        # Column missing / email down — verification is best-effort, don't block signup
+        print(f"[SEND VERIFICATION] skipped: {e}")
+
+
+@app.route("/api/auth/verify-email", methods=["POST"])
+@rate_limit(20, 900)
+def verify_email():
+    body      = request.json or {}
+    raw_token = body.get("token", "").strip()
+    email     = (body.get("email") or "").strip().lower()
+    user_type = body.get("user_type", "customer")
+    if not raw_token or not email:
+        return err("Token and email are required")
+    if user_type not in ("vendor", "customer"):
+        return err("Invalid user_type")
+
+    now = datetime.utcnow()
+    try:
+        tokens = sb.table("password_reset_tokens").select("*").ilike("email", email)\
+            .eq("user_type", user_type).eq("used", False).execute().data
+    except Exception:
+        tokens = []
+
+    for t in tokens:
+        if t.get("purpose") != "verify":
+            continue
+        try:
+            exp = datetime.fromisoformat(t["expires_at"].replace("Z","").replace("+00:00","").split("+")[0].strip())
+            if exp < now:
+                continue
+            if bcrypt.checkpw(raw_token.encode(), t["token_hash"].encode()):
+                table = "vendors" if user_type == "vendor" else "customers"
+                try:
+                    sb.table(table).update({"email_verified": True}).eq("id", t["user_id"]).execute()
+                except Exception as e:
+                    print(f"[VERIFY EMAIL] could not set email_verified: {e}")
+                sb.table("password_reset_tokens").update({"used": True}).eq("id", t["id"]).execute()
+                return ok("Email confirmed! Thanks for verifying.")
+        except Exception:
+            continue
+
+    return err("This confirmation link is invalid or has expired.", 400)
+
+
+@app.route("/api/auth/resend-verification", methods=["POST"])
+@rate_limit(5, 3600)
+def resend_verification():
+    body      = request.json or {}
+    email     = (body.get("email") or "").strip().lower()
+    user_type = body.get("user_type", "customer")
+    SAFE = ok("If that account exists and isn't verified yet, we've sent a new link.")
+    if not email or user_type not in ("vendor", "customer"):
+        return SAFE
+    try:
+        table      = "vendors" if user_type == "vendor" else "customers"
+        name_field = "truck_name" if user_type == "vendor" else "name"
+        rows = sb.table(table).select(f"id, {name_field}, email_verified").ilike("email", email).execute().data
+        if rows and not rows[0].get("email_verified"):
+            _send_verification(user_type, rows[0]["id"], email, rows[0].get(name_field, ""))
+    except Exception as e:
+        print(f"[RESEND VERIFICATION] {e}")
+    return SAFE
+
+
 @app.route("/api/auth/forgot-password", methods=["OPTIONS"])
 @app.route("/api/auth/reset-password", methods=["OPTIONS"])
 @app.route("/api/auth/verify-reset-token", methods=["OPTIONS"])
+@app.route("/api/auth/verify-email", methods=["OPTIONS"])
+@app.route("/api/auth/resend-verification", methods=["OPTIONS"])
 def auth_options():
     return ok("ok")
 
