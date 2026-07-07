@@ -226,6 +226,7 @@
               <input type="checkbox" id="v-su-tester" style="width:18px;height:18px;accent-color:var(--brand);cursor:pointer;flex-shrink:0">
               <label for="v-su-tester" style="font-size:13px;font-weight:700;color:var(--tx);cursor:pointer;line-height:1.3">🧪 Tester account <span style="color:var(--mu);font-weight:500;font-size:12px">— skip payment, instant access</span></label>
             </div>
+            <label style="display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:var(--mu);margin:4px 0 6px;line-height:1.5;text-align:left;cursor:pointer"><input type="checkbox" id="v-agree-tos" style="margin-top:2px;width:16px;height:16px;accent-color:var(--brand);flex-shrink:0"><span>I'm at least 18, authorized to bind this business, and I agree to the <a href="/terms" target="_blank" style="color:var(--brand);font-weight:800">Terms of Service</a>, <a href="/vendor-agreement" target="_blank" style="color:var(--brand);font-weight:800">Vendor Agreement</a>, and <a href="/privacy" target="_blank" style="color:var(--brand);font-weight:800">Privacy Policy</a> (including arbitration &amp; class-action waiver).</span></label>
             <button class="btn btn-p" id="v-signup-btn" onclick="vendorSignup()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Continue to Payment Setup →</button>
             <div class="auth-switch">Already have an account? <span onclick="goV('s-v-login')">Sign in</span></div>
           </div>
@@ -299,7 +300,7 @@
           <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer">
             <input type="checkbox" id="legal-consent" style="width:20px;height:20px;flex-shrink:0;margin-top:1px;accent-color:var(--brand)">
             <div style="font-size:12px;color:var(--tx);line-height:1.7;font-weight:600">
-              I agree to the <span style="color:var(--brand);text-decoration:underline;cursor:pointer" onclick="goV('s-v-terms')">Terms of Service</span> and <span style="color:var(--brand);text-decoration:underline;cursor:pointer" onclick="goV('s-v-privacy')">Privacy Policy</span>. I authorize Food Truck Rewards to charge my card <strong>$9.99 on <span id="trial-end-consent">—</span></strong> and then every 30 days until I cancel. I understand I can cancel anytime from my Settings page or by emailing <strong>flavoronwheels26@gmail.com</strong> with no penalty.
+              I agree to the <span style="color:var(--brand);text-decoration:underline;cursor:pointer" onclick="window.open('/terms','_blank')">Terms of Service</span> and <span style="color:var(--brand);text-decoration:underline;cursor:pointer" onclick="window.open('/privacy','_blank')">Privacy Policy</span>. I authorize Food Truck Rewards to charge my card <strong>$9.99 on <span id="trial-end-consent">—</span></strong> and then every 30 days until I cancel. I understand I can cancel anytime from my Settings page or by emailing <strong>flavoronwheels26@gmail.com</strong> with no penalty.
             </div>
           </label>
         </div>
@@ -328,119 +329,11 @@
         <div style="margin-top:16px;font-size:11px;color:var(--fa);text-align:center;line-height:1.7">
           By starting your trial you agree to our Terms of Service.<br>
           Food Truck Rewards is operated by Samuel McCune.<br>
-          Questions? <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="goV('s-v-terms')">Read our full Terms</span> · <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="goV('s-v-privacy')">Privacy Policy</span>
+          Questions? <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="window.open('/terms','_blank')">Read our full Terms</span> · <span style="color:var(--brand);cursor:pointer;text-decoration:underline" onclick="window.open('/privacy','_blank')">Privacy Policy</span>
         </div>
       </div>
     </div>
 
-    <!-- TERMS OF SERVICE -->
-    <div class="screen" id="s-v-terms">
-      <div class="sh sh-row">
-        <div class="back-btn" onclick="history.go(-1)||goV('s-v-card-setup')">←</div>
-        <div><h1>Terms of Service</h1><p>Last updated: April 2026</p></div>
-      </div>
-      <div class="bp" style="font-size:13px;line-height:1.9;color:var(--tx)">
-        <div class="card">
-          <div class="card-title">1. Agreement to Terms</div>
-          <p>By creating a vendor account on Food Truck Rewards ("Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service. These Terms apply to all vendors who sign up for a paid subscription.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">2. Subscription & Billing</div>
-          <p style="margin-bottom:8px"><strong>Free Trial:</strong> New vendor accounts receive a 14-day free trial beginning on the date of account creation. No charge is made during the trial period.</p>
-          <p style="margin-bottom:8px"><strong>Billing Cycle:</strong> After the trial period ends, your payment method will be charged <strong>$9.99 USD</strong> on the same date each month (every 30 days from your first charge date).</p>
-          <p style="margin-bottom:8px"><strong>Automatic Renewal:</strong> Your subscription automatically renews monthly until cancelled. By providing your payment method, you authorize Food Truck Rewards to charge your card on a recurring monthly basis.</p>
-          <p style="margin-bottom:8px"><strong>Invoice:</strong> A receipt/invoice is automatically emailed to your registered email address after each successful payment.</p>
-          <p style="margin-bottom:8px"><strong>Failed Payments:</strong> If your payment fails, you will receive a notification. You have a 5-day grace period to update your payment method before your account is suspended. We will attempt to retry your payment during this period.</p>
-          <p><strong>Price Changes:</strong> We reserve the right to change subscription pricing with at least 30 days written notice sent to your registered email address.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">3. Cancellation Policy</div>
-          <p style="margin-bottom:8px"><strong>How to Cancel:</strong> You may cancel your subscription at any time by (a) going to Settings → Subscription → Cancel My Subscription within the app, or (b) emailing <strong>flavoronwheels26@gmail.com</strong> with your account email and a request to cancel.</p>
-          <p style="margin-bottom:8px"><strong>Effect of Cancellation:</strong> Upon cancellation, your account remains active through the end of your current paid billing period. You will not be charged for the following month.</p>
-          <p style="margin-bottom:8px"><strong>No Partial Refunds:</strong> We do not issue refunds or credits for partial months of service, unused features, or periods where your account was active but not used.</p>
-          <p><strong>Trial Cancellation:</strong> If you cancel during your 14-day trial, you will not be charged and your account will be deactivated at the end of the trial period.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">4. Refund Policy</div>
-          <p style="margin-bottom:8px">All subscription fees are non-refundable except as required by applicable law. If you believe you were charged in error, contact us within 30 days at <strong>flavoronwheels26@gmail.com</strong> and we will investigate and issue a refund if the charge was made in error.</p>
-          <p>Chargebacks initiated without contacting us first may result in immediate account suspension.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">5. Service & Data</div>
-          <p style="margin-bottom:8px"><strong>Service Availability:</strong> We strive for 99% uptime but do not guarantee uninterrupted service. Scheduled maintenance will be communicated in advance when possible.</p>
-          <p style="margin-bottom:8px"><strong>Your Data:</strong> You own your customer data. We do not sell your data or your customers' data to third parties. See our Privacy Policy for full details.</p>
-          <p style="margin-bottom:8px"><strong>Data Retention:</strong> Upon account cancellation, your data is retained for 30 days, after which it is permanently deleted. Export your data before cancelling if you need to retain records.</p>
-          <p><strong>Account Termination:</strong> We reserve the right to suspend or terminate accounts that violate these Terms, engage in fraudulent activity, or fail to pay after the grace period expires.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">6. Limitation of Liability</div>
-          <p style="margin-bottom:8px">Food Truck Rewards is provided "as is" without warranties of any kind. To the maximum extent permitted by law, Food Truck Rewards and its operators shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service.</p>
-          <p>Our total liability to you for any claims arising from these Terms or the Service shall not exceed the amount you paid us in the 12 months preceding the claim.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">7. Governing Law</div>
-          <p>These Terms are governed by the laws of the State of Ohio, United States. Any disputes shall be resolved in the courts of Ohio. If any provision of these Terms is found unenforceable, the remaining provisions remain in full effect.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">8. Contact</div>
-          <p>Food Truck Rewards<br>Operated by Samuel McCune<br>Email: <strong>flavoronwheels26@gmail.com</strong><br><br>For billing questions, cancellations, or disputes, please email us. We respond within 2 business days.</p>
-        </div>
-        <button class="btn btn-p" onclick="goV('s-v-card-setup')" style="margin-top:8px">← Back to Payment Setup</button>
-      </div>
-    </div>
-
-    <!-- PRIVACY POLICY -->
-    <div class="screen" id="s-v-privacy">
-      <div class="sh sh-row">
-        <div class="back-btn" onclick="goV('s-v-card-setup')">←</div>
-        <div><h1>Privacy Policy</h1><p>Last updated: April 2026</p></div>
-      </div>
-      <div class="bp" style="font-size:13px;line-height:1.9;color:var(--tx)">
-        <div class="card">
-          <div class="card-title">1. Information We Collect</div>
-          <p style="margin-bottom:8px"><strong>Vendor accounts:</strong> Name, business name, email address, password (hashed — never stored in plain text), and payment method (processed and stored securely by Stripe — we never see your full card number).</p>
-          <p><strong>Customer accounts:</strong> Name, phone number, email address, visit history, and points balance. This data is used solely to operate the loyalty program on your behalf.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">2. How We Use Your Information</div>
-          <p style="margin-bottom:8px">We use your information to operate the Service, process payments, send billing receipts, provide customer support, and improve the platform. We do not use your data or your customers' data for advertising.</p>
-          <p>We may send you service-related emails such as payment receipts, trial expiration reminders, and important account notices. You cannot opt out of transactional emails while your account is active.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">3. Data Sharing</div>
-          <p style="margin-bottom:8px">We do not sell, rent, or share your personal information or your customers' personal information with third parties for marketing purposes.</p>
-          <p style="margin-bottom:8px"><strong>Payment processing:</strong> Payment information is shared with Stripe, Inc. for billing purposes. Stripe's privacy policy applies to that data.</p>
-          <p><strong>Infrastructure:</strong> We use Supabase for database hosting and Render for application hosting. These providers process data on our behalf under data processing agreements.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">4. Data Security</div>
-          <p>All data is transmitted over HTTPS (TLS encryption). Passwords are hashed using bcrypt and are never stored in plain text. Payment data is handled entirely by Stripe and subject to PCI-DSS compliance. We perform regular security reviews of our infrastructure.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">5. Data Retention & Deletion</div>
-          <p style="margin-bottom:8px">Active vendor accounts and associated customer data are retained as long as the account is active. Upon cancellation, all data is retained for 30 days then permanently deleted.</p>
-          <p>You may request immediate deletion of your account and data by emailing <strong>flavoronwheels26@gmail.com</strong>. We will complete deletion within 14 business days.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">6. Your Rights</div>
-          <p style="margin-bottom:8px">You have the right to access, correct, or delete your personal data at any time. Contact us at <strong>flavoronwheels26@gmail.com</strong> to exercise these rights.</p>
-          <p>If you are in the European Economic Area (EEA), you have additional rights under GDPR including the right to data portability and the right to lodge a complaint with your local data protection authority.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">7. Cookies</div>
-          <p>This application uses browser localStorage to maintain your session and preferences. We do not use third-party tracking cookies or advertising pixels.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">8. Changes to This Policy</div>
-          <p>We may update this Privacy Policy from time to time. We will notify you of significant changes by email at least 14 days before they take effect. Continued use of the Service after changes constitutes acceptance.</p>
-        </div>
-        <div class="card">
-          <div class="card-title">9. Contact</div>
-          <p>Food Truck Rewards — Operated by Samuel McCune<br>Email: <strong>flavoronwheels26@gmail.com</strong></p>
-        </div>
-        <button class="btn btn-p" onclick="goV('s-v-card-setup')" style="margin-top:8px">← Back to Payment Setup</button>
-      </div>
-    </div>
 
     <!-- VENDOR HOME -->
     <div class="screen" id="s-v-home">
@@ -1056,7 +949,7 @@
               </div>
             </div>
             <button class="btn btn-p" id="c-signup-btn" onclick="customerSignup()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Create My Account</button>
-            <div style="font-size:11px;color:var(--mu);text-align:center;margin-top:12px;line-height:1.5">By creating an account you agree to our <a href="/terms" target="_blank" style="color:var(--brand);font-weight:800;text-decoration:underline">Terms</a> &amp; <a href="/privacy" target="_blank" style="color:var(--brand);font-weight:800;text-decoration:underline">Privacy Policy</a>.</div>
+            <label style="display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:var(--mu);margin-top:14px;line-height:1.5;text-align:left;cursor:pointer"><input type="checkbox" id="c-agree-tos" style="margin-top:2px;width:16px;height:16px;accent-color:var(--brand);flex-shrink:0"><span>I'm at least 13 years old and I agree to the <a href="/terms" target="_blank" style="color:var(--brand);font-weight:800">Terms of Service</a> and <a href="/privacy" target="_blank" style="color:var(--brand);font-weight:800">Privacy Policy</a> (including the arbitration agreement and class-action waiver).</span></label>
             <div class="auth-switch">Already have an account? <span onclick="goC('s-c-login')">Sign in</span></div>
           </div>
         </div>
@@ -1887,7 +1780,7 @@ function setMode(mode){
       updateRefreshBtn();
     } else {
       // Not logged in — allow forgot/reset screens without redirecting to login
-      const allowedUnauth=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup','s-v-terms','s-v-privacy'];
+      const allowedUnauth=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup'];
       if(allowedUnauth.includes(S.vScreen)){
         show(S.vScreen); renderNav([],'' );
       } else {
@@ -1914,7 +1807,7 @@ function setMode(mode){
 function goV(id){
   S.vScreen=id; show(id);
   // Only show nav when logged in AND on an authenticated screen
-  const noNavScreens=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup','s-v-terms','s-v-privacy'];
+  const noNavScreens=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup'];
   if(noNavScreens.includes(id)) renderNav([],'' );
   else renderNav(VNAV,id);
   if(id==='s-v-home')     loadVendorHome();
@@ -2032,11 +1925,12 @@ async function vendorSignup(){
   if(!email.includes('@')){showErr(errEl,'Enter a valid email address');return}
   if(!states){showErr(errEl,'Enter at least one state you operate in (e.g. OH)');return}
   if(!zip||zip.length!==5||!/^\d{5}$/.test(zip)){showErr(errEl,'Enter a valid 5-digit ZIP code');return}
+  if(!document.getElementById('v-agree-tos')?.checked){showErr(errEl,'Please accept the Terms, Vendor Agreement, and Privacy Policy to continue');return}
 
   // Tester path — create account directly, skip card setup
   if(isTester){
     showLoad('Creating tester account...');
-    const r = await apiPost('/api/vendor/signup', {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, is_tester:true, ...(promo && {promo_code:promo})});
+    const r = await apiPost('/api/vendor/signup', {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, is_tester:true, accepted_tos:true, ...(promo && {promo_code:promo})});
     hideLoad();
     if(!r.ok){showErr(errEl, r.data.error||'Signup failed'); return;}
     S.vendorToken = r.data.data.token;
@@ -2051,7 +1945,7 @@ async function vendorSignup(){
   }
 
   // Store signup info — account is NOT created until payment succeeds
-  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, ...(promo && {promo_code:promo})};
+  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, accepted_tos:true, ...(promo && {promo_code:promo})};
 
   // Show trial end date
   const trialEnd = new Date();
@@ -2877,8 +2771,9 @@ async function customerSignup(){
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   if(!pass||pass.length<8){showErr(errEl,'Password must be at least 8 characters');return}
   if(pass!==confirm){showErr(errEl,'Passwords do not match');return}
+  if(!document.getElementById('c-agree-tos')?.checked){showErr(errEl,'Please accept the Terms and Privacy Policy to continue');return}
   showLoad('Creating your account...');
-  const r=await apiPost('/api/customer/signup',{name,email,password:pass});
+  const r=await apiPost('/api/customer/signup',{name,email,password:pass,accepted_tos:true});
   hideLoad();
   if(!r.ok){showErr(errEl,r.data.error||'Signup failed');return}
   const ctoken = r.data.data.token;
@@ -2989,7 +2884,7 @@ function updateRefreshBtn(){
   if(!btn) return;
   const noRefresh = new Set([
     's-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup',
-    's-v-terms','s-v-privacy','s-v-brand','s-v-points',
+    's-v-brand','s-v-points',
     's-c-login','s-c-signup','s-c-forgot','s-c-reset',
     's-c-scan','s-c-spin','s-c-qr','s-c-review','s-c-promo',
   ]);
