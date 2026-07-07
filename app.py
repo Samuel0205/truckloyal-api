@@ -626,6 +626,17 @@ def admin_stats():
 
     mrr = len(paying_vendors) * MONTHLY_PRICE
 
+    # Anonymous churn — customers who deleted their accounts (all-time + 30 days)
+    customers_lost = customers_lost_30d = 0
+    try:
+        since30 = (datetime.utcnow() - timedelta(days=30)).isoformat()
+        customers_lost = sb.table("account_deletions").select("id", count="exact")\
+            .eq("user_type", "customer").execute().count or 0
+        customers_lost_30d = sb.table("account_deletions").select("id", count="exact")\
+            .eq("user_type", "customer").gte("deleted_at", since30).execute().count or 0
+    except Exception:
+        pass
+
     return ok({
         "vendors":         vendors,
         "total_vendors":   len(vendors),
@@ -636,6 +647,8 @@ def admin_stats():
         "total_customers": customers.count or 0,
         "total_visits":    visits.count    or 0,
         "total_redemptions": redemptions.count or 0,
+        "customers_lost":     customers_lost,
+        "customers_lost_30d": customers_lost_30d,
         "mrr":             round(mrr, 2),
         "promo_codes":     promos,
     })
@@ -1833,7 +1846,30 @@ def delete_customer_account():
     if body.get("confirm") != "DELETE":
         return err('Send {"confirm": "DELETE"} to confirm')
 
+    # Remove every row of personal data tied to this customer (children first
+    # so foreign keys don't block the delete). Best-effort per table.
+    for tbl in ("redemptions", "spin_results", "visits", "reviews", "customer_trucks"):
+        try:
+            sb.table(tbl).delete().eq("customer_id", customer_id).execute()
+        except Exception as e:
+            print(f"[DELETE ACCOUNT] {tbl}: {e}")
+    try:
+        sb.table("password_reset_tokens").delete().eq("user_id", customer_id).eq("user_type", "customer").execute()
+    except Exception:
+        pass
+
     sb.table("customers").delete().eq("id", customer_id).execute()
+
+    # Anonymous churn record — NO personal data, just a timestamp so lost
+    # customers can be counted over any timeframe.
+    try:
+        sb.table("account_deletions").insert({
+            "user_type": "customer",
+            "deleted_at": datetime.utcnow().isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"[DELETE ACCOUNT] churn log: {e}")
+
     return ok("Account deleted")
 
 
