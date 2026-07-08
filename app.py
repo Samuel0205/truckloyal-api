@@ -377,6 +377,11 @@ def _get_customer_trucks(customer_id: str) -> list:
     for ct in ct_rows:
         vendor = ct.pop("vendors", {}) or {}
         is_active = _vendor_is_active(vendor)
+        # Deactivated / lapsed trucks are hidden from the customer entirely (kill
+        # switch). The customer_trucks row is untouched, so points and history
+        # reappear automatically if the vendor is reactivated.
+        if not is_active:
+            continue
         # Strip raw billing fields — only expose the computed status to customers
         for k in ("plan_active", "trial_ends_at", "promo_expires_at", "payment_failed_at"):
             vendor.pop(k, None)
