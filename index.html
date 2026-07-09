@@ -237,6 +237,7 @@
     <!-- VENDOR CARD SETUP — step 2 of signup -->
     <div class="screen" id="s-v-card-setup">
       <div class="auth-wrap" style="background:linear-gradient(160deg,#FFF3E0 0%,#FFF8F0 100%);padding-bottom:60px">
+        <button type="button" onclick="backToSignup()" style="align-self:flex-start;background:none;border:none;color:var(--brand);font-weight:800;font-size:15px;padding:4px 0;margin-bottom:4px;cursor:pointer">← Back</button>
         <div class="auth-logo" style="animation:none">💳</div>
         <div class="auth-title">Set Up Payment</div>
         <div class="auth-sub">Your 14-day free trial starts today. Your first payment of <strong>$9.99</strong> will be charged on <strong id="trial-end-date">—</strong>. You can cancel before then at no charge.</div>
@@ -1938,6 +1939,14 @@ const STRIPE_PK = 'pk_live_51SsDt1FZdL8SRWbqdgcAHF0hiAUR6n0MFVvKd3I4zIfgAts6m9X6
 let stripeInstance = null;
 let stripeCardElement = null;
 
+function backToSignup(){
+  // Return from the card screen to the signup form without creating anything.
+  S.pendingSignup = null;
+  S.vScreen = 's-v-signup';
+  show('s-v-signup');
+  renderNav([], '');
+}
+
 async function vendorSignup(){
   const name   = document.getElementById('v-su-name').value.trim();
   const owner  = document.getElementById('v-su-owner').value.trim();
@@ -1971,6 +1980,16 @@ async function vendorSignup(){
     S.vScreen='s-v-home'; show('s-v-home'); renderNav(VNAV,'s-v-home');
     loadVendorHome();
     showToast('🧪 Tester account activated!');
+    return;
+  }
+
+  // Pre-check the email HERE so a duplicate is caught on this form — not after
+  // the vendor has already entered card details on the next screen.
+  showLoad('Checking your details...');
+  const chk = await apiPost('/api/vendor/check-email', {email});
+  hideLoad();
+  if(chk.ok && chk.data?.data && chk.data.data.available === false){
+    showErr(errEl,'An account with this email already exists. Please sign in instead.');
     return;
   }
 

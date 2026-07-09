@@ -893,6 +893,19 @@ def delete_promo_code(code_id):
 #  VENDOR AUTH + BILLING
 # ══════════════════════════════════════════════════════
 
+@app.route("/api/vendor/check-email", methods=["POST"])
+@rate_limit(20, 300)
+def vendor_check_email():
+    """Lightweight pre-check so the signup form can catch a taken email BEFORE
+    sending the vendor to the card screen (mirrors the check in vendor_signup)."""
+    body  = request.json or {}
+    email = (body.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return err("Enter a valid email address")
+    taken = sb.table("vendors").select("id").ilike("email", email).execute().data
+    return ok({"available": not taken})
+
+
 @app.route("/api/vendor/signup", methods=["POST"])
 @rate_limit(5, 3600)
 def vendor_signup():
