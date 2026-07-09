@@ -1635,6 +1635,18 @@
 const API = location.origin;
 
 /* ════════════════════════════════════
+   HTML ESCAPING — prevent stored XSS
+   Any user- or vendor-controlled value (names, truck names, review
+   comments, post text, locations, image URLs) MUST be passed through
+   esc() before being placed into innerHTML. escAttr() also escapes for
+   safe use inside a "..." HTML attribute. escJs() is for values embedded
+   inside an inline on* handler's JS string.
+════════════════════════════════════ */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+const escAttr = esc;
+function escJs(s){ return String(s==null?'':s).replace(/[\\'"<>&\r\n]/g,function(c){return '\\u'+('000'+c.charCodeAt(0).toString(16)).slice(-4);}); }
+
+/* ════════════════════════════════════
    STATE
 ════════════════════════════════════ */
 const S = {
@@ -2157,7 +2169,7 @@ async function loadVendorHome(){
   if(heroPic){
     const pic = S.vendor.profile_picture_url || localStorage.getItem('tl_vpic') || '';
     if(pic){
-      heroPic.innerHTML = `<img src="${pic}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+      heroPic.innerHTML = `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
     } else {
       heroPic.textContent = S.vendor.emoji || '🚚';
     }
@@ -2220,7 +2232,7 @@ function renderVRewards(){
   el.innerHTML=S.rewards.map((r,i)=>`
     <div class="li">
       <div class="li-icon">${r.emoji}</div>
-      <div class="li-info"><div class="li-name">${r.name}</div><div class="li-sub">${r.pts_required||r.pts} pts to redeem</div></div>
+      <div class="li-info"><div class="li-name">${esc(r.name)}</div><div class="li-sub">${r.pts_required||r.pts} pts to redeem</div></div>
       <div class="li-act"><button class="iBtn" onclick="removeReward(${i})">✕</button></div>
     </div>`).join('');
 }
@@ -2240,7 +2252,7 @@ function renderVPrizes(){
   el.innerHTML=S.prizes.map((p,i)=>`
     <div class="li">
       <div class="li-icon">${p.emoji}</div>
-      <div class="li-info"><div class="li-name">${p.name}</div><div class="li-sub">Weight: ${p.probability||1} · +${p.pts||0} pts</div></div>
+      <div class="li-info"><div class="li-name">${esc(p.name)}</div><div class="li-sub">Weight: ${p.probability||1} · +${p.pts||0} pts</div></div>
       <div class="li-act"><button class="iBtn" onclick="removePrize(${i})">✕</button></div>
     </div>`).join('');
 }
@@ -2658,14 +2670,14 @@ async function loadCustomers(){
   el.innerHTML = members.map(m=>{
     const last = m.last_visit ? fmtMemberDate(m.last_visit) : 'Never';
     const avatarInner = m.profile_picture_url
-      ? `<img src="${m.profile_picture_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
+      ? `<img src="${escAttr(m.profile_picture_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
       : m.name.charAt(0).toUpperCase();
     return `
     <div class="card" style="margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:12px">
         <div style="width:44px;height:44px;border-radius:50%;background:rgba(255,87,34,.12);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:900;color:var(--brand);flex-shrink:0;overflow:hidden">${avatarInner}</div>
         <div style="flex:1;min-width:0">
-          <div style="font-weight:800;font-size:14px">${m.name}</div>
+          <div style="font-weight:800;font-size:14px">${esc(m.name)}</div>
           <div style="font-size:11px;color:var(--mu);font-weight:600">Last visit: ${last} · Streak: ${m.current_streak}🔥</div>
         </div>
         <div style="text-align:right;flex-shrink:0">
@@ -2919,7 +2931,7 @@ function renderMyTrucks(filter='all'){
   const avatarEl = document.getElementById('c-home-avatar');
   if(avatarEl){
     if(S.customer.profile_picture_url){
-      avatarEl.innerHTML=`<img src="${S.customer.profile_picture_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+      avatarEl.innerHTML=`<img src="${escAttr(S.customer.profile_picture_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
     } else {
       avatarEl.textContent=(S.customer.name||'?').charAt(0).toUpperCase();
     }
@@ -2928,7 +2940,7 @@ function renderMyTrucks(filter='all'){
   // Update hero icon with customer pic
   const heroPic = document.getElementById('c-hero-pic');
   if(heroPic && S.customer.profile_picture_url){
-    heroPic.innerHTML=`<img src="${S.customer.profile_picture_url}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">`;
+    heroPic.innerHTML=`<img src="${escAttr(S.customer.profile_picture_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">`;
   }
 
   // Redeemable badge
@@ -2984,7 +2996,7 @@ function renderMyTrucks(filter='all'){
     const spunToday = !!localStorage.getItem(spunKey);
     const visits  = t.visit_count||0;
     const streak  = t.current_streak||0;
-    const loc     = t.location_today ? `📍 ${t.location_today}` : '';
+    const loc     = t.location_today ? `📍 ${esc(t.location_today)}` : '';
     const bannerBg= t.profile_picture_url ? '' : (bgs[i%bgs.length]);
 
     // Find index in original S.myTrucks for openTruck
@@ -2995,7 +3007,7 @@ function renderMyTrucks(filter='all'){
       <!-- Banner image area -->
       <div class="tc-banner" style="${bannerBg?'background:'+bannerBg:''}">
         ${t.profile_picture_url
-          ? `<img src="${t.profile_picture_url}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
+          ? `<img src="${escAttr(t.profile_picture_url)}" style="width:100%;height:100%;object-fit:cover;position:absolute;inset:0">`
           : `<span style="font-size:54px;z-index:1">${t.emoji||'🚚'}</span>`}
         <div class="tc-banner-grad"></div>
         ${spunToday
@@ -3005,7 +3017,7 @@ function renderMyTrucks(filter='all'){
       <!-- Card body -->
       <div class="tc-body">
         <div class="tc-row1">
-          <div class="tc-name">${t.truck_name||'Food Truck'}</div>
+          <div class="tc-name">${esc(t.truck_name||'Food Truck')}</div>
           <div class="tc-rating" style="color:${p}">${pts.toLocaleString()} pts</div>
         </div>
         <div class="tc-cuisine">${tier.icon} ${tier.name}${loc?' · '+loc:''}</div>
@@ -3197,7 +3209,7 @@ async function renderTruckDash(){
   const emojiEl = document.getElementById('ct-emoji');
   if(emojiEl){
     if(t.profile_picture_url){
-      emojiEl.innerHTML = `<img src="${t.profile_picture_url}" style="width:100%;height:100%;object-fit:cover">`;
+      emojiEl.innerHTML = `<img src="${escAttr(t.profile_picture_url)}" style="width:100%;height:100%;object-fit:cover">`;
     } else {
       emojiEl.textContent = t.emoji||'🚚';
     }
@@ -3247,7 +3259,7 @@ async function renderTruckDash(){
           const isToday = d.day_of_week === today_dow;
           return `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;${isToday?'font-weight:800;color:var(--brand)':'color:var(--mu);font-weight:600'}">
             <span>${isToday?'🔥 ':''}<strong>${DAY_SHORT[d.day_of_week]}</strong></span>
-            <span>${d.location||''}${d.location&&d.hours?' · ':''}${d.hours||''}</span>
+            <span>${esc(d.location||'')}${d.location&&d.hours?' · ':''}${esc(d.hours||'')}</span>
           </div>`;
         }).join('');
         schedBar.style.display = 'block';
@@ -3342,7 +3354,7 @@ function renderTruckRewards(){
     <div class="rrow ${unlocked?'unlocked':''}">
       <div class="rico">${r.emoji}</div>
       <div class="rinfo">
-        <div class="rname">${r.name}</div>
+        <div class="rname">${esc(r.name)}</div>
         <div class="rpts">${unlocked?'✓ You can redeem this now!':Math.max(0,cost-pts)+' more pts needed (you have '+pts+')'}</div>
       </div>
       <button class="rdm-btn ${unlocked?'ready':'locked'}"
@@ -3607,7 +3619,7 @@ async function renderHistory(){
           <div class="hist-left">
             <div class="hist-ico" style="background:#FFF3E0">${item.rewards?.emoji||'🎁'}</div>
             <div>
-              <div class="hist-desc">${item.rewards?.name||'Reward'} · <strong>${truckName}</strong></div>
+              <div class="hist-desc">${esc(item.rewards?.name||'Reward')} · <strong>${esc(truckName)}</strong></div>
               <div class="hist-date">${fmtHistDate(item.created_at)} · Code: ${item.code||'–'}</div>
             </div>
           </div>
@@ -4081,10 +4093,10 @@ async function searchTrucks(query) {
       const already = S.myTrucks.find(mt => mt.id === t.id || mt.slug === t.slug);
       return `
       <div style="display:flex;align-items:center;gap:12px;background:white;border:2px solid ${already?'var(--brand)':'var(--b2)'};border-radius:12px;padding:12px;margin-bottom:8px;cursor:pointer;box-shadow:var(--sh1)"
-        onclick="${already ? `openTruck(${S.myTrucks.findIndex(mt=>mt.id===t.id||mt.slug===t.slug)});goC('s-c-truck')` : `joinTruckFromSearch('${t.slug}','${(t.truck_name||'').replace(/'/g,"\\'")}')` }">
+        onclick="${already ? `openTruck(${S.myTrucks.findIndex(mt=>mt.id===t.id||mt.slug===t.slug)});goC('s-c-truck')` : `joinTruckFromSearch('${escJs(t.slug)}','${escJs(t.truck_name||'')}')` }">
         <div style="font-size:26px;width:44px;height:44px;background:var(--s2);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${t.emoji||'🚚'}</div>
         <div style="flex:1">
-          <div style="font-weight:800;font-size:14px">${t.truck_name}</div>
+          <div style="font-weight:800;font-size:14px">${esc(t.truck_name)}</div>
           <div style="font-size:12px;color:var(--mu);font-weight:600">${already ? '✓ Already joined' : 'Truck #'+(t.vendor_number||'–')}</div>
         </div>
         <div style="font-size:${already?'13px':'20px'};color:var(--brand);font-weight:700">${already?'View →':'→'}</div>
@@ -4264,7 +4276,7 @@ function openEditProfile() {
   const prev = document.getElementById('edit-prof-preview');
   if (prev) {
     if (c.profile_picture_url) {
-      prev.innerHTML = `<img src="${c.profile_picture_url}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+      prev.innerHTML = `<img src="${escAttr(c.profile_picture_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
     } else {
       prev.innerHTML = '';
       prev.textContent = (c.name || '?')[0].toUpperCase();
@@ -4451,8 +4463,8 @@ async function loadNotifications(){
   }
   el.innerHTML = items.map(n=>`
     <div style="padding:10px 0;border-bottom:1px solid var(--b1)">
-      <div style="font-weight:700;font-size:13px">${n.title}</div>
-      <div style="font-size:12px;color:var(--mu);margin-top:2px">${n.message}</div>
+      <div style="font-weight:700;font-size:13px">${esc(n.title)}</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:2px">${esc(n.message)}</div>
       <div style="font-size:11px;color:var(--mu);margin-top:4px">Sent to ${n.sent_to||0} members · ${fmtMemberDate(n.created_at)}</div>
     </div>`).join('');
 }
@@ -4492,7 +4504,7 @@ async function loadPromos(){
   el.innerHTML = items.map(p=>`
     <div style="display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--b1)">
       <div style="flex:1">
-        <div style="font-weight:800;font-size:14px">${p.title}</div>
+        <div style="font-weight:800;font-size:14px">${esc(p.title)}</div>
         <div style="font-size:12px;color:var(--mu);margin-top:2px">Code: <strong style="font-family:monospace;color:var(--brand)">${p.code}</strong> · Used ${p.used_count||0}x</div>
         <div style="font-size:11px;color:var(--mu)">${p.expires_at ? 'Expires: '+new Date(p.expires_at).toLocaleDateString() : 'No expiry'}</div>
       </div>
@@ -4588,7 +4600,7 @@ async function loadVendorFeed(){
         <div style="font-size:24px;margin-bottom:8px">${p.emoji||'🚚'}</div>
         <button onclick="deletePost('${p.id}')" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--mu)">🗑️</button>
       </div>
-      <div style="font-size:14px;line-height:1.6;color:var(--tx)">${p.content}</div>
+      <div style="font-size:14px;line-height:1.6;color:var(--tx)">${esc(p.content)}</div>
       <div style="font-size:11px;color:var(--mu);margin-top:8px">${fmtMemberDate(p.created_at)}</div>
     </div>`).join('');
   const ta = document.getElementById('post-content');
@@ -4638,16 +4650,16 @@ async function loadVendorReviews(){
   el.innerHTML = d.reviews.map(rev=>{
     const cust = rev.customers||{};
     const pic = cust.profile_picture_url;
-    const av = pic ? `<img src="${pic}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (cust.name||'?')[0].toUpperCase();
+    const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (cust.name||'?')[0].toUpperCase();
     return `
     <div class="card" style="margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,87,34,.12);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--brand);font-size:14px;overflow:hidden;flex-shrink:0">${av}</div>
-        <div style="flex:1"><div style="font-weight:800;font-size:13px">${cust.name||'Customer'}</div>
+        <div style="flex:1"><div style="font-weight:800;font-size:13px">${esc(cust.name||'Customer')}</div>
         <div style="font-size:13px;color:var(--gd)">${'★'.repeat(rev.rating)}${'☆'.repeat(5-rev.rating)}</div></div>
         <div style="font-size:11px;color:var(--mu)">${fmtMemberDate(rev.created_at)}</div>
       </div>
-      ${rev.comment ? `<div style="font-size:13px;color:var(--tx);line-height:1.6">"${rev.comment}"</div>` : ''}
+      ${rev.comment ? `<div style="font-size:13px;color:var(--tx);line-height:1.6">"${esc(rev.comment)}"</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -4668,16 +4680,16 @@ async function loadCustomerFeed(){
   el.innerHTML = posts.map(p=>{
     const v = p.vendors||{};
     const pic = v.profile_picture_url;
-    const av = pic ? `<img src="${pic}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (v.emoji||'🚚');
+    const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (v.emoji||'🚚');
     return `
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
         <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,87,34,.12);display:flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;flex-shrink:0">${av}</div>
-        <div style="flex:1"><div style="font-weight:800;font-size:14px">${v.truck_name||'Food Truck'}</div>
+        <div style="flex:1"><div style="font-weight:800;font-size:14px">${esc(v.truck_name||'Food Truck')}</div>
         <div style="font-size:11px;color:var(--mu)">${fmtMemberDate(p.created_at)}</div></div>
         <div style="font-size:22px">${p.emoji||'🚚'}</div>
       </div>
-      <div style="font-size:14px;line-height:1.6;color:var(--tx)">${p.content}</div>
+      <div style="font-size:14px;line-height:1.6;color:var(--tx)">${esc(p.content)}</div>
     </div>`;
   }).join('');
 }
@@ -4701,7 +4713,7 @@ async function loadDiscover(){
   const joinedSlugs = new Set((S.myTrucks||[]).map(tr=>tr.slug));
   el.innerHTML = trucks.map(t=>{
     const pic = t.profile_picture_url;
-    const av = pic ? `<img src="${pic}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">` : `<span style="font-size:28px">${t.emoji||'🚚'}</span>`;
+    const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">` : `<span style="font-size:28px">${t.emoji||'🚚'}</span>`;
     const stars = t.avg_rating ? '★'.repeat(Math.round(t.avg_rating)) : '';
     const displayLoc = t.display_location || '';
     const displayHrs = t.display_hours || '';
@@ -4720,7 +4732,7 @@ async function loadDiscover(){
         <div style="width:56px;height:56px;border-radius:14px;background:rgba(255,87,34,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${av}</div>
         <div style="flex:1;min-width:0">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-            <div style="font-weight:900;font-size:16px">${t.truck_name}</div>
+            <div style="font-weight:900;font-size:16px">${esc(t.truck_name)}</div>
             ${states}
           </div>
           <div style="font-size:12px;color:${hasLoc?'var(--tx)':'var(--mu)'};margin-top:2px;font-weight:${hasLoc?'600':'400'}">${locLine}</div>
@@ -4771,13 +4783,13 @@ async function loadLeaderboard(){
   el.innerHTML = board.map(m=>{
     const isMe = m.name === S.customer?.name;
     const pic = m.profile_picture_url;
-    const av = pic ? `<img src="${pic}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : m.name[0].toUpperCase();
+    const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : m.name[0].toUpperCase();
     return `
     <div class="card" style="margin-bottom:10px;${isMe?'border-color:var(--brand);background:rgba(255,87,34,.04)':''}">
       <div style="display:flex;align-items:center;gap:12px">
         <div style="font-size:28px;width:36px;text-align:center">${medals[m.rank-1]||m.rank}</div>
         <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,87,34,.12);display:flex;align-items:center;justify-content:center;font-weight:900;color:var(--brand);overflow:hidden;flex-shrink:0">${av}</div>
-        <div style="flex:1"><div style="font-weight:800;font-size:14px">${m.name}${isMe?' (You)':''}</div>
+        <div style="flex:1"><div style="font-weight:800;font-size:14px">${esc(m.name)}${isMe?' (You)':''}</div>
         <div style="font-size:12px;color:var(--mu)">${m.visit_count} visits</div></div>
         <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--brand)">${m.points_total} pts</div>
       </div>
@@ -4844,8 +4856,8 @@ async function applyPromo(){
       el.innerHTML=`
       <div class="callout co-gn">
         <div class="co-icon">🎉</div>
-        <div><div class="co-title">${p.title}</div>
-        <div class="co-desc">${d.bonus_pts ? '+'+d.bonus_pts+' bonus points added!' : p.description}</div></div>
+        <div><div class="co-title">${esc(p.title)}</div>
+        <div class="co-desc">${d.bonus_pts ? '+'+d.bonus_pts+' bonus points added!' : esc(p.description)}</div></div>
       </div>`;
     }
     // Refresh truck balance
