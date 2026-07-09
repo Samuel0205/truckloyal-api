@@ -266,6 +266,8 @@
       ['', (s.total_redemptions||0).toLocaleString(), 'Redemptions'],
       ['', (s.customers_lost_30d||0).toLocaleString(), 'Customers Lost · 30d'],
       ['', (s.customers_lost||0).toLocaleString(), 'Customers Lost · All-Time'],
+      ['', (s.vendors_lost_30d||0).toLocaleString(), 'Vendors Lost · 30d'],
+      ['', (s.vendors_lost||0).toLocaleString(), 'Vendors Lost · All-Time'],
     ];
     document.getElementById('ov-stats').innerHTML = cards.map(function(c){
       return '<div class="stat '+c[0]+'"><div class="v">'+c[1]+'</div><div class="l">'+c[2]+'</div></div>';

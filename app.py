@@ -631,14 +631,19 @@ def admin_stats():
 
     mrr = len(paying_vendors) * MONTHLY_PRICE
 
-    # Anonymous churn — customers who deleted their accounts (all-time + 30 days)
+    # Anonymous churn — accounts deleted (all-time + last 30 days), by type
     customers_lost = customers_lost_30d = 0
+    vendors_lost = vendors_lost_30d = 0
     try:
         since30 = (datetime.utcnow() - timedelta(days=30)).isoformat()
         customers_lost = sb.table("account_deletions").select("id", count="exact")\
             .eq("user_type", "customer").execute().count or 0
         customers_lost_30d = sb.table("account_deletions").select("id", count="exact")\
             .eq("user_type", "customer").gte("deleted_at", since30).execute().count or 0
+        vendors_lost = sb.table("account_deletions").select("id", count="exact")\
+            .eq("user_type", "vendor").execute().count or 0
+        vendors_lost_30d = sb.table("account_deletions").select("id", count="exact")\
+            .eq("user_type", "vendor").gte("deleted_at", since30).execute().count or 0
     except Exception:
         pass
 
@@ -654,6 +659,8 @@ def admin_stats():
         "total_redemptions": redemptions.count or 0,
         "customers_lost":     customers_lost,
         "customers_lost_30d": customers_lost_30d,
+        "vendors_lost":       vendors_lost,
+        "vendors_lost_30d":   vendors_lost_30d,
         "mrr":             round(mrr, 2),
         "promo_codes":     promos,
     })
@@ -1124,7 +1131,8 @@ def delete_vendor_account():
     if confirm != "DELETE":
         return err('Send {"confirm": "DELETE"} to confirm account deletion')
 
-    vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
+    vendor_id = request.vendor_id
+    vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", vendor_id).execute().data[0]
 
     try:
         stripe = _stripe()
@@ -1133,7 +1141,33 @@ def delete_vendor_account():
     except Exception:
         pass
 
-    sb.table("vendors").delete().eq("id", request.vendor_id).execute()
+    # Remove every row tied to this vendor (children first so foreign keys
+    # don't block the delete). This also removes the customers' loyalty links
+    # to the truck, which is correct — the truck no longer exists. Best-effort
+    # per table so one missing/renamed table can't abort the deletion.
+    for tbl in ("rewards", "spin_prizes", "tiers", "customer_trucks", "visits",
+                "redemptions", "reviews", "vendor_schedule", "vendor_posts"):
+        try:
+            sb.table(tbl).delete().eq("vendor_id", vendor_id).execute()
+        except Exception as e:
+            print(f"[DELETE VENDOR] {tbl}: {e}")
+    try:
+        sb.table("password_reset_tokens").delete().eq("user_id", vendor_id).eq("user_type", "vendor").execute()
+    except Exception:
+        pass
+
+    sb.table("vendors").delete().eq("id", vendor_id).execute()
+
+    # Anonymous churn record — NO personal data, just a timestamp so lost
+    # vendors can be counted over any timeframe.
+    try:
+        sb.table("account_deletions").insert({
+            "user_type": "vendor",
+            "deleted_at": datetime.utcnow().isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"[DELETE VENDOR] churn log: {e}")
+
     return ok("Account permanently deleted")
 
 
