@@ -479,6 +479,31 @@ def _ensure_stripe_customer(stripe, vendor: dict) -> str:
     return sc.id
 
 
+def _purge_vendor(vendor_id: str):
+    """Delete a vendor and ALL of its child data (cancels the Stripe
+    subscription if any). Shared by account deletion and by signup's reclaim of
+    an abandoned, never-completed account. Raises if the final vendors-row
+    delete fails so the caller can react."""
+    row = sb.table("vendors").select("stripe_sub_id").eq("id", vendor_id).execute().data
+    if row and row[0].get("stripe_sub_id"):
+        try:
+            _stripe().Subscription.delete(row[0]["stripe_sub_id"])
+        except Exception:
+            pass
+    for tbl in ("rewards", "spin_prizes", "tiers", "customer_trucks", "visits",
+                "redemptions", "spin_results", "reviews", "promos", "promo_uses",
+                "notifications", "vendor_schedule", "vendor_posts"):
+        try:
+            sb.table(tbl).delete().eq("vendor_id", vendor_id).execute()
+        except Exception as e:
+            print(f"[PURGE VENDOR] {tbl}: {e}")
+    try:
+        sb.table("password_reset_tokens").delete().eq("user_id", vendor_id).eq("user_type", "vendor").execute()
+    except Exception:
+        pass
+    sb.table("vendors").delete().eq("id", vendor_id).execute()
+
+
 # ══════════════════════════════════════════════════════
 #  HEALTH + SERVE FRONTEND APP
 # ══════════════════════════════════════════════════════
@@ -893,6 +918,27 @@ def delete_promo_code(code_id):
 #  VENDOR AUTH + BILLING
 # ══════════════════════════════════════════════════════
 
+@app.route("/api/vendor/check-email", methods=["POST"])
+@rate_limit(20, 300)
+def vendor_check_email():
+    """Lightweight pre-check so the signup form can catch a taken email BEFORE
+    sending the vendor to the card screen (mirrors the check in vendor_signup)."""
+    body  = request.json or {}
+    email = (body.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return err("Enter a valid email address")
+    rows = sb.table("vendors").select(
+        "id, stripe_sub_id, plan_active, trial_ends_at, promo_expires_at, payment_failed_at"
+    ).ilike("email", email).execute().data
+    # An abandoned/incomplete signup (no subscription and not active in any way)
+    # is reclaimable, so report the email as available.
+    available = True
+    if rows:
+        ev = rows[0]
+        available = (not ev.get("stripe_sub_id")) and (not _vendor_is_active(ev))
+    return ok({"available": available})
+
+
 @app.route("/api/vendor/signup", methods=["POST"])
 @rate_limit(5, 3600)
 def vendor_signup():
@@ -911,9 +957,24 @@ def vendor_signup():
     if not body.get("accepted_tos"):
         return err("Please accept the Terms of Service, Vendor Agreement, and Privacy Policy to continue")
 
-    existing = sb.table("vendors").select("id").ilike("email", email).execute()
-    if existing.data:
-        return err("An account with this email already exists")
+    existing = sb.table("vendors").select(
+        "id, stripe_sub_id, plan_active, trial_ends_at, promo_expires_at, payment_failed_at"
+    ).ilike("email", email).execute().data
+    if existing:
+        ev = existing[0]
+        # Reclaim an abandoned/incomplete signup: the account row was created
+        # but the card step never finished, so it has no subscription and isn't
+        # active by any measure. Purge it and let this signup proceed. A real,
+        # completed account (has a subscription or is active/trial/promo/tester)
+        # is left intact — the user is told to sign in instead.
+        if (not ev.get("stripe_sub_id")) and (not _vendor_is_active(ev)):
+            try:
+                _purge_vendor(ev["id"])
+            except Exception as e:
+                print(f"[SIGNUP] could not reclaim stale account: {e}")
+                return err("An account with this email already exists")
+        else:
+            return err("An account with this email already exists")
 
     pw_hash      = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     base_slug    = slugify(truck_name)
@@ -1242,33 +1303,8 @@ def delete_vendor_account():
         return err('Send {"confirm": "DELETE"} to confirm account deletion')
 
     vendor_id = request.vendor_id
-    vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", vendor_id).execute().data[0]
-
     try:
-        stripe = _stripe()
-        if vendor.get("stripe_sub_id"):
-            stripe.Subscription.delete(vendor["stripe_sub_id"])
-    except Exception:
-        pass
-
-    # Remove every row tied to this vendor (children first so foreign keys
-    # don't block the delete). This also removes the customers' loyalty links
-    # to the truck, which is correct — the truck no longer exists. Best-effort
-    # per table so one missing/renamed table can't abort the deletion.
-    for tbl in ("rewards", "spin_prizes", "tiers", "customer_trucks", "visits",
-                "redemptions", "spin_results", "reviews", "promos", "promo_uses",
-                "notifications", "vendor_schedule", "vendor_posts"):
-        try:
-            sb.table(tbl).delete().eq("vendor_id", vendor_id).execute()
-        except Exception as e:
-            print(f"[DELETE VENDOR] {tbl}: {e}")
-    try:
-        sb.table("password_reset_tokens").delete().eq("user_id", vendor_id).eq("user_type", "vendor").execute()
-    except Exception:
-        pass
-
-    try:
-        sb.table("vendors").delete().eq("id", vendor_id).execute()
+        _purge_vendor(vendor_id)
     except Exception as e:
         print(f"[DELETE VENDOR] vendors row: {e}")
         return err("Could not fully delete the account — please contact support")
