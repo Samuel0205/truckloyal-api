@@ -2069,93 +2069,86 @@ async function submitCardSetup(){
   btn.disabled = true;
   btn.textContent = '⏳ Setting up your trial...';
 
+  // Tracks whether THIS attempt created the vendor account, so we only clean
+  // up an account we just made — never an existing logged-in vendor's account.
+  let createdNow = false;
   try {
-    // Step 1: If this is a new signup, create the account now (not before)
+    // Step 1: If this is a new signup, create the account now (not before).
+    // Keep S.pendingSignup until the whole flow succeeds so a failed attempt
+    // can recreate + retry without the vendor re-typing anything.
     if(S.pendingSignup && !S.vendorToken){
       btn.textContent = '⏳ Creating account...';
       const signupRes = await apiPost('/api/vendor/signup', S.pendingSignup);
       if(!signupRes.ok){
-        showErr(errEl, signupRes.data?.error || 'Signup failed — check your details and try again.');
-        btn.disabled=false; btn.textContent='🎉 Start My Free 14-Day Trial';
-        return;
+        // Signup itself failed (e.g. email already exists) — nothing was
+        // created, so surface the message and stop (no cleanup needed).
+        throw { msg: signupRes.data?.error || 'Signup failed — check your details and try again.', noCleanup: true };
       }
       S.vendorToken = signupRes.data.data.token;
       S.vendor      = signupRes.data.data.vendor;
       localStorage.setItem('tl_vendor_token', S.vendorToken);
       localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
-      S.pendingSignup = null;
+      createdNow = true;
     }
 
     btn.textContent = '⏳ Saving card details...';
     // Step 2: Create SetupIntent
     const setupRes = await fetch(API + '/api/vendor/create-setup-intent', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + S.vendorToken
-      }
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.vendorToken }
     });
     const setupData = await setupRes.json();
-
     if(!setupRes.ok || !setupData.data?.client_secret){
-      showErr(errEl, setupData.error || 'Could not reach payment server. Please try again.');
-      btn.disabled = false; btn.textContent = 'Start My Free Trial →';
-      return;
+      throw { msg: setupData.error || 'Could not reach payment server. Please try again.' };
     }
 
-    // 2. Confirm card setup with Stripe
+    // Step 3: Confirm card setup with Stripe
     const {setupIntent, error} = await stripeInstance.confirmCardSetup(
       setupData.data.client_secret,
       { payment_method: { card: stripeCardElement } }
     );
-
     if(error){
-      showErr(errEl, error.message);
-      btn.disabled = false; btn.textContent = 'Start My Free Trial →';
-      return;
+      throw { msg: error.message };
     }
 
-    // 3. Create subscription on backend using the saved payment method
+    // Step 4: Create subscription on backend using the saved payment method
     const subRes = await fetch(API + '/api/vendor/create-subscription', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + S.vendorToken
-      },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.vendorToken },
       body: JSON.stringify({ payment_method_id: setupIntent.payment_method })
     });
     const subData = await subRes.json();
-
     if(!subRes.ok){
-      // Subscription failed — delete the account we just created and show error
-      showErr(errEl, subData.error || 'Payment setup failed. Please check your card and try again.');
-      if(S.vendorToken){
-        // Clean up the account
-        try {
-          await fetch(API+'/api/vendor/delete-account',{
-            method:'DELETE',
-            headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.vendorToken},
-            body:JSON.stringify({confirm:'DELETE'})
-          });
-        } catch(e){}
-        S.vendorToken=null; S.vendor=null;
-        localStorage.removeItem('tl_vendor_token');
-        localStorage.removeItem('tl_vendor');
-        S.pendingSignup=null;
-      }
-      btn.disabled=false; btn.textContent='🎉 Start My Free 14-Day Trial';
-      return;
+      throw { msg: subData.error || 'Payment setup failed. Please check your card and try again.' };
     }
 
+    // Success — now it's safe to drop the pending signup data.
+    S.pendingSignup = null;
     S.vendor = { ...S.vendor, plan_active: true, stripe_sub_id: subData.data?.subscription_id||'pending' };
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 Welcome! Your 14-day free trial has started!');
 
   } catch(e) {
-    showErr(errEl, 'Something went wrong. Please try again.');
+    const msg = (e && e.msg) || 'Something went wrong. Please try again.';
+    // If we created the account in THIS attempt but couldn't finish payment,
+    // roll it back so the email is freed. S.pendingSignup is preserved, so
+    // pressing the button again cleanly recreates the account and retries.
+    if(createdNow && S.vendorToken && !(e && e.noCleanup)){
+      try {
+        await fetch(API+'/api/vendor/delete-account',{
+          method:'DELETE',
+          headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.vendorToken},
+          body:JSON.stringify({confirm:'DELETE'})
+        });
+      } catch(_){}
+      S.vendorToken=null; S.vendor=null;
+      localStorage.removeItem('tl_vendor_token');
+      localStorage.removeItem('tl_vendor');
+    }
+    showErr(errEl, msg);
     btn.disabled = false;
-    btn.textContent = 'Start My Free Trial →';
+    btn.textContent = '🎉 Start My Free 14-Day Trial';
   }
 }
 
