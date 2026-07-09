@@ -276,6 +276,35 @@ def _parse_dt(iso_str: str):
         return None
 
 
+# Business-local timezone for day-boundary logic (streaks, "checked in today").
+# Without this, "today" rolls over at UTC midnight, so an evening check-in on
+# the US west coast lands on the next calendar day and breaks streaks.
+APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "America/New_York")
+try:
+    from zoneinfo import ZoneInfo
+    _APP_TZ = ZoneInfo(APP_TIMEZONE)
+except Exception:
+    _APP_TZ = None
+
+
+def _local_today():
+    """Return the current calendar date in the business timezone."""
+    if _APP_TZ is not None:
+        return datetime.now(_APP_TZ).date()
+    return datetime.utcnow().date()
+
+
+def _safe_date(v):
+    """Parse a date/timestamp value into a date, tolerant of a column that is
+    a timestamp rather than a bare date; returns None if unparseable."""
+    if not v:
+        return None
+    try:
+        return date.fromisoformat(str(v)[:10])
+    except Exception:
+        return None
+
+
 def _vendor_is_active(v: dict) -> bool:
     """Return True if vendor should have access."""
     now = datetime.utcnow()
@@ -288,7 +317,7 @@ def _vendor_is_active(v: dict) -> bool:
     if promo and promo > now:
         return True
     failed = _parse_dt(v.get("payment_failed_at"))
-    if failed and (now - failed).days <= GRACE_PERIOD_DAYS:
+    if failed and (now - failed) < timedelta(days=GRACE_PERIOD_DAYS):
         return True
     return False
 
@@ -305,7 +334,7 @@ def _vendor_status(v: dict) -> str:
     if promo and promo > now:
         return "promo"
     failed = _parse_dt(v.get("payment_failed_at"))
-    if failed and (now - failed).days <= GRACE_PERIOD_DAYS:
+    if failed and (now - failed) < timedelta(days=GRACE_PERIOD_DAYS):
         return "grace"
     return "inactive"
 
@@ -427,6 +456,22 @@ def _stripe():
     import stripe
     stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
     return stripe
+
+
+def _ensure_stripe_customer(stripe, vendor: dict) -> str:
+    """Return the vendor's Stripe customer id, creating it if the signup-time
+    creation was skipped or failed (which used to leave billing permanently
+    broken with a null customer)."""
+    cid = vendor.get("stripe_customer_id")
+    if cid:
+        return cid
+    sc = stripe.Customer.create(
+        email=vendor.get("email"),
+        name=vendor.get("truck_name"),
+        metadata={"vendor_id": vendor["id"]},
+    )
+    sb.table("vendors").update({"stripe_customer_id": sc.id}).eq("id", vendor["id"]).execute()
+    return sc.id
 
 
 # ══════════════════════════════════════════════════════
@@ -647,12 +692,14 @@ def admin_stats():
     redemptions = sb.table("redemptions").select("id", count="exact").execute()
     promos      = sb.table("promo_codes").select("*").execute().data
 
+    # Classify each vendor into exactly one bucket so the dashboard tiles
+    # don't double-count (a promo or long-lapsed vendor was previously swept
+    # into both "trial" and "grace").
+    statuses       = [_vendor_status(v) for v in vendors]
     active_vendors = [v for v in vendors if _vendor_is_active(v)]
     paying_vendors = [v for v in vendors if v.get("plan_active")]
-    trial_vendors  = [v for v in vendors
-                      if not v.get("plan_active") and _vendor_is_active(v)]
-    grace_vendors  = [v for v in vendors
-                      if not v.get("plan_active") and v.get("payment_failed_at")]
+    trial_vendors  = [s for s in statuses if s == "trial"]
+    grace_vendors  = [s for s in statuses if s == "grace"]
 
     mrr = len(paying_vendors) * MONTHLY_PRICE
 
@@ -1032,7 +1079,8 @@ def create_setup_intent():
         return ok({"client_secret": setup_intent.client_secret})
 
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE setup-intent] {e}")
+        return err("Could not start payment setup — please try again.")
 
 
 @app.route("/api/vendor/create-subscription", methods=["POST"])
@@ -1044,30 +1092,45 @@ def create_subscription():
     if not payment_method:
         return err("payment_method_id is required")
 
-    vendor = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data[0]
+    vrow = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
+    if not vrow:
+        return err("Vendor not found", 404)
+    vendor = vrow[0]
     stripe = _stripe()
 
     try:
-        stripe.PaymentMethod.attach(payment_method, customer=vendor["stripe_customer_id"])
+        customer_id = _ensure_stripe_customer(stripe, vendor)
+        stripe.PaymentMethod.attach(payment_method, customer=customer_id)
         stripe.Customer.modify(
-            vendor["stripe_customer_id"],
+            customer_id,
             invoice_settings={"default_payment_method": payment_method}
         )
 
-        subscription = stripe.Subscription.create(
-            customer=vendor["stripe_customer_id"],
+        # Only grant the 14-day Stripe trial the first time. Otherwise a vendor
+        # could cancel and re-subscribe repeatedly to farm free trials.
+        sub_args = dict(
+            customer=customer_id,
             items=[{"price": STRIPE_PRICE_ID}],
-            trial_period_days=14,
             default_payment_method=payment_method,
             expand=["latest_invoice.payment_intent"],
             collection_method="charge_automatically",
         )
+        if not vendor.get("stripe_trial_used"):
+            sub_args["trial_period_days"] = 14
+
+        subscription = stripe.Subscription.create(**sub_args)
 
         sb.table("vendors").update({
             "stripe_sub_id": subscription.id,
             "plan_active":   True,
             "payment_failed_at": None,
         }).eq("id", request.vendor_id).execute()
+        # Best-effort (column may not exist yet) — records that the one-time
+        # Stripe trial has been consumed so re-subscribes don't get another.
+        try:
+            sb.table("vendors").update({"stripe_trial_used": True}).eq("id", request.vendor_id).execute()
+        except Exception as e:
+            print(f"[STRIPE create-subscription] trial flag: {e}")
 
         return ok({
             "subscription_id": subscription.id,
@@ -1076,28 +1139,36 @@ def create_subscription():
         })
 
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE create-subscription] {e}")
+        return err("Could not start your subscription — please check your card and try again.")
 
 
 @app.route("/api/vendor/billing-portal", methods=["POST"])
 @vendor_required
 def billing_portal():
-    vendor = sb.table("vendors").select("stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
+    vrow = sb.table("vendors").select("id, email, truck_name, stripe_customer_id").eq("id", request.vendor_id).execute().data
+    if not vrow:
+        return err("Vendor not found", 404)
     stripe = _stripe()
     try:
+        customer_id = _ensure_stripe_customer(stripe, vrow[0])
         session = stripe.billing_portal.Session.create(
-            customer=vendor["stripe_customer_id"],
+            customer=customer_id,
             return_url=APP_URL,
         )
         return ok({"url": session.url})
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE billing-portal] {e}")
+        return err("Could not open the billing portal — please try again.")
 
 
 @app.route("/api/vendor/cancel-subscription", methods=["POST"])
 @vendor_required
 def cancel_subscription():
-    vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
+    vrow = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data
+    if not vrow:
+        return err("Vendor not found", 404)
+    vendor = vrow[0]
     stripe = _stripe()
     try:
         if vendor.get("stripe_sub_id"):
@@ -1105,12 +1176,15 @@ def cancel_subscription():
                 vendor["stripe_sub_id"],
                 cancel_at_period_end=True
             )
+        # Keep access until the period actually ends — the subscription stays
+        # "active" at Stripe until then, and the deleted webhook flips
+        # plan_active off at expiry. We only record the cancellation here.
         sb.table("vendors").update({
-            "plan_active":        False,
             "cancellation_date":  datetime.utcnow().isoformat(),
         }).eq("id", request.vendor_id).execute()
         return ok("Subscription cancelled. You have access until the end of your billing period.")
     except Exception as e:
+        print(f"[STRIPE cancel-subscription] {e}")
         sb.table("vendors").update({"plan_active": False}).eq("id", request.vendor_id).execute()
         return ok("Account cancelled.")
 
@@ -1484,6 +1558,8 @@ def award_points():
         order_total = float(body.get("order_total") or 0)
     except (ValueError, TypeError):
         order_total = 0.0
+    if order_total < 0:      # never let a negative total subtract points
+        order_total = 0.0
 
     if not customer_id:
         return err("customer_id is required")
@@ -1496,14 +1572,14 @@ def award_points():
     if not customer: return err("Customer not found", 404)
     customer = customer[0]
 
-    today     = date.today()
+    today     = _local_today()
     today_iso = today.isoformat()
 
     ct_row = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
 
     if ct_row:
         ct        = ct_row[0]
-        last_date = date.fromisoformat(ct["last_visit_date"]) if ct.get("last_visit_date") else None
+        last_date = _safe_date(ct.get("last_visit_date"))
         already_visited = (last_date == today)
 
         if already_visited:
@@ -2022,13 +2098,13 @@ def record_visit():
     if not _vendor_is_active(vendor):
         return err("This truck's loyalty program is not currently active", 403)
 
-    today     = date.today()
+    today     = _local_today()
     today_iso = today.isoformat()
     ct_row    = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
 
     if ct_row:
         ct        = ct_row[0]
-        last_date = date.fromisoformat(ct["last_visit_date"]) if ct.get("last_visit_date") else None
+        last_date = _safe_date(ct.get("last_visit_date"))
         if last_date == today:
             return err("Already checked in today — come back tomorrow! 🔥", 409)
 
@@ -2077,13 +2153,29 @@ def record_visit():
     prizes = sb.table("spin_prizes").select("*").eq("vendor_id", vendor_id).eq("is_active", True).execute().data
     spin_result = None
     if prizes:
-        total_w = sum(p["probability"] for p in prizes)
-        r = random.uniform(0, total_w); cum = 0; won = prizes[-1]
-        for p in prizes:
-            cum += p["probability"]
-            if r <= cum: won = p; break
+        def _weight(p):
+            try:
+                return max(float(p.get("probability") or 0), 0)
+            except (TypeError, ValueError):
+                return 0.0
+        total_w = sum(_weight(p) for p in prizes)
+        won = prizes[-1]
+        if total_w > 0:
+            r = random.uniform(0, total_w); cum = 0
+            for p in prizes:
+                cum += _weight(p)
+                if r <= cum: won = p; break
 
-        spin_pts = int(won.get("prize_value") or 25)
+        # Only points-type prizes credit the balance; a discount/free-item
+        # prize is redeemed in person and must not also add points. Parse the
+        # value defensively so a non-numeric prize_value can't 500 the check-in.
+        if won.get("prize_type", "points") == "points":
+            try:
+                spin_pts = int(float(won.get("prize_value") or 25))
+            except (TypeError, ValueError):
+                spin_pts = 25
+        else:
+            spin_pts = 0
         spin_rows = sb.table("spin_results").insert({
             "customer_id": customer_id, "vendor_id": vendor_id,
             "visit_id": visit["id"], "prize_id": won["id"],
@@ -2122,12 +2214,18 @@ def customer_redeem():
     if not reward: return err("Reward not found", 404)
     reward = reward[0]
 
+    if not reward.get("is_active", True):
+        return err("This reward is no longer available")
+
+    # Don't allow redeeming against a paused/deactivated/lapsed truck.
+    vrow = sb.table("vendors").select("id, plan_active, trial_ends_at, promo_expires_at, payment_failed_at")\
+        .eq("id", reward["vendor_id"]).execute().data
+    if not vrow or not _vendor_is_active(vrow[0]):
+        return err("This truck's loyalty program is not currently active", 403)
+
     ct = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", reward["vendor_id"]).execute().data
     if not ct: return err("You haven't visited this truck yet")
     ct = ct[0]
-
-    if not reward.get("is_active", True):
-        return err("This reward is no longer available")
 
     prev_balance = ct["points_balance"]
     if prev_balance < reward["pts_required"]:
@@ -2570,7 +2668,19 @@ def stripe_webhook():
             payload, sig, os.environ.get("STRIPE_WEBHOOK_SECRET","")
         )
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE webhook] signature/parse failed: {e}")
+        return err("Invalid signature", 400)
+
+    # Idempotency: Stripe re-delivers events on any non-2xx or timeout, so the
+    # same event can arrive several times. Record processed ids and skip dupes.
+    # Best-effort: if the table doesn't exist the webhook still works (just not
+    # de-duped) — create stripe_events to enable it.
+    try:
+        if sb.table("stripe_events").select("id").eq("id", event["id"]).execute().data:
+            return ok("duplicate ignored")
+        sb.table("stripe_events").insert({"id": event["id"], "type": event["type"]}).execute()
+    except Exception as e:
+        print(f"[STRIPE webhook] idempotency store unavailable: {e}")
 
     etype = event["type"]
     obj   = event["data"]["object"]
@@ -2757,7 +2867,7 @@ def delete_promo(promo_id):
 
 @app.route("/api/truck/<slug>/promos", methods=["GET"])
 def get_truck_promos(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
     now = datetime.utcnow().isoformat()
@@ -2896,7 +3006,7 @@ def submit_review():
 
 @app.route("/api/truck/<slug>/schedule", methods=["GET"])
 def get_truck_schedule(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
     rows = sb.table("vendor_schedule").select("*").eq("vendor_id", vid)\
@@ -2906,7 +3016,7 @@ def get_truck_schedule(slug):
 
 @app.route("/api/truck/<slug>/reviews", methods=["GET"])
 def get_truck_reviews(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
     rows = sb.table("reviews").select(
@@ -2979,7 +3089,7 @@ def referral_complete():
 
 @app.route("/api/truck/<slug>/leaderboard", methods=["GET"])
 def truck_leaderboard(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
 
