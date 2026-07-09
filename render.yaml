@@ -42,6 +42,18 @@ services:
       # Base URL used to build password-reset links in emails.
       - key: APP_URL
         sync: false
+      # Public site root used for robots.txt / sitemap.xml (default
+      # https://foodtruckrewards.com). Override only if the domain changes.
+      - key: SITE_URL
+        sync: false
+      # Business timezone for streak/check-in day boundaries (default
+      # America/New_York). IANA name, e.g. America/Los_Angeles.
+      - key: APP_TIMEZONE
+        sync: false
+      # Number of trusted proxy hops for real-client-IP rate limiting
+      # (default 1, correct for Render).
+      - key: TRUSTED_PROXY_HOPS
+        sync: false
       # Gmail account + app password used to send password-reset emails.
       - key: GMAIL_USER
         sync: false

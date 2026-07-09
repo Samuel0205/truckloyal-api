@@ -30,6 +30,18 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# ── Trust the platform proxy for the real client IP ───────
+# On Render (and most PaaS) requests arrive through a reverse proxy that
+# appends the real client IP to X-Forwarded-For. Without this, our rate
+# limiter keyed on the *client-supplied* left-most XFF value, which any
+# caller could spoof to get a fresh bucket per request and defeat the
+# login / admin / reset throttles. ProxyFix makes request.remote_addr the
+# IP from the trusted hop. TRUSTED_PROXY_HOPS defaults to 1 (Render adds
+# exactly one hop); raise it only if you front the app with more proxies.
+from werkzeug.middleware.proxy_fix import ProxyFix
+_proxy_hops = int(os.environ.get("TRUSTED_PROXY_HOPS", "1"))
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_proxy_hops, x_proto=1)
+
 # ── CORS — restrict to configured origins ─────────────────
 # The app is served from this same Flask process (same-origin), so the app
 # itself never needs CORS. ALLOWED_ORIGINS lets you whitelist any external
@@ -90,7 +102,9 @@ def rate_limit(max_calls: int, window_seconds: int):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            ip  = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+            # remote_addr is now the real client IP (set by ProxyFix from the
+            # trusted proxy hop), so it can't be spoofed via a request header.
+            ip  = request.remote_addr or "unknown"
             key = f"{f.__name__}:{ip}"
             now = time.time()
             _sweep_rate_store(now)
@@ -208,6 +222,17 @@ def customer_required(f):
         url_cid = kwargs.get("customer_id")
         if url_cid is not None and str(url_cid) != str(request.customer_id):
             return err("Forbidden", 403)
+        # Re-check the account on every request: JWTs are long-lived and
+        # stateless, so a customer who was blocked (or deleted) after their
+        # token was issued must still be cut off here — not just at next login.
+        try:
+            row = sb.table("customers").select("is_blocked").eq("id", request.customer_id).execute().data
+            if not row:
+                return err("Your session is no longer valid — please sign in again", 401)
+            if row[0].get("is_blocked"):
+                return err("This account has been suspended", 403)
+        except Exception:
+            pass  # transient DB error — fail open rather than lock everyone out
         return f(*args, **kwargs)
     return decorated
 
@@ -251,6 +276,35 @@ def _parse_dt(iso_str: str):
         return None
 
 
+# Business-local timezone for day-boundary logic (streaks, "checked in today").
+# Without this, "today" rolls over at UTC midnight, so an evening check-in on
+# the US west coast lands on the next calendar day and breaks streaks.
+APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "America/New_York")
+try:
+    from zoneinfo import ZoneInfo
+    _APP_TZ = ZoneInfo(APP_TIMEZONE)
+except Exception:
+    _APP_TZ = None
+
+
+def _local_today():
+    """Return the current calendar date in the business timezone."""
+    if _APP_TZ is not None:
+        return datetime.now(_APP_TZ).date()
+    return datetime.utcnow().date()
+
+
+def _safe_date(v):
+    """Parse a date/timestamp value into a date, tolerant of a column that is
+    a timestamp rather than a bare date; returns None if unparseable."""
+    if not v:
+        return None
+    try:
+        return date.fromisoformat(str(v)[:10])
+    except Exception:
+        return None
+
+
 def _vendor_is_active(v: dict) -> bool:
     """Return True if vendor should have access."""
     now = datetime.utcnow()
@@ -263,7 +317,7 @@ def _vendor_is_active(v: dict) -> bool:
     if promo and promo > now:
         return True
     failed = _parse_dt(v.get("payment_failed_at"))
-    if failed and (now - failed).days <= GRACE_PERIOD_DAYS:
+    if failed and (now - failed) < timedelta(days=GRACE_PERIOD_DAYS):
         return True
     return False
 
@@ -280,7 +334,7 @@ def _vendor_status(v: dict) -> str:
     if promo and promo > now:
         return "promo"
     failed = _parse_dt(v.get("payment_failed_at"))
-    if failed and (now - failed).days <= GRACE_PERIOD_DAYS:
+    if failed and (now - failed) < timedelta(days=GRACE_PERIOD_DAYS):
         return "grace"
     return "inactive"
 
@@ -304,7 +358,12 @@ def gen_vendor_number() -> str:
 
 
 def slugify(name: str) -> str:
-    return re.sub(r'[^a-z0-9]', '', name.lower())[:24]
+    base = re.sub(r'[^a-z0-9]', '', (name or "").lower())[:24]
+    # Emoji-only / non-Latin names strip to empty, which would make the truck
+    # unreachable by slug — fall back to a random token so it always has one.
+    if not base:
+        base = "truck" + "".join(random.choices(string.digits, k=6))
+    return base
 
 
 def ok(data=None, **kwargs):
@@ -402,6 +461,22 @@ def _stripe():
     import stripe
     stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
     return stripe
+
+
+def _ensure_stripe_customer(stripe, vendor: dict) -> str:
+    """Return the vendor's Stripe customer id, creating it if the signup-time
+    creation was skipped or failed (which used to leave billing permanently
+    broken with a null customer)."""
+    cid = vendor.get("stripe_customer_id")
+    if cid:
+        return cid
+    sc = stripe.Customer.create(
+        email=vendor.get("email"),
+        name=vendor.get("truck_name"),
+        metadata={"vendor_id": vendor["id"]},
+    )
+    sb.table("vendors").update({"stripe_customer_id": sc.id}).eq("id", vendor["id"]).execute()
+    return sc.id
 
 
 # ══════════════════════════════════════════════════════
@@ -622,23 +697,30 @@ def admin_stats():
     redemptions = sb.table("redemptions").select("id", count="exact").execute()
     promos      = sb.table("promo_codes").select("*").execute().data
 
+    # Classify each vendor into exactly one bucket so the dashboard tiles
+    # don't double-count (a promo or long-lapsed vendor was previously swept
+    # into both "trial" and "grace").
+    statuses       = [_vendor_status(v) for v in vendors]
     active_vendors = [v for v in vendors if _vendor_is_active(v)]
     paying_vendors = [v for v in vendors if v.get("plan_active")]
-    trial_vendors  = [v for v in vendors
-                      if not v.get("plan_active") and _vendor_is_active(v)]
-    grace_vendors  = [v for v in vendors
-                      if not v.get("plan_active") and v.get("payment_failed_at")]
+    trial_vendors  = [s for s in statuses if s == "trial"]
+    grace_vendors  = [s for s in statuses if s == "grace"]
 
     mrr = len(paying_vendors) * MONTHLY_PRICE
 
-    # Anonymous churn — customers who deleted their accounts (all-time + 30 days)
+    # Anonymous churn — accounts deleted (all-time + last 30 days), by type
     customers_lost = customers_lost_30d = 0
+    vendors_lost = vendors_lost_30d = 0
     try:
         since30 = (datetime.utcnow() - timedelta(days=30)).isoformat()
         customers_lost = sb.table("account_deletions").select("id", count="exact")\
             .eq("user_type", "customer").execute().count or 0
         customers_lost_30d = sb.table("account_deletions").select("id", count="exact")\
             .eq("user_type", "customer").gte("deleted_at", since30).execute().count or 0
+        vendors_lost = sb.table("account_deletions").select("id", count="exact")\
+            .eq("user_type", "vendor").execute().count or 0
+        vendors_lost_30d = sb.table("account_deletions").select("id", count="exact")\
+            .eq("user_type", "vendor").gte("deleted_at", since30).execute().count or 0
     except Exception:
         pass
 
@@ -654,6 +736,8 @@ def admin_stats():
         "total_redemptions": redemptions.count or 0,
         "customers_lost":     customers_lost,
         "customers_lost_30d": customers_lost_30d,
+        "vendors_lost":       vendors_lost,
+        "vendors_lost_30d":   vendors_lost_30d,
         "mrr":             round(mrr, 2),
         "promo_codes":     promos,
     })
@@ -736,10 +820,16 @@ def admin_get_customers():
     customers = sb.table("customers").select(
         "id, name, email, phone, created_at, is_blocked, referral_code"
     ).order("created_at", desc=True).limit(200).execute().data or []
+
+    # Tally visit counts in one query rather than one per customer (was N+1).
+    ids = [c["id"] for c in customers]
+    visits_by = {}
+    if ids:
+        for row in (sb.table("visits").select("customer_id")
+                    .in_("customer_id", ids).execute().data or []):
+            visits_by[row["customer_id"]] = visits_by.get(row["customer_id"], 0) + 1
     for c in customers:
-        visits = sb.table("visits").select("id", count="exact")\
-            .eq("customer_id", c["id"]).execute()
-        c["total_visits"] = visits.count or 0
+        c["total_visits"] = visits_by.get(c["id"], 0)
     return ok(customers)
 
 # ══════════════════════════════════════════════════════
@@ -1000,7 +1090,8 @@ def create_setup_intent():
         return ok({"client_secret": setup_intent.client_secret})
 
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE setup-intent] {e}")
+        return err("Could not start payment setup — please try again.")
 
 
 @app.route("/api/vendor/create-subscription", methods=["POST"])
@@ -1012,30 +1103,45 @@ def create_subscription():
     if not payment_method:
         return err("payment_method_id is required")
 
-    vendor = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data[0]
+    vrow = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
+    if not vrow:
+        return err("Vendor not found", 404)
+    vendor = vrow[0]
     stripe = _stripe()
 
     try:
-        stripe.PaymentMethod.attach(payment_method, customer=vendor["stripe_customer_id"])
+        customer_id = _ensure_stripe_customer(stripe, vendor)
+        stripe.PaymentMethod.attach(payment_method, customer=customer_id)
         stripe.Customer.modify(
-            vendor["stripe_customer_id"],
+            customer_id,
             invoice_settings={"default_payment_method": payment_method}
         )
 
-        subscription = stripe.Subscription.create(
-            customer=vendor["stripe_customer_id"],
+        # Only grant the 14-day Stripe trial the first time. Otherwise a vendor
+        # could cancel and re-subscribe repeatedly to farm free trials.
+        sub_args = dict(
+            customer=customer_id,
             items=[{"price": STRIPE_PRICE_ID}],
-            trial_period_days=14,
             default_payment_method=payment_method,
             expand=["latest_invoice.payment_intent"],
             collection_method="charge_automatically",
         )
+        if not vendor.get("stripe_trial_used"):
+            sub_args["trial_period_days"] = 14
+
+        subscription = stripe.Subscription.create(**sub_args)
 
         sb.table("vendors").update({
             "stripe_sub_id": subscription.id,
             "plan_active":   True,
             "payment_failed_at": None,
         }).eq("id", request.vendor_id).execute()
+        # Best-effort (column may not exist yet) — records that the one-time
+        # Stripe trial has been consumed so re-subscribes don't get another.
+        try:
+            sb.table("vendors").update({"stripe_trial_used": True}).eq("id", request.vendor_id).execute()
+        except Exception as e:
+            print(f"[STRIPE create-subscription] trial flag: {e}")
 
         return ok({
             "subscription_id": subscription.id,
@@ -1044,28 +1150,36 @@ def create_subscription():
         })
 
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE create-subscription] {e}")
+        return err("Could not start your subscription — please check your card and try again.")
 
 
 @app.route("/api/vendor/billing-portal", methods=["POST"])
 @vendor_required
 def billing_portal():
-    vendor = sb.table("vendors").select("stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
+    vrow = sb.table("vendors").select("id, email, truck_name, stripe_customer_id").eq("id", request.vendor_id).execute().data
+    if not vrow:
+        return err("Vendor not found", 404)
     stripe = _stripe()
     try:
+        customer_id = _ensure_stripe_customer(stripe, vrow[0])
         session = stripe.billing_portal.Session.create(
-            customer=vendor["stripe_customer_id"],
+            customer=customer_id,
             return_url=APP_URL,
         )
         return ok({"url": session.url})
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE billing-portal] {e}")
+        return err("Could not open the billing portal — please try again.")
 
 
 @app.route("/api/vendor/cancel-subscription", methods=["POST"])
 @vendor_required
 def cancel_subscription():
-    vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
+    vrow = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data
+    if not vrow:
+        return err("Vendor not found", 404)
+    vendor = vrow[0]
     stripe = _stripe()
     try:
         if vendor.get("stripe_sub_id"):
@@ -1073,12 +1187,15 @@ def cancel_subscription():
                 vendor["stripe_sub_id"],
                 cancel_at_period_end=True
             )
+        # Keep access until the period actually ends — the subscription stays
+        # "active" at Stripe until then, and the deleted webhook flips
+        # plan_active off at expiry. We only record the cancellation here.
         sb.table("vendors").update({
-            "plan_active":        False,
             "cancellation_date":  datetime.utcnow().isoformat(),
         }).eq("id", request.vendor_id).execute()
         return ok("Subscription cancelled. You have access until the end of your billing period.")
     except Exception as e:
+        print(f"[STRIPE cancel-subscription] {e}")
         sb.table("vendors").update({"plan_active": False}).eq("id", request.vendor_id).execute()
         return ok("Account cancelled.")
 
@@ -1124,7 +1241,8 @@ def delete_vendor_account():
     if confirm != "DELETE":
         return err('Send {"confirm": "DELETE"} to confirm account deletion')
 
-    vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", request.vendor_id).execute().data[0]
+    vendor_id = request.vendor_id
+    vendor = sb.table("vendors").select("stripe_sub_id, stripe_customer_id").eq("id", vendor_id).execute().data[0]
 
     try:
         stripe = _stripe()
@@ -1133,7 +1251,38 @@ def delete_vendor_account():
     except Exception:
         pass
 
-    sb.table("vendors").delete().eq("id", request.vendor_id).execute()
+    # Remove every row tied to this vendor (children first so foreign keys
+    # don't block the delete). This also removes the customers' loyalty links
+    # to the truck, which is correct — the truck no longer exists. Best-effort
+    # per table so one missing/renamed table can't abort the deletion.
+    for tbl in ("rewards", "spin_prizes", "tiers", "customer_trucks", "visits",
+                "redemptions", "spin_results", "reviews", "promos", "promo_uses",
+                "notifications", "vendor_schedule", "vendor_posts"):
+        try:
+            sb.table(tbl).delete().eq("vendor_id", vendor_id).execute()
+        except Exception as e:
+            print(f"[DELETE VENDOR] {tbl}: {e}")
+    try:
+        sb.table("password_reset_tokens").delete().eq("user_id", vendor_id).eq("user_type", "vendor").execute()
+    except Exception:
+        pass
+
+    try:
+        sb.table("vendors").delete().eq("id", vendor_id).execute()
+    except Exception as e:
+        print(f"[DELETE VENDOR] vendors row: {e}")
+        return err("Could not fully delete the account — please contact support")
+
+    # Anonymous churn record — NO personal data, just a timestamp so lost
+    # vendors can be counted over any timeframe.
+    try:
+        sb.table("account_deletions").insert({
+            "user_type": "vendor",
+            "deleted_at": datetime.utcnow().isoformat(),
+        }).execute()
+    except Exception as e:
+        print(f"[DELETE VENDOR] churn log: {e}")
+
     return ok("Account permanently deleted")
 
 
@@ -1420,6 +1569,8 @@ def award_points():
         order_total = float(body.get("order_total") or 0)
     except (ValueError, TypeError):
         order_total = 0.0
+    if order_total < 0:      # never let a negative total subtract points
+        order_total = 0.0
 
     if not customer_id:
         return err("customer_id is required")
@@ -1432,14 +1583,14 @@ def award_points():
     if not customer: return err("Customer not found", 404)
     customer = customer[0]
 
-    today     = date.today()
+    today     = _local_today()
     today_iso = today.isoformat()
 
     ct_row = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
 
     if ct_row:
         ct        = ct_row[0]
-        last_date = date.fromisoformat(ct["last_visit_date"]) if ct.get("last_visit_date") else None
+        last_date = _safe_date(ct.get("last_visit_date"))
         already_visited = (last_date == today)
 
         if already_visited:
@@ -1853,7 +2004,7 @@ def delete_customer_account():
 
     # Remove every row of personal data tied to this customer (children first
     # so foreign keys don't block the delete). Best-effort per table.
-    for tbl in ("redemptions", "spin_results", "visits", "reviews", "customer_trucks"):
+    for tbl in ("redemptions", "spin_results", "visits", "reviews", "promo_uses", "customer_trucks"):
         try:
             sb.table(tbl).delete().eq("customer_id", customer_id).execute()
         except Exception as e:
@@ -1901,12 +2052,18 @@ def customer_join_truck():
 
     existing = sb.table("customer_trucks").select("id").eq("customer_id", customer_id).eq("vendor_id", vendor["id"]).execute().data
     if not existing:
-        sb.table("customer_trucks").insert({
-            "customer_id": customer_id, "vendor_id": vendor["id"],
-            "points_balance": 0, "points_total": 0,
-            "visit_count": 0, "current_streak": 0,
-            "longest_streak": 0, "total_saved": 0.0,
-        }).execute()
+        try:
+            sb.table("customer_trucks").insert({
+                "customer_id": customer_id, "vendor_id": vendor["id"],
+                "points_balance": 0, "points_total": 0,
+                "visit_count": 0, "current_streak": 0,
+                "longest_streak": 0, "total_saved": 0.0,
+            }).execute()
+        except Exception as e:
+            # With the (customer_id, vendor_id) unique index, a simultaneous
+            # join can lose this insert — that's fine, the row exists and we
+            # read it just below.
+            print(f"[JOIN TRUCK] insert race (already joined): {e}")
 
     rewards = sb.table("rewards").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).order("sort_order").execute().data
     prizes  = sb.table("spin_prizes").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).execute().data
@@ -1958,13 +2115,13 @@ def record_visit():
     if not _vendor_is_active(vendor):
         return err("This truck's loyalty program is not currently active", 403)
 
-    today     = date.today()
+    today     = _local_today()
     today_iso = today.isoformat()
     ct_row    = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
 
     if ct_row:
         ct        = ct_row[0]
-        last_date = date.fromisoformat(ct["last_visit_date"]) if ct.get("last_visit_date") else None
+        last_date = _safe_date(ct.get("last_visit_date"))
         if last_date == today:
             return err("Already checked in today — come back tomorrow! 🔥", 409)
 
@@ -2013,13 +2170,29 @@ def record_visit():
     prizes = sb.table("spin_prizes").select("*").eq("vendor_id", vendor_id).eq("is_active", True).execute().data
     spin_result = None
     if prizes:
-        total_w = sum(p["probability"] for p in prizes)
-        r = random.uniform(0, total_w); cum = 0; won = prizes[-1]
-        for p in prizes:
-            cum += p["probability"]
-            if r <= cum: won = p; break
+        def _weight(p):
+            try:
+                return max(float(p.get("probability") or 0), 0)
+            except (TypeError, ValueError):
+                return 0.0
+        total_w = sum(_weight(p) for p in prizes)
+        won = prizes[-1]
+        if total_w > 0:
+            r = random.uniform(0, total_w); cum = 0
+            for p in prizes:
+                cum += _weight(p)
+                if r <= cum: won = p; break
 
-        spin_pts = int(won.get("prize_value") or 25)
+        # Only points-type prizes credit the balance; a discount/free-item
+        # prize is redeemed in person and must not also add points. Parse the
+        # value defensively so a non-numeric prize_value can't 500 the check-in.
+        if won.get("prize_type", "points") == "points":
+            try:
+                spin_pts = int(float(won.get("prize_value") or 25))
+            except (TypeError, ValueError):
+                spin_pts = 25
+        else:
+            spin_pts = 0
         spin_rows = sb.table("spin_results").insert({
             "customer_id": customer_id, "vendor_id": vendor_id,
             "visit_id": visit["id"], "prize_id": won["id"],
@@ -2058,27 +2231,54 @@ def customer_redeem():
     if not reward: return err("Reward not found", 404)
     reward = reward[0]
 
+    if not reward.get("is_active", True):
+        return err("This reward is no longer available")
+
+    # Don't allow redeeming against a paused/deactivated/lapsed truck.
+    vrow = sb.table("vendors").select("id, plan_active, trial_ends_at, promo_expires_at, payment_failed_at")\
+        .eq("id", reward["vendor_id"]).execute().data
+    if not vrow or not _vendor_is_active(vrow[0]):
+        return err("This truck's loyalty program is not currently active", 403)
+
     ct = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", reward["vendor_id"]).execute().data
     if not ct: return err("You haven't visited this truck yet")
     ct = ct[0]
 
-    if ct["points_balance"] < reward["pts_required"]:
-        return err(f"Not enough points. Need {reward['pts_required']}, you have {ct['points_balance']}")
+    prev_balance = ct["points_balance"]
+    if prev_balance < reward["pts_required"]:
+        return err(f"Not enough points. Need {reward['pts_required']}, you have {prev_balance}")
+
+    # Atomic compare-and-swap: deduct the points FIRST, guarded on the exact
+    # balance we read. If a concurrent redemption already changed the balance,
+    # this update matches zero rows and we bail — preventing a double-spend
+    # where two taps each mint a code but only one deduction lands.
+    new_balance = prev_balance - reward["pts_required"]
+    swapped = sb.table("customer_trucks").update({
+        "points_balance": new_balance,
+    }).eq("id", ct["id"]).eq("points_balance", prev_balance).execute().data
+    if not swapped:
+        return err("Your points balance just changed — please try again")
 
     code = gen_code()
     while sb.table("redemptions").select("id").eq("code", code).execute().data:
         code = gen_code()
 
-    redemption = sb.table("redemptions").insert({
-        "customer_id": customer_id, "vendor_id": reward["vendor_id"],
-        "reward_id": reward_id, "pts_spent": reward["pts_required"],
-        "code": code, "status": "pending",
-        "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat(),
-    }).execute().data[0]
-
-    sb.table("customer_trucks").update({
-        "points_balance": ct["points_balance"] - reward["pts_required"],
-    }).eq("id", ct["id"]).execute()
+    try:
+        redemption = sb.table("redemptions").insert({
+            "customer_id": customer_id, "vendor_id": reward["vendor_id"],
+            "reward_id": reward_id, "pts_spent": reward["pts_required"],
+            "code": code, "status": "pending",
+            "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat(),
+        }).execute().data[0]
+    except Exception as e:
+        # Roll the points back (only if nothing else touched the balance since).
+        try:
+            sb.table("customer_trucks").update({"points_balance": prev_balance})\
+                .eq("id", ct["id"]).eq("points_balance", new_balance).execute()
+        except Exception:
+            pass
+        print(f"[REDEEM] code insert failed, refunded: {e}")
+        return err("Could not create redemption — please try again")
 
     return ok({
         "code": code, "reward_name": reward["name"],
@@ -2167,7 +2367,7 @@ def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) 
         msg["To"]      = to_email
         msg.attach(MIMEText(html_body, "html"))
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(gmail_user, gmail_pass)
             server.sendmail(gmail_user, to_email, msg.as_string())
 
@@ -2369,7 +2569,7 @@ def _send_verify_email(to_email: str, verify_url: str, name: str) -> bool:
         msg["From"]    = f"Food Truck Rewards <{gmail_user}>"
         msg["To"]      = to_email
         msg.attach(MIMEText(html_body, "html"))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(gmail_user, gmail_pass)
             server.sendmail(gmail_user, to_email, msg.as_string())
         return True
@@ -2485,7 +2685,19 @@ def stripe_webhook():
             payload, sig, os.environ.get("STRIPE_WEBHOOK_SECRET","")
         )
     except Exception as e:
-        return err(str(e))
+        print(f"[STRIPE webhook] signature/parse failed: {e}")
+        return err("Invalid signature", 400)
+
+    # Idempotency: Stripe re-delivers events on any non-2xx or timeout, so the
+    # same event can arrive several times. Record processed ids and skip dupes.
+    # Best-effort: if the table doesn't exist the webhook still works (just not
+    # de-duped) — create stripe_events to enable it.
+    try:
+        if sb.table("stripe_events").select("id").eq("id", event["id"]).execute().data:
+            return ok("duplicate ignored")
+        sb.table("stripe_events").insert({"id": event["id"], "type": event["type"]}).execute()
+    except Exception as e:
+        print(f"[STRIPE webhook] idempotency store unavailable: {e}")
 
     etype = event["type"]
     obj   = event["data"]["object"]
@@ -2510,10 +2722,15 @@ def stripe_webhook():
         }).eq("stripe_customer_id", obj["customer"]).execute()
 
     elif etype == "invoice.payment_failed":
-        sb.table("vendors").update({
-            "plan_active":        False,
-            "payment_failed_at":  datetime.utcnow().isoformat(),
-        }).eq("stripe_customer_id", obj["customer"]).execute()
+        cust = obj["customer"]
+        # Suspend the paid plan, but only stamp the grace clock on the FIRST
+        # failure. Stripe retries a declining card several times over ~2-3
+        # weeks; overwriting payment_failed_at each retry would restart the
+        # grace window every time and hand the vendor weeks of free access.
+        sb.table("vendors").update({"plan_active": False})\
+            .eq("stripe_customer_id", cust).execute()
+        sb.table("vendors").update({"payment_failed_at": datetime.utcnow().isoformat()})\
+            .eq("stripe_customer_id", cust).is_("payment_failed_at", "null").execute()
 
     elif etype == "invoice.payment_succeeded":
         sb.table("vendors").update({
@@ -2667,7 +2884,7 @@ def delete_promo(promo_id):
 
 @app.route("/api/truck/<slug>/promos", methods=["GET"])
 def get_truck_promos(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
     now = datetime.utcnow().isoformat()
@@ -2702,7 +2919,10 @@ def apply_promo():
 
     bonus_pts = 0
     if p["promo_type"] == "bonus_points":
-        bonus_pts = int(p["value"])
+        try:
+            bonus_pts = int(float(p.get("value") or 0))
+        except (TypeError, ValueError):
+            bonus_pts = 0
         ct = sb.table("customer_trucks").select("points_balance, points_total")\
             .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
         if ct:
@@ -2744,25 +2964,38 @@ def save_schedule():
 
 @app.route("/api/trucks/nearby", methods=["GET"])
 def trucks_nearby():
-    today = date.today().isoformat()
-    dow   = date.today().weekday()
+    dow = _local_today().weekday()
 
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
         "location_today, pts_per_visit, pts_per_dollar, plan_active, trial_ends_at"
     ).execute().data or []
 
+    active = [v for v in vendors if _vendor_is_active(v)]
+    if not active:
+        return ok([])
+    ids = [v["id"] for v in active]
+
+    # Bulk-load schedule + ratings (2 queries total, not 2 per vendor).
+    sched_by = {}
+    for row in (sb.table("vendor_schedule").select("*")
+                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
+        sched_by.setdefault(row["vendor_id"], row)
+
+    ratings_by = {}
+    for row in (sb.table("reviews").select("vendor_id, rating")
+                .in_("vendor_id", ids).execute().data or []):
+        try:
+            ratings_by.setdefault(row["vendor_id"], []).append(float(row["rating"]))
+        except (TypeError, ValueError):
+            pass
+
     result = []
-    for v in vendors:
-        if not _vendor_is_active(v): continue
-        sched = sb.table("vendor_schedule").select("*")\
-            .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
-        ratings = sb.table("reviews").select("rating")\
-            .eq("vendor_id", v["id"]).execute().data or []
-        avg_rating = round(sum(r["rating"] for r in ratings) / len(ratings), 1) if ratings else None
-        v["schedule_today"] = sched[0] if sched else None
-        v["avg_rating"]     = avg_rating
-        v["review_count"]   = len(ratings)
+    for v in active:
+        rlist = ratings_by.get(v["id"], [])
+        v["schedule_today"] = sched_by.get(v["id"])
+        v["avg_rating"]     = round(sum(rlist)/len(rlist), 1) if rlist else None
+        v["review_count"]   = len(rlist)
         result.append(v)
 
     return ok(result)
@@ -2785,7 +3018,8 @@ def submit_review():
     if not all([customer_id, vendor_id, rating]):
         return err("customer_id, vendor_id, rating required")
     try:
-        if not 1 <= int(rating) <= 5:
+        rating = int(rating)
+        if not 1 <= rating <= 5:
             return err("Rating must be 1-5")
     except (ValueError, TypeError):
         return err("Rating must be a number 1-5")
@@ -2793,7 +3027,7 @@ def submit_review():
     existing = sb.table("reviews").select("id").eq("customer_id", customer_id)\
         .eq("vendor_id", vendor_id).execute().data
     if existing:
-        sb.table("reviews").update({"rating": rating, "comment": comment})\
+        sb.table("reviews").update({"rating": int(rating), "comment": comment})\
             .eq("id", existing[0]["id"]).execute()
     else:
         sb.table("reviews").insert({
@@ -2806,7 +3040,7 @@ def submit_review():
 
 @app.route("/api/truck/<slug>/schedule", methods=["GET"])
 def get_truck_schedule(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
     rows = sb.table("vendor_schedule").select("*").eq("vendor_id", vid)\
@@ -2816,7 +3050,7 @@ def get_truck_schedule(slug):
 
 @app.route("/api/truck/<slug>/reviews", methods=["GET"])
 def get_truck_reviews(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
     rows = sb.table("reviews").select(
@@ -2889,7 +3123,7 @@ def referral_complete():
 
 @app.route("/api/truck/<slug>/leaderboard", methods=["GET"])
 def truck_leaderboard(slug):
-    vendor = sb.table("vendors").select("id").ilike("slug", slug).execute().data
+    vendor = sb.table("vendors").select("id").eq("slug", (slug or "").lower()).execute().data
     if not vendor: return err("Truck not found", 404)
     vid = vendor[0]["id"]
 
@@ -2959,12 +3193,10 @@ def customer_feed():
     vids = [t["vendor_id"] for t in trucks]
     if not vids: return ok([])
 
-    posts = []
-    for vid in vids:
-        rows = sb.table("vendor_posts").select(
-            "*, vendors(truck_name, emoji, profile_picture_url)"
-        ).eq("vendor_id", vid).order("created_at", desc=True).limit(5).execute().data or []
-        posts.extend(rows)
+    # One query for all joined trucks' posts instead of one query per truck.
+    posts = sb.table("vendor_posts").select(
+        "*, vendors(truck_name, emoji, profile_picture_url)"
+    ).in_("vendor_id", vids).order("created_at", desc=True).limit(50).execute().data or []
 
     posts.sort(key=lambda x: x.get("created_at",""), reverse=True)
     return ok(posts[:30])
@@ -3023,37 +3255,57 @@ def vendor_revenue():
 @app.route("/api/discover", methods=["GET"])
 def discover():
     state_filter = request.args.get("state", "").strip().upper()
-    dow = date.today().weekday()
+    dow = _local_today().weekday()
 
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
         "location_today, service_states, plan_active, trial_ends_at"
     ).execute().data or []
 
-    result = []
+    # First filter to the visible set...
+    active = []
     for v in vendors:
-        if not _vendor_is_active(v): continue
-
+        if not _vendor_is_active(v):
+            continue
         if state_filter:
             states = [s.strip().upper() for s in (v.get("service_states") or "").split(",") if s.strip()]
             if not states or state_filter not in states:
                 continue
+        active.append(v)
+    if not active:
+        return ok([])
 
-        sched = sb.table("vendor_schedule").select("location, hours")\
-            .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
-        today_sched = sched[0] if sched else {}
-        display_location = v.get("location_today") or today_sched.get("location") or ""
-        display_hours    = today_sched.get("hours") or ""
+    ids = [v["id"] for v in active]
 
-        ratings = sb.table("reviews").select("rating").eq("vendor_id", v["id"]).execute().data or []
-        member_count = sb.table("customer_trucks").select("id", count="exact")\
-            .eq("vendor_id", v["id"]).execute().count or 0
+    # ...then bulk-load schedule, ratings and member counts in 3 queries total
+    # instead of 3 per vendor (was an N+1 that got slow past a few hundred trucks).
+    sched_by = {}
+    for row in (sb.table("vendor_schedule").select("vendor_id, location, hours")
+                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
+        sched_by.setdefault(row["vendor_id"], row)
 
-        v["display_location"] = display_location
-        v["display_hours"]    = display_hours
-        v["avg_rating"]       = round(sum(r["rating"] for r in ratings)/len(ratings),1) if ratings else None
-        v["review_count"]     = len(ratings)
-        v["member_count"]     = member_count
+    ratings_by = {}
+    for row in (sb.table("reviews").select("vendor_id, rating")
+                .in_("vendor_id", ids).execute().data or []):
+        try:
+            ratings_by.setdefault(row["vendor_id"], []).append(float(row["rating"]))
+        except (TypeError, ValueError):
+            pass
+
+    members_by = {}
+    for row in (sb.table("customer_trucks").select("vendor_id")
+                .in_("vendor_id", ids).execute().data or []):
+        members_by[row["vendor_id"]] = members_by.get(row["vendor_id"], 0) + 1
+
+    result = []
+    for v in active:
+        today_sched = sched_by.get(v["id"], {})
+        rlist       = ratings_by.get(v["id"], [])
+        v["display_location"] = v.get("location_today") or today_sched.get("location") or ""
+        v["display_hours"]    = today_sched.get("hours") or ""
+        v["avg_rating"]       = round(sum(rlist)/len(rlist), 1) if rlist else None
+        v["review_count"]     = len(rlist)
+        v["member_count"]     = members_by.get(v["id"], 0)
         result.append(v)
 
     return ok(result)
