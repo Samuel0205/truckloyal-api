@@ -222,10 +222,6 @@
               </label>
               <input type="text" id="v-su-promo" placeholder="Enter code if you have one" autocomplete="off" style="text-transform:uppercase;letter-spacing:1px" oninput="this.value=this.value.toUpperCase()">
             </div>
-            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,87,34,.06);border:1.5px dashed rgba(255,87,34,.3);border-radius:12px;margin-bottom:4px">
-              <input type="checkbox" id="v-su-tester" style="width:18px;height:18px;accent-color:var(--brand);cursor:pointer;flex-shrink:0">
-              <label for="v-su-tester" style="font-size:13px;font-weight:700;color:var(--tx);cursor:pointer;line-height:1.3">🧪 Tester account <span style="color:var(--mu);font-weight:500;font-size:12px">— skip payment, instant access</span></label>
-            </div>
             <label style="display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:var(--mu);margin:4px 0 6px;line-height:1.5;text-align:left;cursor:pointer"><input type="checkbox" id="v-agree-tos" style="margin-top:2px;width:16px;height:16px;accent-color:var(--brand);flex-shrink:0"><span>I'm at least 18, authorized to bind this business, and I agree to the <a href="/terms" target="_blank" style="color:var(--brand);font-weight:800">Terms of Service</a>, <a href="/vendor-agreement" target="_blank" style="color:var(--brand);font-weight:800">Vendor Agreement</a>, and <a href="/privacy" target="_blank" style="color:var(--brand);font-weight:800">Privacy Policy</a> (including arbitration &amp; class-action waiver).</span></label>
             <button class="btn btn-p" id="v-signup-btn" onclick="vendorSignup()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Continue to Payment Setup →</button>
             <div class="auth-switch">Already have an account? <span onclick="goV('s-v-login')">Sign in</span></div>
@@ -237,7 +233,7 @@
     <!-- VENDOR CARD SETUP — step 2 of signup -->
     <div class="screen" id="s-v-card-setup">
       <div class="auth-wrap" style="background:linear-gradient(160deg,#FFF3E0 0%,#FFF8F0 100%);padding-bottom:60px">
-        <button type="button" onclick="backToSignup()" style="align-self:flex-start;background:none;border:none;color:var(--brand);font-weight:800;font-size:15px;padding:4px 0;margin-bottom:4px;cursor:pointer">← Back</button>
+        <button type="button" id="card-back-btn" onclick="backToSignup()" style="align-self:flex-start;background:none;border:none;color:var(--brand);font-weight:800;font-size:15px;padding:4px 0;margin-bottom:4px;cursor:pointer">← Back</button>
         <div class="auth-logo" style="animation:none">💳</div>
         <div class="auth-title">Set Up Payment</div>
         <div class="auth-sub">Your 14-day free trial starts today. Your first payment of <strong>$9.99</strong> will be charged on <strong id="trial-end-date">—</strong>. You can cancel before then at no charge.</div>
@@ -1795,13 +1791,19 @@ function setMode(mode){
         show('s-v-card-setup'); renderNav([],'' );
         return;
       }
-      // If vendor has never completed billing setup, force them to card screen
-      const trialActive = S.vendor.trial_ends_at && new Date(S.vendor.trial_ends_at) > new Date();
-      const needsBilling = !S.vendor.stripe_sub_id && !S.vendor.plan_active &&
-                           !S.vendor.promo_expires_at && !trialActive;
-      if(needsBilling && S.vScreen !== 's-v-card-setup'){
-        S.vScreen='s-v-card-setup';
-        show('s-v-card-setup'); renderNav([],'' );
+      // Lapsed / never-active vendor → payment wall (reactivation), not the app.
+      // Prefer the server-computed is_active (covers plan/trial/promo/grace);
+      // fall back to local fields only if an older cached record lacks it.
+      let active;
+      if(typeof S.vendor.is_active === 'boolean'){
+        active = S.vendor.is_active;
+      } else {
+        const trialActive = S.vendor.trial_ends_at && new Date(S.vendor.trial_ends_at) > new Date();
+        const promoActive = S.vendor.promo_expires_at && new Date(S.vendor.promo_expires_at) > new Date();
+        active = S.vendor.plan_active || trialActive || promoActive;
+      }
+      if(!active){
+        if(S.vScreen !== 's-v-card-setup') enterCardScreen('reactivate');
         return;
       }
       // For other auth screens when logged in, go home
@@ -1925,6 +1927,18 @@ async function vendorLogin(){
     localStorage.removeItem('tl_v_remember');
     localStorage.removeItem('tl_v_remember_email');
   }
+
+  // Lapsed/never-active vendor → reactivation wall, not the dashboard. Their
+  // account is kept; they just have to add payment to turn rewards back on.
+  const active = (typeof S.vendor.is_active === 'boolean')
+    ? S.vendor.is_active
+    : (r.data.data.is_active !== false);
+  if(!active){
+    enterCardScreen('reactivate');
+    showToast('Your subscription is paused — add a payment method to continue.');
+    return;
+  }
+
   S.vScreen='s-v-home'; show('s-v-home'); renderNav(VNAV,'s-v-home');
   loadVendorHome();
   showToast('👋 Welcome back, '+S.vendor.truck_name+'!');
@@ -1955,7 +1969,6 @@ async function vendorSignup(){
   const states = (document.getElementById('v-su-states')?.value||'').trim().toUpperCase();
   const zip    = (document.getElementById('v-su-zip')?.value||'').trim();
   const promo    = (document.getElementById('v-su-promo')?.value||'').trim().toUpperCase();
-  const isTester = document.getElementById('v-su-tester')?.checked || false;
   const errEl    = document.getElementById('v-signup-err');
   errEl.classList.remove('show');
 
@@ -1965,23 +1978,6 @@ async function vendorSignup(){
   if(!states){showErr(errEl,'Enter at least one state you operate in (e.g. OH)');return}
   if(!zip||zip.length!==5||!/^\d{5}$/.test(zip)){showErr(errEl,'Enter a valid 5-digit ZIP code');return}
   if(!document.getElementById('v-agree-tos')?.checked){showErr(errEl,'Please accept the Terms, Vendor Agreement, and Privacy Policy to continue');return}
-
-  // Tester path — create account directly, skip card setup
-  if(isTester){
-    showLoad('Creating tester account...');
-    const r = await apiPost('/api/vendor/signup', {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, is_tester:true, accepted_tos:true, ...(promo && {promo_code:promo})});
-    hideLoad();
-    if(!r.ok){showErr(errEl, r.data.error||'Signup failed'); return;}
-    S.vendorToken = r.data.data.token;
-    localStorage.setItem('tl_vendor_token', S.vendorToken);
-    const me = await apiGet('/api/vendor/me');
-    S.vendor = me.ok ? me.data.data : r.data.data.vendor;
-    localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
-    S.vScreen='s-v-home'; show('s-v-home'); renderNav(VNAV,'s-v-home');
-    loadVendorHome();
-    showToast('🧪 Tester account activated!');
-    return;
-  }
 
   // Pre-check the email HERE so a duplicate is caught on this form — not after
   // the vendor has already entered card details on the next screen.
@@ -2007,10 +2003,30 @@ async function vendorSignup(){
   const emailDisplay = document.getElementById('billing-email-display');
   if(emailDisplay) emailDisplay.textContent = email;
 
-  // Go to payment — account created only after card is charged
-  show('s-v-card-setup');
+  // Go to payment — account is created only after payment succeeds.
+  enterCardScreen('signup');
+}
+
+// Show the card screen in the right mode: 'signup' (new vendor, pay-first) or
+// 'reactivate' (existing lapsed vendor renewing). Mounts the Stripe card field.
+function enterCardScreen(mode){
   S.vScreen = 's-v-card-setup';
+  show('s-v-card-setup');
   renderNav([], '');
+  const titleEl = document.querySelector('#s-v-card-setup .auth-title');
+  const subEl   = document.querySelector('#s-v-card-setup .auth-sub');
+  const btn     = document.getElementById('v-card-btn');
+  const backBtn = document.getElementById('card-back-btn');
+  if(mode === 'reactivate'){
+    if(titleEl) titleEl.textContent = 'Reactivate Your Subscription';
+    if(subEl)   subEl.innerHTML = 'Your access is paused. Add a payment method to turn your rewards back on — you\'ll be billed <strong>$9.99/mo</strong>. Cancel anytime.';
+    if(btn)     btn.textContent = 'Reactivate Subscription';
+    if(backBtn){ backBtn.textContent = 'Log out'; backBtn.onclick = vendorLogout; }
+  } else {
+    if(titleEl) titleEl.textContent = 'Set Up Payment';
+    if(btn)     btn.textContent = '🎉 Start My Free 14-Day Trial';
+    if(backBtn){ backBtn.textContent = '← Back'; backBtn.onclick = backToSignup; }
+  }
   initStripeCard();
 }
 
@@ -2066,89 +2082,93 @@ async function submitCardSetup(){
   }
 
   const btn = document.getElementById('v-card-btn');
+  const isReactivate = !!S.vendorToken;   // logged-in lapsed vendor renewing
   btn.disabled = true;
-  btn.textContent = '⏳ Setting up your trial...';
+  btn.textContent = '⏳ Processing...';
 
-  // Tracks whether THIS attempt created the vendor account, so we only clean
-  // up an account we just made — never an existing logged-in vendor's account.
-  let createdNow = false;
   try {
-    // Step 1: If this is a new signup, create the account now (not before).
-    // Keep S.pendingSignup until the whole flow succeeds so a failed attempt
-    // can recreate + retry without the vendor re-typing anything.
-    if(S.pendingSignup && !S.vendorToken){
-      btn.textContent = '⏳ Creating account...';
-      const signupRes = await apiPost('/api/vendor/signup', S.pendingSignup);
-      if(!signupRes.ok){
-        // Signup itself failed (e.g. email already exists) — nothing was
-        // created, so surface the message and stop (no cleanup needed).
-        throw { msg: signupRes.data?.error || 'Signup failed — check your details and try again.', noCleanup: true };
+    if(isReactivate){
+      // ── REACTIVATION: existing account renewing a lapsed subscription ──
+      // The account already exists; just add a card and re-subscribe.
+      btn.textContent = '⏳ Saving card details...';
+      const setupRes = await fetch(API + '/api/vendor/create-setup-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.vendorToken }
+      });
+      const setupData = await setupRes.json();
+      if(!setupRes.ok || !setupData.data?.client_secret){
+        throw { msg: setupData.error || 'Could not reach payment server. Please try again.' };
       }
-      S.vendorToken = signupRes.data.data.token;
-      S.vendor      = signupRes.data.data.vendor;
-      localStorage.setItem('tl_vendor_token', S.vendorToken);
+      const {setupIntent, error} = await stripeInstance.confirmCardSetup(
+        setupData.data.client_secret, { payment_method: { card: stripeCardElement } }
+      );
+      if(error){ throw { msg: error.message }; }
+
+      const subRes = await fetch(API + '/api/vendor/create-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.vendorToken },
+        body: JSON.stringify({ payment_method_id: setupIntent.payment_method })
+      });
+      const subData = await subRes.json();
+      if(!subRes.ok){ throw { msg: subData.error || 'Payment failed. Please check your card and try again.' }; }
+
+      S.vendor = { ...S.vendor, plan_active: true, is_active: true };
       localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
-      createdNow = true;
+      landOnDashboard();
+      showToast('✅ Your subscription is active again — welcome back!');
+      return;
     }
 
-    btn.textContent = '⏳ Saving card details...';
-    // Step 2: Create SetupIntent
-    const setupRes = await fetch(API + '/api/vendor/create-setup-intent', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.vendorToken }
-    });
-    const setupData = await setupRes.json();
-    if(!setupRes.ok || !setupData.data?.client_secret){
-      throw { msg: setupData.error || 'Could not reach payment server. Please try again.' };
+    // ── NEW SIGNUP (pay-first): NO account is created until payment succeeds ──
+    if(!S.pendingSignup){
+      throw { msg: 'Your session reset — please re-enter your details.' };
     }
+    const ps = S.pendingSignup;
 
-    // Step 3: Confirm card setup with Stripe
-    const {setupIntent, error} = await stripeInstance.confirmCardSetup(
-      setupData.data.client_secret,
-      { payment_method: { card: stripeCardElement } }
+    // Step 1: open a checkout (Stripe customer + SetupIntent) — no account yet.
+    btn.textContent = '⏳ Preparing checkout...';
+    const beginRes  = await apiPost('/api/vendor/begin-checkout', { email: ps.email });
+    if(!beginRes.ok || !beginRes.data?.data?.client_secret){
+      throw { msg: beginRes.data?.error || 'Could not start checkout. Please try again.' };
+    }
+    const { client_secret, checkout_token } = beginRes.data.data;
+
+    // Step 2: confirm the card with Stripe.
+    btn.textContent = '⏳ Confirming your card...';
+    const { setupIntent, error } = await stripeInstance.confirmCardSetup(
+      client_secret, { payment_method: { card: stripeCardElement } }
     );
-    if(error){
-      throw { msg: error.message };
-    }
+    if(error){ throw { msg: error.message }; }
 
-    // Step 4: Create subscription on backend using the saved payment method
-    const subRes = await fetch(API + '/api/vendor/create-subscription', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + S.vendorToken },
-      body: JSON.stringify({ payment_method_id: setupIntent.payment_method })
+    // Step 3: create the subscription AND the account — server only creates the
+    // account if the subscription succeeds. A failure here leaves nothing behind.
+    btn.textContent = '⏳ Starting your trial...';
+    const doneRes = await apiPost('/api/vendor/complete-signup', {
+      checkout_token,
+      payment_method_id: setupIntent.payment_method,
+      email: ps.email, password: ps.password, truck_name: ps.truck_name,
+      owner_name: ps.owner_name, service_states: ps.service_states,
+      accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
     });
-    const subData = await subRes.json();
-    if(!subRes.ok){
-      throw { msg: subData.error || 'Payment setup failed. Please check your card and try again.' };
+    if(!doneRes.ok){
+      throw { msg: doneRes.data?.error || 'Payment could not be completed. Please try again.' };
     }
 
-    // Success — now it's safe to drop the pending signup data.
+    // Success — account now exists. Safe to drop the pending signup data.
     S.pendingSignup = null;
-    S.vendor = { ...S.vendor, plan_active: true, stripe_sub_id: subData.data?.subscription_id||'pending' };
+    S.vendorToken = doneRes.data.data.token;
+    S.vendor      = doneRes.data.data.vendor;
+    localStorage.setItem('tl_vendor_token', S.vendorToken);
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 Welcome! Your 14-day free trial has started!');
 
   } catch(e) {
-    const msg = (e && e.msg) || 'Something went wrong. Please try again.';
-    // If we created the account in THIS attempt but couldn't finish payment,
-    // roll it back so the email is freed. S.pendingSignup is preserved, so
-    // pressing the button again cleanly recreates the account and retries.
-    if(createdNow && S.vendorToken && !(e && e.noCleanup)){
-      try {
-        await fetch(API+'/api/vendor/delete-account',{
-          method:'DELETE',
-          headers:{'Content-Type':'application/json','Authorization':'Bearer '+S.vendorToken},
-          body:JSON.stringify({confirm:'DELETE'})
-        });
-      } catch(_){}
-      S.vendorToken=null; S.vendor=null;
-      localStorage.removeItem('tl_vendor_token');
-      localStorage.removeItem('tl_vendor');
-    }
-    showErr(errEl, msg);
+    // Nothing to roll back — in the new flow no account is created unless the
+    // whole payment succeeds. Just surface the error and let them retry.
+    showErr(errEl, (e && e.msg) || 'Something went wrong. Please try again.');
     btn.disabled = false;
-    btn.textContent = '🎉 Start My Free 14-Day Trial';
+    btn.textContent = isReactivate ? 'Reactivate Subscription' : '🎉 Start My Free 14-Day Trial';
   }
 }
 
