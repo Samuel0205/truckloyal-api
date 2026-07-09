@@ -30,6 +30,18 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# ── Trust the platform proxy for the real client IP ───────
+# On Render (and most PaaS) requests arrive through a reverse proxy that
+# appends the real client IP to X-Forwarded-For. Without this, our rate
+# limiter keyed on the *client-supplied* left-most XFF value, which any
+# caller could spoof to get a fresh bucket per request and defeat the
+# login / admin / reset throttles. ProxyFix makes request.remote_addr the
+# IP from the trusted hop. TRUSTED_PROXY_HOPS defaults to 1 (Render adds
+# exactly one hop); raise it only if you front the app with more proxies.
+from werkzeug.middleware.proxy_fix import ProxyFix
+_proxy_hops = int(os.environ.get("TRUSTED_PROXY_HOPS", "1"))
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_proxy_hops, x_proto=1)
+
 # ── CORS — restrict to configured origins ─────────────────
 # The app is served from this same Flask process (same-origin), so the app
 # itself never needs CORS. ALLOWED_ORIGINS lets you whitelist any external
@@ -90,7 +102,9 @@ def rate_limit(max_calls: int, window_seconds: int):
     def decorator(f):
         @wraps(f)
         def wrapper(*args, **kwargs):
-            ip  = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+            # remote_addr is now the real client IP (set by ProxyFix from the
+            # trusted proxy hop), so it can't be spoofed via a request header.
+            ip  = request.remote_addr or "unknown"
             key = f"{f.__name__}:{ip}"
             now = time.time()
             _sweep_rate_store(now)
@@ -208,6 +222,17 @@ def customer_required(f):
         url_cid = kwargs.get("customer_id")
         if url_cid is not None and str(url_cid) != str(request.customer_id):
             return err("Forbidden", 403)
+        # Re-check the account on every request: JWTs are long-lived and
+        # stateless, so a customer who was blocked (or deleted) after their
+        # token was issued must still be cut off here — not just at next login.
+        try:
+            row = sb.table("customers").select("is_blocked").eq("id", request.customer_id).execute().data
+            if not row:
+                return err("Your session is no longer valid — please sign in again", 401)
+            if row[0].get("is_blocked"):
+                return err("This account has been suspended", 403)
+        except Exception:
+            pass  # transient DB error — fail open rather than lock everyone out
         return f(*args, **kwargs)
     return decorated
 
@@ -1146,7 +1171,8 @@ def delete_vendor_account():
     # to the truck, which is correct — the truck no longer exists. Best-effort
     # per table so one missing/renamed table can't abort the deletion.
     for tbl in ("rewards", "spin_prizes", "tiers", "customer_trucks", "visits",
-                "redemptions", "reviews", "vendor_schedule", "vendor_posts"):
+                "redemptions", "spin_results", "reviews", "promos", "promo_uses",
+                "notifications", "vendor_schedule", "vendor_posts"):
         try:
             sb.table(tbl).delete().eq("vendor_id", vendor_id).execute()
         except Exception as e:
@@ -1156,7 +1182,11 @@ def delete_vendor_account():
     except Exception:
         pass
 
-    sb.table("vendors").delete().eq("id", vendor_id).execute()
+    try:
+        sb.table("vendors").delete().eq("id", vendor_id).execute()
+    except Exception as e:
+        print(f"[DELETE VENDOR] vendors row: {e}")
+        return err("Could not fully delete the account — please contact support")
 
     # Anonymous churn record — NO personal data, just a timestamp so lost
     # vendors can be counted over any timeframe.
@@ -1887,7 +1917,7 @@ def delete_customer_account():
 
     # Remove every row of personal data tied to this customer (children first
     # so foreign keys don't block the delete). Best-effort per table.
-    for tbl in ("redemptions", "spin_results", "visits", "reviews", "customer_trucks"):
+    for tbl in ("redemptions", "spin_results", "visits", "reviews", "promo_uses", "customer_trucks"):
         try:
             sb.table(tbl).delete().eq("customer_id", customer_id).execute()
         except Exception as e:
@@ -2096,23 +2126,44 @@ def customer_redeem():
     if not ct: return err("You haven't visited this truck yet")
     ct = ct[0]
 
-    if ct["points_balance"] < reward["pts_required"]:
-        return err(f"Not enough points. Need {reward['pts_required']}, you have {ct['points_balance']}")
+    if not reward.get("is_active", True):
+        return err("This reward is no longer available")
+
+    prev_balance = ct["points_balance"]
+    if prev_balance < reward["pts_required"]:
+        return err(f"Not enough points. Need {reward['pts_required']}, you have {prev_balance}")
+
+    # Atomic compare-and-swap: deduct the points FIRST, guarded on the exact
+    # balance we read. If a concurrent redemption already changed the balance,
+    # this update matches zero rows and we bail — preventing a double-spend
+    # where two taps each mint a code but only one deduction lands.
+    new_balance = prev_balance - reward["pts_required"]
+    swapped = sb.table("customer_trucks").update({
+        "points_balance": new_balance,
+    }).eq("id", ct["id"]).eq("points_balance", prev_balance).execute().data
+    if not swapped:
+        return err("Your points balance just changed — please try again")
 
     code = gen_code()
     while sb.table("redemptions").select("id").eq("code", code).execute().data:
         code = gen_code()
 
-    redemption = sb.table("redemptions").insert({
-        "customer_id": customer_id, "vendor_id": reward["vendor_id"],
-        "reward_id": reward_id, "pts_spent": reward["pts_required"],
-        "code": code, "status": "pending",
-        "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat(),
-    }).execute().data[0]
-
-    sb.table("customer_trucks").update({
-        "points_balance": ct["points_balance"] - reward["pts_required"],
-    }).eq("id", ct["id"]).execute()
+    try:
+        redemption = sb.table("redemptions").insert({
+            "customer_id": customer_id, "vendor_id": reward["vendor_id"],
+            "reward_id": reward_id, "pts_spent": reward["pts_required"],
+            "code": code, "status": "pending",
+            "expires_at": (datetime.utcnow() + timedelta(hours=24)).isoformat(),
+        }).execute().data[0]
+    except Exception as e:
+        # Roll the points back (only if nothing else touched the balance since).
+        try:
+            sb.table("customer_trucks").update({"points_balance": prev_balance})\
+                .eq("id", ct["id"]).eq("points_balance", new_balance).execute()
+        except Exception:
+            pass
+        print(f"[REDEEM] code insert failed, refunded: {e}")
+        return err("Could not create redemption — please try again")
 
     return ok({
         "code": code, "reward_name": reward["name"],
@@ -2201,7 +2252,7 @@ def _send_reset_email(to_email: str, reset_url: str, user_type: str, name: str) 
         msg["To"]      = to_email
         msg.attach(MIMEText(html_body, "html"))
 
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(gmail_user, gmail_pass)
             server.sendmail(gmail_user, to_email, msg.as_string())
 
@@ -2403,7 +2454,7 @@ def _send_verify_email(to_email: str, verify_url: str, name: str) -> bool:
         msg["From"]    = f"Food Truck Rewards <{gmail_user}>"
         msg["To"]      = to_email
         msg.attach(MIMEText(html_body, "html"))
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as server:
             server.login(gmail_user, gmail_pass)
             server.sendmail(gmail_user, to_email, msg.as_string())
         return True
@@ -2544,10 +2595,15 @@ def stripe_webhook():
         }).eq("stripe_customer_id", obj["customer"]).execute()
 
     elif etype == "invoice.payment_failed":
-        sb.table("vendors").update({
-            "plan_active":        False,
-            "payment_failed_at":  datetime.utcnow().isoformat(),
-        }).eq("stripe_customer_id", obj["customer"]).execute()
+        cust = obj["customer"]
+        # Suspend the paid plan, but only stamp the grace clock on the FIRST
+        # failure. Stripe retries a declining card several times over ~2-3
+        # weeks; overwriting payment_failed_at each retry would restart the
+        # grace window every time and hand the vendor weeks of free access.
+        sb.table("vendors").update({"plan_active": False})\
+            .eq("stripe_customer_id", cust).execute()
+        sb.table("vendors").update({"payment_failed_at": datetime.utcnow().isoformat()})\
+            .eq("stripe_customer_id", cust).is_("payment_failed_at", "null").execute()
 
     elif etype == "invoice.payment_succeeded":
         sb.table("vendors").update({
