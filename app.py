@@ -389,6 +389,10 @@ def _record_tos_acceptance(table: str, user_id: str) -> None:
 
 
 def _safe_vendor(v: dict) -> dict:
+    # Expose the computed access flag (covers plan/trial/promo/grace) so the
+    # app can gate the dashboard the same way the backend does — then strip
+    # the raw billing fields the client shouldn't see.
+    v["is_active"] = _vendor_is_active(v)
     v.pop("password_hash", None)
     v.pop("stripe_customer_id", None)
     v.pop("stripe_sub_id", None)
@@ -502,6 +506,77 @@ def _purge_vendor(vendor_id: str):
     except Exception:
         pass
     sb.table("vendors").delete().eq("id", vendor_id).execute()
+
+
+def _create_vendor_account(*, email, password, truck_name, owner_name, service_states,
+                           stripe_customer_id=None, stripe_sub_id=None,
+                           plan_active=False, promo_expires=None, trial_days=14):
+    """Insert a vendor row (+ defaults, TOS record, verification email) and
+    return it. Called only AFTER a subscription is confirmed (paying vendors)
+    or from the gated tester path — never on a failed/abandoned payment."""
+    pw_hash   = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    base_slug = slugify(truck_name)
+    slug      = base_slug
+    i = 1
+    while sb.table("vendors").select("id").eq("slug", slug).execute().data:
+        slug = f"{base_slug}{i}"; i += 1
+    vendor_number = gen_vendor_number()
+    trial_end     = (datetime.utcnow() + timedelta(days=trial_days)).isoformat() if trial_days else None
+
+    vendor = sb.table("vendors").insert({
+        "email":            email,
+        "password_hash":    pw_hash,
+        "truck_name":       truck_name,
+        "owner_name":       owner_name,
+        "slug":             slug,
+        "vendor_number":    vendor_number,
+        "service_states":   service_states,
+        "trial_ends_at":    trial_end,
+        "promo_expires_at": promo_expires,
+        "plan_active":      plan_active,
+        "stripe_customer_id": stripe_customer_id,
+        "stripe_sub_id":    stripe_sub_id,
+        "pts_per_visit":    50,
+        "pts_per_dollar":   10,
+        "pts_spin_bonus":   25,
+        "pts_streak_mult":  1.5,
+        "pts_referral":     100,
+        "double_first_visit": True,
+        "streak_bonus":     True,
+        "birthday_reward":  False,
+        "winback_enabled":  False,
+        "referral_bonus":   True,
+    }).execute().data[0]
+
+    try:
+        sb.rpc("seed_vendor_defaults", {"v_id": vendor["id"]}).execute()
+    except Exception:
+        pass
+    if stripe_sub_id:
+        # One-time Stripe trial has been consumed; mark it (best-effort).
+        try:
+            sb.table("vendors").update({"stripe_trial_used": True}).eq("id", vendor["id"]).execute()
+        except Exception:
+            pass
+
+    _record_tos_acceptance("vendors", vendor["id"])
+    _send_verification("vendor", vendor["id"], email, owner_name or truck_name)
+    return vendor
+
+
+def _vendor_email_state(email: str):
+    """Classify a vendor email: ('free'|'reclaimable'|'taken', vendor_id_or_None).
+    'reclaimable' = a legacy incomplete row (no subscription, not active by any
+    measure) that a new signup may purge and take over."""
+    rows = sb.table("vendors").select(
+        "id, stripe_sub_id, plan_active, trial_ends_at, promo_expires_at, payment_failed_at"
+    ).ilike("email", email).execute().data
+    if not rows:
+        return ("free", None)
+    ev = rows[0]
+    if (not ev.get("stripe_sub_id")) and (not _vendor_is_active(ev)):
+        return ("reclaimable", ev["id"])
+    return ("taken", ev["id"])
 
 
 # ══════════════════════════════════════════════════════
@@ -927,130 +1002,190 @@ def vendor_check_email():
     email = (body.get("email") or "").strip().lower()
     if not email or "@" not in email:
         return err("Enter a valid email address")
-    rows = sb.table("vendors").select(
-        "id, stripe_sub_id, plan_active, trial_ends_at, promo_expires_at, payment_failed_at"
-    ).ilike("email", email).execute().data
-    # An abandoned/incomplete signup (no subscription and not active in any way)
-    # is reclaimable, so report the email as available.
-    available = True
-    if rows:
-        ev = rows[0]
-        available = (not ev.get("stripe_sub_id")) and (not _vendor_is_active(ev))
-    return ok({"available": available})
+    state, _ = _vendor_email_state(email)
+    return ok({"available": state != "taken"})
 
 
 @app.route("/api/vendor/signup", methods=["POST"])
 @rate_limit(5, 3600)
 def vendor_signup():
-    body         = request.json or {}
-    email        = (body.get("email") or "").strip().lower()
-    password     = body.get("password") or ""
-    truck_name   = (body.get("truck_name") or "My Food Truck").strip()
-    owner_name   = (body.get("owner_name") or "").strip()
-    promo_code   = (body.get("promo_code") or "").strip().upper()
-    is_tester    = bool(body.get("is_tester", False))
+    """Comp / internal tester accounts ONLY, gated by a secret TESTER_CODE.
+    Paying vendors never hit this — they go through begin-checkout +
+    complete-signup so an account is created only after payment succeeds.
+    Without TESTER_CODE set, this path is disabled entirely."""
+    body        = request.json or {}
+    expected    = os.environ.get("TESTER_CODE", "")
+    if not expected or (body.get("tester_code") or "") != expected:
+        return err("Payment is required to create an account.", 403)
 
-    if not email or not password:
+    email       = (body.get("email") or "").strip().lower()
+    password    = body.get("password") or ""
+    truck_name  = (body.get("truck_name") or "My Food Truck").strip()
+    owner_name  = (body.get("owner_name") or "").strip()
+    service_states = (body.get("service_states") or "").strip().upper()
+
+    if not email or "@" not in email or not password:
         return err("Email and password are required")
     if len(password) < 8:
         return err("Password must be at least 8 characters")
     if not body.get("accepted_tos"):
         return err("Please accept the Terms of Service, Vendor Agreement, and Privacy Policy to continue")
 
-    existing = sb.table("vendors").select(
-        "id, stripe_sub_id, plan_active, trial_ends_at, promo_expires_at, payment_failed_at"
-    ).ilike("email", email).execute().data
-    if existing:
-        ev = existing[0]
-        # Reclaim an abandoned/incomplete signup: the account row was created
-        # but the card step never finished, so it has no subscription and isn't
-        # active by any measure. Purge it and let this signup proceed. A real,
-        # completed account (has a subscription or is active/trial/promo/tester)
-        # is left intact — the user is told to sign in instead.
-        if (not ev.get("stripe_sub_id")) and (not _vendor_is_active(ev)):
-            try:
-                _purge_vendor(ev["id"])
-            except Exception as e:
-                print(f"[SIGNUP] could not reclaim stale account: {e}")
-                return err("An account with this email already exists")
-        else:
+    state, vid = _vendor_email_state(email)
+    if state == "taken":
+        return err("An account with this email already exists")
+    if state == "reclaimable":
+        try:
+            _purge_vendor(vid)
+        except Exception as e:
+            print(f"[TESTER SIGNUP] reclaim: {e}")
             return err("An account with this email already exists")
 
-    pw_hash      = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
-    base_slug    = slugify(truck_name)
-    slug         = base_slug
-    i = 1
-    while sb.table("vendors").select("id").eq("slug", slug).execute().data:
-        slug = f"{base_slug}{i}"; i += 1
+    vendor = _create_vendor_account(
+        email=email, password=password, truck_name=truck_name,
+        owner_name=owner_name, service_states=service_states, plan_active=True,
+    )
+    token = make_vendor_token(vendor["id"])
+    return ok({
+        "token":         token,
+        "vendor":        _safe_vendor(vendor),
+        "trial_ends_at": vendor.get("trial_ends_at"),
+    }), 201
 
-    vendor_number = gen_vendor_number()
-    trial_end     = (datetime.utcnow() + timedelta(days=14)).isoformat()
 
+@app.route("/api/vendor/begin-checkout", methods=["POST"])
+@rate_limit(10, 900)
+def vendor_begin_checkout():
+    """Pay-first signup, step 1: create a Stripe customer + SetupIntent with NO
+    vendor account yet, and return a short-lived checkout token binding the
+    email to that Stripe customer. Abandoning here leaves only an empty Stripe
+    customer — the email stays completely free, no account is created."""
+    body  = request.json or {}
+    email = (body.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return err("Enter a valid email address")
+
+    state, _ = _vendor_email_state(email)
+    if state == "taken":
+        return err("An account with this email already exists. Please sign in.")
+
+    try:
+        stripe   = _stripe()
+        customer = stripe.Customer.create(email=email)
+        si       = stripe.SetupIntent.create(
+            customer=customer.id, payment_method_types=["card"], usage="off_session",
+        )
+    except Exception as e:
+        print(f"[BEGIN CHECKOUT] {e}")
+        return err("Could not start checkout — please try again.")
+
+    checkout_token = jwt.encode({
+        "type": "checkout", "email": email, "scid": customer.id,
+        "exp": datetime.utcnow() + timedelta(minutes=30),
+    }, JWT_SECRET, algorithm=JWT_ALGO)
+    return ok({"client_secret": si.client_secret, "checkout_token": checkout_token})
+
+
+@app.route("/api/vendor/complete-signup", methods=["POST"])
+@rate_limit(10, 3600)
+def vendor_complete_signup():
+    """Pay-first signup, step 2: verify the checkout token, create the
+    subscription, and ONLY on success create the vendor account. A declined
+    card or a failed subscription leaves NO account behind."""
+    body           = request.json or {}
+    token          = body.get("checkout_token") or ""
+    payment_method = body.get("payment_method_id") or ""
+    if not token or not payment_method:
+        return err("Missing payment details — please restart signup.")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        if payload.get("type") != "checkout":
+            return err("Invalid checkout session — please restart signup.")
+    except JWTError:
+        return err("Your checkout session expired — please restart signup.")
+
+    email              = payload["email"]
+    stripe_customer_id = payload["scid"]
+    password       = body.get("password") or ""
+    truck_name     = (body.get("truck_name") or "My Food Truck").strip()
+    owner_name     = (body.get("owner_name") or "").strip()
+    service_states = (body.get("service_states") or "").strip().upper()
+    promo_code     = (body.get("promo_code") or "").strip().upper()
+
+    if len(password) < 8:
+        return err("Password must be at least 8 characters")
+    if not body.get("accepted_tos"):
+        return err("Please accept the Terms of Service, Vendor Agreement, and Privacy Policy to continue")
+
+    state, vid = _vendor_email_state(email)
+    if state == "taken":
+        return err("An account with this email already exists. Please sign in.")
+    if state == "reclaimable":
+        try:
+            _purge_vendor(vid)
+        except Exception as e:
+            print(f"[COMPLETE SIGNUP] reclaim: {e}")
+            return err("An account with this email already exists")
+
+    # Validate promo BEFORE creating the subscription so we never charge and
+    # then reject on a bad code.
     promo_expires = None
+    pc = None
     if promo_code:
-        pc = sb.table("promo_codes").select("*").eq("code", promo_code).eq("is_active", True).execute().data
-        if not pc:
+        pcr = sb.table("promo_codes").select("*").eq("code", promo_code).eq("is_active", True).execute().data
+        if not pcr:
             return err("Invalid or expired promo code")
-        pc = pc[0]
+        pc = pcr[0]
         max_uses = pc.get("max_uses")
         if max_uses and pc.get("uses", 0) >= max_uses:
             return err("This promo code has reached its maximum uses")
         months = pc.get("free_months", 1)
         promo_expires = (datetime.utcnow() + timedelta(days=30 * months)).isoformat()
-        sb.table("promo_codes").update({"uses": pc["uses"] + 1}).eq("id", pc["id"]).execute()
 
-    service_states = (body.get("service_states") or "").strip().upper()
-
-    vendor = sb.table("vendors").insert({
-        "email":           email,
-        "password_hash":   pw_hash,
-        "truck_name":      truck_name,
-        "owner_name":      owner_name,
-        "slug":            slug,
-        "vendor_number":   vendor_number,
-        "service_states":  service_states,
-        "trial_ends_at":   trial_end,
-        "promo_expires_at": promo_expires,
-        "plan_active":     True if is_tester else False,
-        "pts_per_visit":   50,
-        "pts_per_dollar":  10,
-        "pts_spin_bonus":  25,
-        "pts_streak_mult": 1.5,
-        "pts_referral":    100,
-        "double_first_visit": True,
-        "streak_bonus":    True,
-        "birthday_reward": False,
-        "winback_enabled": False,
-        "referral_bonus":  True,
-    }).execute().data[0]
-
-    try:
-        sb.rpc("seed_vendor_defaults", {"v_id": vendor["id"]}).execute()
-    except Exception:
-        pass
-
-    stripe_customer_id = None
+    # Attach the card + create the subscription. No vendor row exists yet, so if
+    # ANY of this fails the email stays free and no account is created.
     try:
         stripe = _stripe()
-        sc = stripe.Customer.create(
-            email=email,
-            name=truck_name,
-            metadata={"vendor_id": vendor["id"], "vendor_number": vendor_number}
+        stripe.PaymentMethod.attach(payment_method, customer=stripe_customer_id)
+        stripe.Customer.modify(stripe_customer_id, invoice_settings={"default_payment_method": payment_method})
+        subscription = stripe.Subscription.create(
+            customer=stripe_customer_id,
+            items=[{"price": STRIPE_PRICE_ID}],
+            trial_period_days=14,
+            default_payment_method=payment_method,
+            expand=["latest_invoice.payment_intent"],
+            collection_method="charge_automatically",
         )
-        stripe_customer_id = sc.id
-        sb.table("vendors").update({"stripe_customer_id": sc.id}).eq("id", vendor["id"]).execute()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[COMPLETE SIGNUP] stripe: {e}")
+        return err("Could not start your subscription — please check your card and try again.")
 
-    _record_tos_acceptance("vendors", vendor["id"])
-    _send_verification("vendor", vendor["id"], email, owner_name or truck_name)
+    # Payment is set up — NOW it's safe to create the account.
+    try:
+        vendor = _create_vendor_account(
+            email=email, password=password, truck_name=truck_name, owner_name=owner_name,
+            service_states=service_states, stripe_customer_id=stripe_customer_id,
+            stripe_sub_id=subscription.id, plan_active=True, promo_expires=promo_expires,
+        )
+    except Exception as e:
+        print(f"[COMPLETE SIGNUP] account create failed after payment: {e}")
+        # Don't leave a paid subscription with no account — cancel it and retry.
+        try:
+            _stripe().Subscription.delete(subscription.id)
+        except Exception:
+            pass
+        return err("Something went wrong finishing your account — please try again.")
 
-    token = make_vendor_token(vendor["id"])
+    if pc:
+        try:
+            sb.table("promo_codes").update({"uses": pc["uses"] + 1}).eq("id", pc["id"]).execute()
+        except Exception:
+            pass
+
     return ok({
-        "token":              token,
-        "vendor":             _safe_vendor(vendor),
-        "stripe_customer_id": stripe_customer_id,
-        "trial_ends_at":      trial_end,
+        "token":         make_vendor_token(vendor["id"]),
+        "vendor":        _safe_vendor(vendor),
+        "trial_ends_at": vendor.get("trial_ends_at"),
     }), 201
 
 

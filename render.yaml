@@ -54,6 +54,10 @@ services:
       # (default 1, correct for Render).
       - key: TRUSTED_PROXY_HOPS
         sync: false
+      # Secret that unlocks comp/tester account creation (no payment) via
+      # /api/vendor/signup. Leave UNSET in production so every vendor must pay.
+      - key: TESTER_CODE
+        sync: false
       # Gmail account + app password used to send password-reset emails.
       - key: GMAIL_USER
         sync: false
