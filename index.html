@@ -1714,8 +1714,23 @@ const CNAV = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-feed',icon:'📰
 /* ════════════════════════════════════
    API HELPERS
 ════════════════════════════════════ */
+let _sessionExpiredHandling = false;
+function handleSessionExpired(){
+  // A token we HELD was rejected (expired/blocked/deleted) — clear it and send
+  // the user to sign in, instead of leaving them on silently-failing screens.
+  if (_sessionExpiredHandling) return;
+  _sessionExpiredHandling = true;
+  const wasVendor = S.mode === 'vendor' || !!S.vendorToken;
+  try { localStorage.removeItem('tl_vendor_token'); localStorage.removeItem('tl_ctoken'); } catch(e){}
+  S.vendorToken = null; S.vendor = null; S.customer = null;
+  showToast('Your session expired — please sign in again');
+  try { wasVendor ? goV('s-v-login') : goC('s-c-login'); } catch(e){}
+  setTimeout(() => { _sessionExpiredHandling = false; }, 4000);
+}
+
 async function apiFetch(path, opts={}) {
   const headers = {'Content-Type':'application/json'};
+  const sentToken = !!(S.vendorToken || S.customer?.token);
   if (S.vendorToken) headers['Authorization'] = `Bearer ${S.vendorToken}`;
   if (S.customer?.token) headers['X-Customer-Token'] = S.customer.token;
 
@@ -1724,6 +1739,9 @@ async function apiFetch(path, opts={}) {
   try {
     const r = await fetch(API + path, {headers, ...opts, signal: ctrl.signal});
     const d = await r.json();
+    // Only force-logout when a token we actually sent was rejected — never on
+    // a login/signup attempt (those carry no token, so a 401 is just bad creds).
+    if (r.status === 401 && sentToken) handleSessionExpired();
     return {ok: r.ok, status: r.status, data: d};
   } catch {
     return {ok: false, status: 0, data: {error: 'Check your connection and try again'}};

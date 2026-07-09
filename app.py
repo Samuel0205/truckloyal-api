@@ -358,7 +358,12 @@ def gen_vendor_number() -> str:
 
 
 def slugify(name: str) -> str:
-    return re.sub(r'[^a-z0-9]', '', name.lower())[:24]
+    base = re.sub(r'[^a-z0-9]', '', (name or "").lower())[:24]
+    # Emoji-only / non-Latin names strip to empty, which would make the truck
+    # unreachable by slug — fall back to a random token so it always has one.
+    if not base:
+        base = "truck" + "".join(random.choices(string.digits, k=6))
+    return base
 
 
 def ok(data=None, **kwargs):
@@ -815,10 +820,16 @@ def admin_get_customers():
     customers = sb.table("customers").select(
         "id, name, email, phone, created_at, is_blocked, referral_code"
     ).order("created_at", desc=True).limit(200).execute().data or []
+
+    # Tally visit counts in one query rather than one per customer (was N+1).
+    ids = [c["id"] for c in customers]
+    visits_by = {}
+    if ids:
+        for row in (sb.table("visits").select("customer_id")
+                    .in_("customer_id", ids).execute().data or []):
+            visits_by[row["customer_id"]] = visits_by.get(row["customer_id"], 0) + 1
     for c in customers:
-        visits = sb.table("visits").select("id", count="exact")\
-            .eq("customer_id", c["id"]).execute()
-        c["total_visits"] = visits.count or 0
+        c["total_visits"] = visits_by.get(c["id"], 0)
     return ok(customers)
 
 # ══════════════════════════════════════════════════════
@@ -2041,12 +2052,18 @@ def customer_join_truck():
 
     existing = sb.table("customer_trucks").select("id").eq("customer_id", customer_id).eq("vendor_id", vendor["id"]).execute().data
     if not existing:
-        sb.table("customer_trucks").insert({
-            "customer_id": customer_id, "vendor_id": vendor["id"],
-            "points_balance": 0, "points_total": 0,
-            "visit_count": 0, "current_streak": 0,
-            "longest_streak": 0, "total_saved": 0.0,
-        }).execute()
+        try:
+            sb.table("customer_trucks").insert({
+                "customer_id": customer_id, "vendor_id": vendor["id"],
+                "points_balance": 0, "points_total": 0,
+                "visit_count": 0, "current_streak": 0,
+                "longest_streak": 0, "total_saved": 0.0,
+            }).execute()
+        except Exception as e:
+            # With the (customer_id, vendor_id) unique index, a simultaneous
+            # join can lose this insert — that's fine, the row exists and we
+            # read it just below.
+            print(f"[JOIN TRUCK] insert race (already joined): {e}")
 
     rewards = sb.table("rewards").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).order("sort_order").execute().data
     prizes  = sb.table("spin_prizes").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).execute().data
@@ -2902,7 +2919,10 @@ def apply_promo():
 
     bonus_pts = 0
     if p["promo_type"] == "bonus_points":
-        bonus_pts = int(p["value"])
+        try:
+            bonus_pts = int(float(p.get("value") or 0))
+        except (TypeError, ValueError):
+            bonus_pts = 0
         ct = sb.table("customer_trucks").select("points_balance, points_total")\
             .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
         if ct:
@@ -2944,25 +2964,38 @@ def save_schedule():
 
 @app.route("/api/trucks/nearby", methods=["GET"])
 def trucks_nearby():
-    today = date.today().isoformat()
-    dow   = date.today().weekday()
+    dow = _local_today().weekday()
 
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
         "location_today, pts_per_visit, pts_per_dollar, plan_active, trial_ends_at"
     ).execute().data or []
 
+    active = [v for v in vendors if _vendor_is_active(v)]
+    if not active:
+        return ok([])
+    ids = [v["id"] for v in active]
+
+    # Bulk-load schedule + ratings (2 queries total, not 2 per vendor).
+    sched_by = {}
+    for row in (sb.table("vendor_schedule").select("*")
+                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
+        sched_by.setdefault(row["vendor_id"], row)
+
+    ratings_by = {}
+    for row in (sb.table("reviews").select("vendor_id, rating")
+                .in_("vendor_id", ids).execute().data or []):
+        try:
+            ratings_by.setdefault(row["vendor_id"], []).append(float(row["rating"]))
+        except (TypeError, ValueError):
+            pass
+
     result = []
-    for v in vendors:
-        if not _vendor_is_active(v): continue
-        sched = sb.table("vendor_schedule").select("*")\
-            .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
-        ratings = sb.table("reviews").select("rating")\
-            .eq("vendor_id", v["id"]).execute().data or []
-        avg_rating = round(sum(r["rating"] for r in ratings) / len(ratings), 1) if ratings else None
-        v["schedule_today"] = sched[0] if sched else None
-        v["avg_rating"]     = avg_rating
-        v["review_count"]   = len(ratings)
+    for v in active:
+        rlist = ratings_by.get(v["id"], [])
+        v["schedule_today"] = sched_by.get(v["id"])
+        v["avg_rating"]     = round(sum(rlist)/len(rlist), 1) if rlist else None
+        v["review_count"]   = len(rlist)
         result.append(v)
 
     return ok(result)
@@ -2985,7 +3018,8 @@ def submit_review():
     if not all([customer_id, vendor_id, rating]):
         return err("customer_id, vendor_id, rating required")
     try:
-        if not 1 <= int(rating) <= 5:
+        rating = int(rating)
+        if not 1 <= rating <= 5:
             return err("Rating must be 1-5")
     except (ValueError, TypeError):
         return err("Rating must be a number 1-5")
@@ -2993,7 +3027,7 @@ def submit_review():
     existing = sb.table("reviews").select("id").eq("customer_id", customer_id)\
         .eq("vendor_id", vendor_id).execute().data
     if existing:
-        sb.table("reviews").update({"rating": rating, "comment": comment})\
+        sb.table("reviews").update({"rating": int(rating), "comment": comment})\
             .eq("id", existing[0]["id"]).execute()
     else:
         sb.table("reviews").insert({
@@ -3159,12 +3193,10 @@ def customer_feed():
     vids = [t["vendor_id"] for t in trucks]
     if not vids: return ok([])
 
-    posts = []
-    for vid in vids:
-        rows = sb.table("vendor_posts").select(
-            "*, vendors(truck_name, emoji, profile_picture_url)"
-        ).eq("vendor_id", vid).order("created_at", desc=True).limit(5).execute().data or []
-        posts.extend(rows)
+    # One query for all joined trucks' posts instead of one query per truck.
+    posts = sb.table("vendor_posts").select(
+        "*, vendors(truck_name, emoji, profile_picture_url)"
+    ).in_("vendor_id", vids).order("created_at", desc=True).limit(50).execute().data or []
 
     posts.sort(key=lambda x: x.get("created_at",""), reverse=True)
     return ok(posts[:30])
@@ -3223,37 +3255,57 @@ def vendor_revenue():
 @app.route("/api/discover", methods=["GET"])
 def discover():
     state_filter = request.args.get("state", "").strip().upper()
-    dow = date.today().weekday()
+    dow = _local_today().weekday()
 
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
         "location_today, service_states, plan_active, trial_ends_at"
     ).execute().data or []
 
-    result = []
+    # First filter to the visible set...
+    active = []
     for v in vendors:
-        if not _vendor_is_active(v): continue
-
+        if not _vendor_is_active(v):
+            continue
         if state_filter:
             states = [s.strip().upper() for s in (v.get("service_states") or "").split(",") if s.strip()]
             if not states or state_filter not in states:
                 continue
+        active.append(v)
+    if not active:
+        return ok([])
 
-        sched = sb.table("vendor_schedule").select("location, hours")\
-            .eq("vendor_id", v["id"]).eq("day_of_week", dow).execute().data
-        today_sched = sched[0] if sched else {}
-        display_location = v.get("location_today") or today_sched.get("location") or ""
-        display_hours    = today_sched.get("hours") or ""
+    ids = [v["id"] for v in active]
 
-        ratings = sb.table("reviews").select("rating").eq("vendor_id", v["id"]).execute().data or []
-        member_count = sb.table("customer_trucks").select("id", count="exact")\
-            .eq("vendor_id", v["id"]).execute().count or 0
+    # ...then bulk-load schedule, ratings and member counts in 3 queries total
+    # instead of 3 per vendor (was an N+1 that got slow past a few hundred trucks).
+    sched_by = {}
+    for row in (sb.table("vendor_schedule").select("vendor_id, location, hours")
+                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
+        sched_by.setdefault(row["vendor_id"], row)
 
-        v["display_location"] = display_location
-        v["display_hours"]    = display_hours
-        v["avg_rating"]       = round(sum(r["rating"] for r in ratings)/len(ratings),1) if ratings else None
-        v["review_count"]     = len(ratings)
-        v["member_count"]     = member_count
+    ratings_by = {}
+    for row in (sb.table("reviews").select("vendor_id, rating")
+                .in_("vendor_id", ids).execute().data or []):
+        try:
+            ratings_by.setdefault(row["vendor_id"], []).append(float(row["rating"]))
+        except (TypeError, ValueError):
+            pass
+
+    members_by = {}
+    for row in (sb.table("customer_trucks").select("vendor_id")
+                .in_("vendor_id", ids).execute().data or []):
+        members_by[row["vendor_id"]] = members_by.get(row["vendor_id"], 0) + 1
+
+    result = []
+    for v in active:
+        today_sched = sched_by.get(v["id"], {})
+        rlist       = ratings_by.get(v["id"], [])
+        v["display_location"] = v.get("location_today") or today_sched.get("location") or ""
+        v["display_hours"]    = today_sched.get("hours") or ""
+        v["avg_rating"]       = round(sum(rlist)/len(rlist), 1) if rlist else None
+        v["review_count"]     = len(rlist)
+        v["member_count"]     = members_by.get(v["id"], 0)
         result.append(v)
 
     return ok(result)
