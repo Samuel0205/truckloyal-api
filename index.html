@@ -1948,10 +1948,21 @@ async function vendorLogin(){
    VENDOR SIGNUP + STRIPE CARD SETUP
 ════════════════════════════════════ */
 
-// Stripe publishable key — safe to expose in frontend
-const STRIPE_PK = 'pk_live_51SsDt1FZdL8SRWbqdgcAHF0hiAUR6n0MFVvKd3I4zIfgAts6m9X6EGjY0pQcQxHWocWNr1CH1emcxb6Y9Bq0IM1300KdSfZFq3';
+// Stripe publishable key is loaded from the backend (/api/config) so it comes
+// from the STRIPE_PUBLISHABLE_KEY env var — flip test/live entirely via Render,
+// no code change. Publishable keys are safe to expose.
+let STRIPE_PK = null;
 let stripeInstance = null;
 let stripeCardElement = null;
+
+async function loadStripeKey(){
+  if(STRIPE_PK) return STRIPE_PK;
+  try {
+    const r = await apiGet('/api/config');
+    STRIPE_PK = (r.ok && r.data?.data?.stripe_publishable_key) || null;
+  } catch(e){ STRIPE_PK = null; }
+  return STRIPE_PK;
+}
 
 function backToSignup(){
   // Return from the card screen to the signup form without creating anything.
@@ -2030,10 +2041,16 @@ function enterCardScreen(mode){
   initStripeCard();
 }
 
-function initStripeCard(){
+async function initStripeCard(){
   try {
     if(!stripeInstance){
-      stripeInstance = Stripe(STRIPE_PK);
+      const pk = await loadStripeKey();
+      if(!pk){
+        const errEl = document.getElementById('v-card-err');
+        if(errEl) showErr(errEl, 'Payment is temporarily unavailable — please try again in a moment.');
+        return;
+      }
+      stripeInstance = Stripe(pk);
     }
     const elements = stripeInstance.elements({
       fonts:[{cssSrc:'https://fonts.googleapis.com/css2?family=Nunito:wght@600&display=swap'}]

@@ -61,6 +61,14 @@ JWT_EXPIRY         = 30   # days
 GRACE_PERIOD_DAYS  = int(os.environ.get("GRACE_PERIOD_DAYS", 5))
 MONTHLY_PRICE      = 9.99
 STRIPE_PRICE_ID    = os.environ.get("STRIPE_PRICE_ID", "")
+# Publishable key served to the app (/api/config). Defaults to the live key so
+# nothing breaks before the env var is set; set STRIPE_PUBLISHABLE_KEY to a
+# pk_test_… (alongside the matching sk_test_ secret key, test price id, and test
+# webhook secret) to run the whole app in Stripe test mode — no code change.
+STRIPE_PUBLISHABLE_KEY = os.environ.get(
+    "STRIPE_PUBLISHABLE_KEY",
+    "pk_live_51SsDt1FZdL8SRWbqdgcAHF0hiAUR6n0MFVvKd3I4zIfgAts6m9X6EGjY0pQcQxHWocWNr1CH1emcxb6Y9Bq0IM1300KdSfZFq3",
+)
 # Public URL the installed app opens at — used in reset/verify emails and the
 # Stripe billing-portal return. Override with the APP_URL env var if the domain changes.
 APP_URL            = os.environ.get("APP_URL", "https://foodtruckrewards.com/app")
@@ -593,6 +601,13 @@ def landing():
 @app.route("/healthz")
 def health():
     return ok("Food Truck Rewards API v2 🚚")
+
+
+@app.route("/api/config", methods=["GET"])
+def public_config():
+    """Non-secret client config. The Stripe publishable key comes from an env
+    var so test/live is switched entirely in Render — no code change."""
+    return ok({"stripe_publishable_key": STRIPE_PUBLISHABLE_KEY})
 
 
 @app.route("/app")
