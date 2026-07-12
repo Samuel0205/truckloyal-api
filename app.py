@@ -517,7 +517,7 @@ def _purge_vendor(vendor_id: str):
 
 
 def _create_vendor_account(*, email, password, truck_name, owner_name, service_states,
-                           stripe_customer_id=None, stripe_sub_id=None,
+                           home_zip=None, stripe_customer_id=None, stripe_sub_id=None,
                            plan_active=False, promo_expires=None, trial_days=14):
     """Insert a vendor row (+ defaults, TOS record, verification email) and
     return it. Called only AFTER a subscription is confirmed (paying vendors)
@@ -539,6 +539,7 @@ def _create_vendor_account(*, email, password, truck_name, owner_name, service_s
         "slug":             slug,
         "vendor_number":    vendor_number,
         "service_states":   service_states,
+        "home_zip":         (str(home_zip).strip()[:10] if home_zip else None),
         "trial_ends_at":    trial_end,
         "promo_expires_at": promo_expires,
         "plan_active":      plan_active,
@@ -1053,6 +1054,7 @@ def vendor_signup():
     truck_name  = (body.get("truck_name") or "My Food Truck").strip()
     owner_name  = (body.get("owner_name") or "").strip()
     service_states = (body.get("service_states") or "").strip().upper()
+    home_zip    = (body.get("home_zip") or "").strip()
 
     if not email or "@" not in email or not password:
         return err("Email and password are required")
@@ -1073,7 +1075,8 @@ def vendor_signup():
 
     vendor = _create_vendor_account(
         email=email, password=password, truck_name=truck_name,
-        owner_name=owner_name, service_states=service_states, plan_active=True,
+        owner_name=owner_name, service_states=service_states, home_zip=home_zip,
+        plan_active=True,
     )
     token = make_vendor_token(vendor["id"])
     return ok({
@@ -1140,6 +1143,7 @@ def vendor_complete_signup():
     truck_name     = (body.get("truck_name") or "My Food Truck").strip()
     owner_name     = (body.get("owner_name") or "").strip()
     service_states = (body.get("service_states") or "").strip().upper()
+    home_zip       = (body.get("home_zip") or "").strip()
     promo_code     = (body.get("promo_code") or "").strip().upper()
 
     if len(password) < 8:
@@ -1194,7 +1198,7 @@ def vendor_complete_signup():
     try:
         vendor = _create_vendor_account(
             email=email, password=password, truck_name=truck_name, owner_name=owner_name,
-            service_states=service_states, stripe_customer_id=stripe_customer_id,
+            service_states=service_states, home_zip=home_zip, stripe_customer_id=stripe_customer_id,
             stripe_sub_id=subscription.id, plan_active=True, promo_expires=promo_expires,
         )
     except Exception as e:
@@ -1497,7 +1501,7 @@ def update_brand():
     body    = request.json or {}
     allowed = ["truck_name", "tagline", "emoji", "color_primary",
                "color_secondary", "profile_picture_url", "location_today",
-               "location_zip", "home_zip", "service_states"]
+               "home_zip", "service_states"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
     if "location_today" in updates:
@@ -3521,7 +3525,7 @@ def trucks_map():
     dow = _local_today().weekday()
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
-        "location_today, location_zip, home_zip, plan_active, trial_ends_at, "
+        "location_today, home_zip, plan_active, trial_ends_at, "
         "promo_expires_at, payment_failed_at"
     ).execute().data or []
 
@@ -3537,7 +3541,7 @@ def trucks_map():
 
     out = []
     for v in active:
-        zip_code = str(v.get("location_zip") or v.get("home_zip") or "").strip()[:5]
+        zip_code = str(v.get("home_zip") or "").strip()[:5]
         if not zip_code:
             continue  # nothing to place a pin on
         sched = sched_by.get(v["id"]) or {}
