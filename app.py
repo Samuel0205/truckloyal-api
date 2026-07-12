@@ -67,6 +67,13 @@ STRIPE_PRICE_ID    = os.environ.get("STRIPE_PRICE_ID", "")
 # stale/wrong-account key. It must match the mode of STRIPE_SECRET_KEY
 # (both pk_test_/sk_test_ for testing, both _live_ for production).
 STRIPE_PUBLISHABLE_KEY = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
+# Web Push (VAPID) — lets the installed PWA receive real phone notifications.
+# Generate a keypair once and set these; the public key is served to the app
+# via /api/config, the private key signs each push. Unset = web push disabled
+# (broadcasts still appear in-app).
+VAPID_PUBLIC_KEY  = os.environ.get("VAPID_PUBLIC_KEY", "")
+VAPID_PRIVATE_KEY = os.environ.get("VAPID_PRIVATE_KEY", "")
+VAPID_SUBJECT     = os.environ.get("VAPID_SUBJECT", f"mailto:{os.environ.get('SUPPORT_EMAIL', 'flavoronwheels26@gmail.com')}")
 # Public URL the installed app opens at — used in reset/verify emails and the
 # Stripe billing-portal return. Override with the APP_URL env var if the domain changes.
 APP_URL            = os.environ.get("APP_URL", "https://foodtruckrewards.com/app")
@@ -619,7 +626,10 @@ def health():
 def public_config():
     """Non-secret client config. The Stripe publishable key comes from an env
     var so test/live is switched entirely in Render — no code change."""
-    return ok({"stripe_publishable_key": STRIPE_PUBLISHABLE_KEY})
+    return ok({
+        "stripe_publishable_key": STRIPE_PUBLISHABLE_KEY,
+        "vapid_public_key":       VAPID_PUBLIC_KEY,
+    })
 
 
 @app.route("/app")
@@ -3008,6 +3018,8 @@ def send_push():
     except Exception as e:
         print(f"[NOTIFY LOG ERROR] {e}")
 
+    # ── Delivery channel 1: Expo push (only if a future native app registers
+    # ExponentPushToken tokens — the PWA never has these) ──
     tokens = []
     for m in members:
         cust = m.get("customers") or {}
@@ -3036,6 +3048,50 @@ def send_push():
         except Exception as e:
             print(f"[PUSH ERROR] {e}")
 
+    # ── Delivery channel 2: Web Push to the installed PWA (the real path
+    # today). Sends to every browser subscription of this truck's members. ──
+    member_ids = [m["customer_id"] for m in members if m.get("customer_id")]
+    if member_ids and VAPID_PRIVATE_KEY:
+        try:
+            from pywebpush import webpush, WebPushException
+            import json as _json
+            subs = sb.table("push_subscriptions").select("*")\
+                .in_("customer_id", member_ids).execute().data or []
+            note = _json.dumps({
+                "title": f"🔥 {truck_name}",
+                "body":  message,
+                "url":   "/app",
+            })
+            for s in subs:
+                try:
+                    webpush(
+                        subscription_info={
+                            "endpoint": s["endpoint"],
+                            "keys": {"p256dh": s["p256dh"], "auth": s["auth"]},
+                        },
+                        data=note,
+                        vapid_private_key=VAPID_PRIVATE_KEY,
+                        vapid_claims={"sub": VAPID_SUBJECT},
+                        timeout=10,
+                    )
+                    sent += 1
+                except WebPushException as e:
+                    code = getattr(getattr(e, "response", None), "status_code", None)
+                    if code in (404, 410):
+                        # Subscription is dead (uninstalled/expired) — prune it.
+                        try:
+                            sb.table("push_subscriptions").delete().eq("id", s["id"]).execute()
+                        except Exception:
+                            pass
+                    else:
+                        print(f"[WEBPUSH ERROR] {e}")
+                except Exception as e:
+                    print(f"[WEBPUSH ERROR] {e}")
+        except ImportError:
+            print("[WEBPUSH] pywebpush not installed — web push skipped")
+        except Exception as e:
+            print(f"[WEBPUSH] subscriptions unavailable (run the migration): {e}")
+
     return ok({"sent": sent, "total_members": len(members)})
 
 
@@ -3057,6 +3113,51 @@ def save_push_token(customer_id):
         return err("Token required")
     sb.table("customers").update({"push_token": token}).eq("id", customer_id).execute()
     return ok("saved")
+
+
+@app.route("/api/customer/push-subscribe", methods=["POST"])
+@customer_required
+@rate_limit(20, 3600)
+def push_subscribe():
+    """Store a Web Push subscription from the installed PWA so this customer
+    gets real phone notifications from their trucks."""
+    body = request.json or {}
+    sub  = body.get("subscription") or {}
+    endpoint = (sub.get("endpoint") or "").strip()
+    keys     = sub.get("keys") or {}
+    p256dh   = (keys.get("p256dh") or "").strip()
+    auth     = (keys.get("auth") or "").strip()
+    if not endpoint.startswith("https://") or not p256dh or not auth:
+        return err("Invalid subscription")
+    row = {
+        "customer_id": request.customer_id,
+        "endpoint":    endpoint[:1000],
+        "p256dh":      p256dh[:255],
+        "auth":        auth[:255],
+    }
+    try:
+        # One row per browser endpoint; re-subscribing just refreshes it.
+        sb.table("push_subscriptions").upsert(row, on_conflict="endpoint").execute()
+    except Exception as e:
+        print(f"[PUSH SUBSCRIBE] {e}")
+        return err("Notifications aren't available yet — please try again later")
+    return ok("subscribed")
+
+
+@app.route("/api/customer/notifications", methods=["GET"])
+@customer_required
+def customer_notifications():
+    """In-app inbox: recent broadcasts from every truck this customer joined —
+    so a vendor's message reaches all members even without push enabled."""
+    trucks = sb.table("customer_trucks").select("vendor_id")\
+        .eq("customer_id", request.customer_id).execute().data or []
+    vids = [t["vendor_id"] for t in trucks]
+    if not vids:
+        return ok([])
+    rows = sb.table("notifications").select(
+        "id, vendor_id, title, message, type, created_at, vendors(truck_name, emoji, profile_picture_url)"
+    ).in_("vendor_id", vids).order("created_at", desc=True).limit(20).execute().data or []
+    return ok(rows)
 
 
 # ══════════════════════════════════════════════════════

@@ -1107,6 +1107,17 @@
           <div style="font-size:22px;flex-shrink:0">›</div>
         </div>
 
+        <!-- Enable push notifications (shown until enabled or dismissed) -->
+        <div id="push-banner" style="display:none;align-items:center;gap:12px;background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:13px 15px;margin-top:12px;box-shadow:var(--sh1)">
+          <div style="font-size:22px;flex-shrink:0">🔔</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:800;font-size:13px;color:var(--tx)">Never miss a deal</div>
+            <div style="font-size:11.5px;color:var(--mu);font-weight:600;margin-top:1px">Get notified when your trucks post locations &amp; specials</div>
+          </div>
+          <button onclick="enableWebPush(false)" style="background:var(--brand);color:#fff;border:none;border-radius:10px;padding:8px 13px;font-size:12px;font-weight:800;cursor:pointer;font-family:var(--fb);flex-shrink:0">Turn on</button>
+          <button onclick="dismissPushBanner()" style="background:none;border:none;color:var(--mu);font-size:16px;cursor:pointer;padding:2px;flex-shrink:0">✕</button>
+        </div>
+
         <!-- Trucks section -->
         <div style="background:#fff;border-radius:26px 26px 0 0;margin:12px -20px 0;padding:18px 20px 0;box-shadow:0 -3px 18px rgba(180,100,40,0.08)">
 
@@ -4251,8 +4262,68 @@ function closeIOSSheet() {
 ════════════════════════════════════ */
 function requestPushPermission() {
   if (window.ReactNativeWebView) {
+    // Future native wrapper: ask it for an Expo token.
     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'request_push_token' }));
+    return;
   }
+  // PWA path (how the app ships today): Web Push via the service worker.
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    enableWebPush(true);          // already allowed — refresh the subscription silently
+  } else if (Notification.permission === 'default') {
+    maybeShowPushBanner();        // needs a user tap — offer a banner, never auto-prompt
+  }
+}
+
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  const arr     = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+async function enableWebPush(silent){
+  try {
+    if (!S.customer) return;
+    if (!silent) {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { showToast('Notifications stay off — you can enable them anytime'); return; }
+    }
+    const cfg = await apiGet('/api/config');
+    const key = cfg.ok && cfg.data?.data?.vapid_public_key;
+    if (!key) { if(!silent) showToast('Notifications aren\'t available yet'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key),
+    });
+    const r = await apiPost('/api/customer/push-subscribe', { subscription: sub.toJSON() });
+    if (r.ok) {
+      const banner = document.getElementById('push-banner');
+      if (banner) banner.style.display = 'none';
+      if (!silent) showToast('🔔 Notifications on! Your trucks can reach you now.');
+    } else if (!silent) {
+      showToast('Could not enable notifications — try again later');
+    }
+  } catch(e) {
+    if (!silent) showToast('Could not enable notifications on this device');
+  }
+}
+
+function maybeShowPushBanner(){
+  const banner = document.getElementById('push-banner');
+  if (!banner) return;
+  if (localStorage.getItem('tl_push_dismissed')) return;
+  if (!('PushManager' in window) || Notification.permission !== 'default') return;
+  banner.style.display = 'flex';
+}
+
+function dismissPushBanner(){
+  localStorage.setItem('tl_push_dismissed', '1');
+  const banner = document.getElementById('push-banner');
+  if (banner) banner.style.display = 'none';
 }
 
 async function savePushToken(token) {
@@ -4703,7 +4774,11 @@ async function sendNotification(){
   if(r.ok){
     const sent = r.data.data?.sent || 0;
     const total = r.data.data?.total_members || 0;
-    showToast(`📣 Sent! ${sent}/${total} members notified`);
+    // All members see broadcasts in their in-app feed; "sent" counts actual
+    // push notifications delivered to phones (members with push enabled).
+    showToast(sent > 0
+      ? `📣 Sent! ${sent} push notification${sent!==1?'s':''} delivered · all ${total} members see it in-app`
+      : `📣 Sent to all ${total} members' in-app feed (none have push notifications enabled yet)`);
     document.getElementById('notif-title').value='';
     document.getElementById('notif-body').value='';
     loadNotifications();
@@ -4892,18 +4967,37 @@ async function loadVendorReviews(){
 ════════════════════════════════════ */
 async function loadCustomerFeed(){
   if(!S.customer){ show('s-c-login'); return; }
-  const r = await apiGet('/api/customer/feed?customer_id='+S.customer.id);
+  // Posts + vendor broadcasts (Notify Customers messages) load together, so
+  // every member sees announcements in-app even without push enabled.
+  const [r, nr] = await Promise.all([
+    apiGet('/api/customer/feed?customer_id='+S.customer.id),
+    apiGet('/api/customer/notifications'),
+  ]);
   const el = document.getElementById('c-feed-list');
   if(!el) return;
-  const posts = r.ok ? (r.data.data||[]) : [];
-  if(!posts.length){
+  const posts  = (r.ok  ? (r.data.data||[])  : []).map(p=>({...p, _kind:'post'}));
+  const notifs = (nr.ok ? (nr.data.data||[]) : []).map(n=>({...n, _kind:'notif'}));
+  const items  = [...posts, ...notifs].sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+  if(!items.length){
     el.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--mu)"><div style="font-size:48px;margin-bottom:12px">📰</div><div style="font-size:15px;font-weight:700">No posts yet</div><div style="font-size:13px;margin-top:6px;line-height:1.6">When trucks post updates they will appear here. Join trucks to follow their feed.</div></div>';
     return;
   }
-  el.innerHTML = posts.map(p=>{
+  el.innerHTML = items.map(p=>{
     const v = p.vendors||{};
     const pic = v.profile_picture_url;
     const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (v.emoji||'🚚');
+    if(p._kind==='notif'){
+      return `
+      <div class="card" style="margin-bottom:12px;border-left:4px solid var(--brand)">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <div style="width:40px;height:40px;border-radius:50%;background:rgba(255,87,34,.12);display:flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;flex-shrink:0">${av}</div>
+          <div style="flex:1"><div style="font-weight:800;font-size:14px">${esc(v.truck_name||'Food Truck')} <span style="font-size:10px;background:rgba(255,87,34,.12);color:var(--brand);border-radius:8px;padding:2px 7px;font-weight:800;vertical-align:middle">📣 ANNOUNCEMENT</span></div>
+          <div style="font-size:11px;color:var(--mu)">${fmtMemberDate(p.created_at)}</div></div>
+        </div>
+        <div style="font-weight:800;font-size:14px;margin-bottom:3px">${esc(p.title||'')}</div>
+        <div style="font-size:14px;line-height:1.6;color:var(--tx)">${esc(p.message||'')}</div>
+      </div>`;
+    }
     return `
     <div class="card" style="margin-bottom:12px">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">

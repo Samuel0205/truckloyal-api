@@ -65,6 +65,16 @@ services:
       # /api/vendor/signup. Leave UNSET in production so every vendor must pay.
       - key: TESTER_CODE
         sync: false
+      # Web Push (VAPID) keypair — enables real phone notifications for the
+      # installed PWA. Public key is served via /api/config; private key signs
+      # pushes. Unset = push disabled (broadcasts still show in-app).
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      # Contact for push services, e.g. mailto:you@example.com (has a default).
+      - key: VAPID_SUBJECT
+        sync: false
       # Gmail account + app password used to send password-reset emails.
       - key: GMAIL_USER
         sync: false
