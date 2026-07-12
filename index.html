@@ -377,9 +377,9 @@
           <!-- Today's location — posted here, shows on customer dashboard -->
           <div class="card">
             <div class="card-title">📍 Today's Location</div>
-            <div style="font-size:12px;color:var(--mu);margin-bottom:8px;line-height:1.6">Post where you're parked <strong>right now</strong>. Customers see this on their truck page. <strong>Resets automatically at midnight</strong> — or tap Clear to remove it early.</div>
+            <div style="font-size:12px;color:var(--mu);margin-bottom:8px;line-height:1.6">Post where you're parked <strong>right now</strong>. Customers see this on their truck page, and it <strong>overrides your Weekly Schedule for today</strong>. <strong>Resets automatically at midnight</strong> — or tap Clear to remove it early. 💡 Full street addresses show up best on Maps.</div>
             <div class="field" style="margin-bottom:10px">
-              <input type="text" id="v-location-input" placeholder="e.g. Downtown Market, 5th & Main" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
+              <input type="text" id="v-location-input" placeholder="e.g. 1885 Rosewood Dr, Mansfield" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
             </div>
             <div class="field" style="margin-bottom:10px">
               <label style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px">ZIP Code (helps customers find you)</label>
@@ -746,7 +746,8 @@
     <div class="screen" id="s-v-schedule">
       <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>📅 Weekly Schedule</h1><p>Let customers know where you'll be</p></div></div>
       <div class="bp">
-        <div class="callout co-bl"><div class="co-icon">💡</div><div><div class="co-desc">Customers can see your weekly schedule in the app. Fill in the days you operate — leave blank for days you're closed.</div></div></div>
+        <div class="callout co-bl"><div class="co-icon">💡</div><div><div class="co-desc">Customers can see your weekly schedule in the app. Fill in the days you operate — leave blank for days you're closed. <strong>Full street addresses + ZIP show up best on Maps</strong> (e.g. "1885 Rosewood Dr, Mansfield").</div></div></div>
+        <div class="callout co-gd" style="margin-top:8px"><div class="co-icon">📍</div><div><div class="co-desc"><strong>Heads up:</strong> posting a <strong>Today's Location</strong> from your dashboard overrides that day's scheduled stop until midnight — customers will see the live location instead.</div></div></div>
         <div id="schedule-days"></div>
         <button class="btn btn-p" onclick="saveSchedule()">💾 Save Schedule</button>
       </div>
@@ -1200,7 +1201,7 @@
         <!-- Location today -->
         <div id="ct-location-bar" style="background:#E3F2FD;border:1.5px solid #90CAF9;border-radius:10px;padding:8px 12px;font-size:12px;color:#1565C0;margin-bottom:12px;display:none;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px">
           <div>📍 <span id="ct-location-text">–</span></div>
-          <button onclick="openInMaps(document.getElementById('ct-location-text').textContent)" style="background:#1565C0;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">🗺️ Maps</button>
+          <button onclick="openInMaps(document.getElementById('ct-location-bar')?.dataset.mapsq||document.getElementById('ct-location-text').textContent)" style="background:#1565C0;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">🗺️ Maps</button>
         </div>
         <!-- Weekly schedule -->
         <div id="ct-schedule-bar" style="display:none;background:white;border:1.5px solid var(--b2);border-radius:12px;padding:10px 14px;margin-bottom:12px">
@@ -3447,12 +3448,16 @@ async function renderTruckDash(){
       const schedHrs   = todaySched?.hours || '';
 
       if(locBar){
+        const schedZip = todaySched?.zip_code || '';
         if(loc){
-          // Vendor posted a live location today — show it with live indicator
+          // Vendor posted a live location today — overrides the schedule
           locBar.style.display='flex';
           let txt = '🟢 Live: '+loc;
           if(schedHrs) txt += ' · 🕐 '+schedHrs;
           setText('ct-location-text', txt);
+          // Precise maps query: live address + its zip (fall back to home base)
+          const liveZip = t.location_zip || t.home_zip || '';
+          locBar.dataset.mapsq = loc + (liveZip ? ', ' + liveZip : '');
         } else if(schedLoc || schedHrs){
           // No live location — show from schedule
           locBar.style.display='flex';
@@ -3460,8 +3465,11 @@ async function renderTruckDash(){
           if(schedLoc) txt += schedLoc;
           if(schedHrs) txt += (txt?' · ':'')+'🕐 '+schedHrs;
           setText('ct-location-text', '📅 '+txt);
+          const zq = schedZip || t.home_zip || '';
+          locBar.dataset.mapsq = schedLoc ? (schedLoc + (zq ? ', ' + zq : '')) : '';
         } else {
           locBar.style.display='none';
+          locBar.dataset.mapsq = '';
         }
       }
       const schedBar  = document.getElementById('ct-schedule-bar');
@@ -3481,7 +3489,7 @@ async function renderTruckDash(){
         schedBar.style.display = 'none';
       }
     } else {
-      if(locBar){ locBar.style.display=loc?'flex':'none'; if(loc) setText('ct-location-text',loc); }
+      if(locBar){ locBar.style.display=loc?'flex':'none'; if(loc){ setText('ct-location-text',loc); locBar.dataset.mapsq = loc + ((t.location_zip||t.home_zip) ? ', ' + (t.location_zip||t.home_zip) : ''); } }
       const schedBar=document.getElementById('ct-schedule-bar');
       if(schedBar) schedBar.style.display='none';
     }
@@ -4775,7 +4783,7 @@ async function loadSchedule(){
     <div class="card" style="margin-bottom:10px">
       <div style="font-weight:800;font-size:14px;margin-bottom:10px">${day}</div>
       <div class="two-col">
-        <div class="field"><label>Location</label><input type="text" id="sched-loc-${i}" placeholder="Downtown Market" value="${existing.location||''}"></div>
+        <div class="field"><label>Location</label><input type="text" id="sched-loc-${i}" placeholder="e.g. 1885 Rosewood Dr, Mansfield" value="${existing.location||''}"></div>
         <div class="field"><label>Hours</label><input type="text" id="sched-hrs-${i}" placeholder="11am–3pm" value="${existing.hours||''}"></div>
       </div>
       <div class="field" style="margin-top:6px"><label>ZIP Code</label><input type="text" id="sched-zip-${i}" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" value="${existing.zip_code||''}" style="width:140px"></div>
@@ -4934,7 +4942,8 @@ async function loadDiscover(){
     const displayHrs = t.display_hours || '';
     const locLine = displayLoc ? `📍 ${displayLoc}${displayHrs?' · 🕐 '+displayHrs:''}` : displayHrs ? `🕐 ${displayHrs}` : 'Location not posted today';
     const hasLoc = !!(displayLoc || displayHrs);
-    const mapsAddr = displayLoc || displayHrs;
+    // Include the ZIP so Google geocodes the right town ("10 main st, 44906").
+    const mapsAddr = (displayLoc || displayHrs) + (displayLoc && t.display_zip ? ', ' + t.display_zip : '');
     const states = t.service_states ? `<span style="font-size:10px;background:rgba(255,87,34,.1);color:var(--brand);border-radius:8px;padding:2px 7px;font-weight:700">${t.service_states}</span>` : '';
     const alreadyJoined = joinedSlugs.has(t.slug);
     const actionBtn = alreadyJoined
