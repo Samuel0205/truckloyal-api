@@ -436,11 +436,19 @@ def _calc_points(vendor: dict, order_total: float,
 
 
 def _get_customer_trucks(customer_id: str) -> list:
-    ct_rows = sb.table("customer_trucks").select(
-        "*, vendors(id, truck_name, tagline, emoji, slug, "
-        "color_primary, color_secondary, vendor_number, location_today, profile_picture_url, "
-        "plan_active, trial_ends_at, promo_expires_at, payment_failed_at)"
-    ).eq("customer_id", customer_id).execute().data
+    _vcols = ("id, truck_name, tagline, emoji, slug, "
+              "color_primary, color_secondary, vendor_number, location_today, profile_picture_url, "
+              "plan_active, trial_ends_at, promo_expires_at, payment_failed_at")
+    try:
+        ct_rows = sb.table("customer_trucks").select(
+            f"*, vendors({_vcols}, location_zip, home_zip)"
+        ).eq("customer_id", customer_id).execute().data
+    except Exception:
+        # zip columns not added yet — this is the critical trucks-list path, so
+        # fall back to the known-good column set rather than failing.
+        ct_rows = sb.table("customer_trucks").select(
+            f"*, vendors({_vcols})"
+        ).eq("customer_id", customer_id).execute().data
 
     result = []
     for ct in ct_rows:
@@ -1504,7 +1512,7 @@ def update_brand():
     body    = request.json or {}
     allowed = ["truck_name", "tagline", "emoji", "color_primary",
                "color_secondary", "profile_picture_url", "location_today",
-               "home_zip", "service_states"]
+               "location_zip", "home_zip", "service_states"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
     if "location_today" in updates:
@@ -1519,7 +1527,20 @@ def update_brand():
             slug = f"{base}{i}"; i += 1
         updates["slug"] = slug
 
-    vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
+    try:
+        vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
+    except Exception as e:
+        # A newer optional column (location_zip / home_zip) may not exist yet —
+        # drop those and retry so the rest of the update still lands.
+        print(f"[BRAND] update failed, retrying without optional zip columns: {e}")
+        for k in ("location_zip", "home_zip"):
+            updates.pop(k, None)
+        if not updates:
+            row = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
+            if not row:
+                return err("Vendor not found", 404)
+            return ok(_safe_vendor(row[0]))
+        vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
     return ok(_safe_vendor(vendor))
 
 
@@ -2041,13 +2062,16 @@ def search_trucks():
 @app.route("/api/truck/<slug>", methods=["GET"])
 @app.route("/api/truck/<slug>/config", methods=["GET"])
 def get_truck_config(slug):
-    row = sb.table("vendors").select(
-        "id, truck_name, tagline, emoji, slug, vendor_number, "
-        "color_primary, color_secondary, profile_picture_url, "
-        "pts_per_visit, pts_per_dollar, pts_spin_bonus, pts_streak_mult, "
-        "pts_referral, double_first_visit, streak_bonus, "
-        "plan_active, trial_ends_at, promo_expires_at, location_today, location_updated_date"
-    ).eq("slug", slug).execute().data
+    _cols = ("id, truck_name, tagline, emoji, slug, vendor_number, "
+             "color_primary, color_secondary, profile_picture_url, "
+             "pts_per_visit, pts_per_dollar, pts_spin_bonus, pts_streak_mult, "
+             "pts_referral, double_first_visit, streak_bonus, "
+             "plan_active, trial_ends_at, promo_expires_at, location_today, location_updated_date")
+    try:
+        row = sb.table("vendors").select(_cols + ", location_zip").eq("slug", slug).execute().data
+    except Exception:
+        # location_zip column not added yet
+        row = sb.table("vendors").select(_cols).eq("slug", slug).execute().data
 
     if not row: return err("Truck not found", 404)
     vendor = row[0]
@@ -3160,13 +3184,50 @@ def get_schedule():
 def save_schedule():
     body = request.json or {}
     vid  = request.vendor_id
-    days = body.get("days", [])
 
+    # Sanitize to known fields only — never pass client dicts straight to the DB.
+    days = []
+    for d in (body.get("days") or []):
+        if not isinstance(d, dict):
+            continue
+        try:
+            dow = int(d.get("day_of_week"))
+        except (TypeError, ValueError):
+            continue
+        if not 0 <= dow <= 6:
+            continue
+        row = {"vendor_id": vid, "day_of_week": dow}
+        for k in ("location", "hours", "zip_code"):
+            val = (str(d.get(k) or "")).strip()
+            if val:
+                row[k] = val[:120]
+        days.append(row)
+
+    # Snapshot the existing schedule so a failed insert can't wipe it
+    # (this endpoint replaces the whole schedule: delete then insert).
+    old = sb.table("vendor_schedule").select("*").eq("vendor_id", vid).execute().data or []
     sb.table("vendor_schedule").delete().eq("vendor_id", vid).execute()
-    if days:
-        for d in days:
-            d["vendor_id"] = vid
+    if not days:
+        return ok("saved")
+    try:
         sb.table("vendor_schedule").insert(days).execute()
+    except Exception as e:
+        # Most likely the zip_code column hasn't been added yet — retry without
+        # it so the save still succeeds (locations/hours are never lost).
+        print(f"[SCHEDULE] insert failed, retrying without zip_code: {e}")
+        stripped = [{k: v for k, v in r.items() if k != "zip_code"} for r in days]
+        try:
+            sb.table("vendor_schedule").insert(stripped).execute()
+        except Exception as e2:
+            print(f"[SCHEDULE] retry failed, restoring previous schedule: {e2}")
+            try:
+                for r in old:
+                    r.pop("id", None)
+                if old:
+                    sb.table("vendor_schedule").insert(old).execute()
+            except Exception:
+                pass
+            return err("Could not save your schedule — please try again")
     return ok("saved")
 
 
@@ -3465,10 +3526,12 @@ def discover():
     state_filter = request.args.get("state", "").strip().upper()
     dow = _local_today().weekday()
 
-    vendors = sb.table("vendors").select(
-        "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
-        "location_today, service_states, plan_active, trial_ends_at"
-    ).execute().data or []
+    _dcols = ("id, truck_name, slug, emoji, color_primary, profile_picture_url, "
+              "location_today, home_zip, service_states, plan_active, trial_ends_at")
+    try:
+        vendors = sb.table("vendors").select(_dcols + ", location_zip").execute().data or []
+    except Exception:
+        vendors = sb.table("vendors").select(_dcols).execute().data or []
 
     # First filter to the visible set...
     active = []
@@ -3488,8 +3551,13 @@ def discover():
     # ...then bulk-load schedule, ratings and member counts in 3 queries total
     # instead of 3 per vendor (was an N+1 that got slow past a few hundred trucks).
     sched_by = {}
-    for row in (sb.table("vendor_schedule").select("vendor_id, location, hours")
-                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
+    try:
+        _srows = sb.table("vendor_schedule").select("vendor_id, location, hours, zip_code")\
+            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
+    except Exception:
+        _srows = sb.table("vendor_schedule").select("vendor_id, location, hours")\
+            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
+    for row in _srows:
         sched_by.setdefault(row["vendor_id"], row)
 
     ratings_by = {}
@@ -3511,6 +3579,12 @@ def discover():
         rlist       = ratings_by.get(v["id"], [])
         v["display_location"] = v.get("location_today") or today_sched.get("location") or ""
         v["display_hours"]    = today_sched.get("hours") or ""
+        # ZIP matching the displayed location, so the Maps button can geocode
+        # precisely ("10 main st, 44906" instead of just "10 main st").
+        if v.get("location_today"):
+            v["display_zip"] = v.get("location_zip") or v.get("home_zip") or ""
+        else:
+            v["display_zip"] = today_sched.get("zip_code") or v.get("home_zip") or ""
         v["avg_rating"]       = round(sum(rlist)/len(rlist), 1) if rlist else None
         v["review_count"]     = len(rlist)
         v["member_count"]     = members_by.get(v["id"], 0)
@@ -3526,11 +3600,14 @@ def trucks_map():
     schedule), or 'active' (subscription active, no location set today). The
     client geocodes the ZIP to a pin."""
     dow = _local_today().weekday()
-    vendors = sb.table("vendors").select(
-        "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
-        "location_today, home_zip, plan_active, trial_ends_at, "
-        "promo_expires_at, payment_failed_at"
-    ).execute().data or []
+    base_cols = ("id, truck_name, slug, emoji, color_primary, profile_picture_url, "
+                 "location_today, home_zip, plan_active, trial_ends_at, "
+                 "promo_expires_at, payment_failed_at")
+    try:
+        vendors = sb.table("vendors").select(base_cols + ", location_zip").execute().data or []
+    except Exception:
+        # location_zip column not added yet — fall back to the base columns.
+        vendors = sb.table("vendors").select(base_cols).execute().data or []
 
     active = [v for v in vendors if _vendor_is_active(v)]
     if not active:
@@ -3538,22 +3615,32 @@ def trucks_map():
     ids = [v["id"] for v in active]
 
     sched_by = {}
-    for row in (sb.table("vendor_schedule").select("vendor_id, location, hours")
-                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
+    try:
+        sched_rows = sb.table("vendor_schedule").select("vendor_id, location, hours, zip_code")\
+            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
+    except Exception:
+        sched_rows = sb.table("vendor_schedule").select("vendor_id, location, hours")\
+            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
+    for row in sched_rows:
         sched_by.setdefault(row["vendor_id"], row)
 
     out = []
     for v in active:
-        zip_code = str(v.get("home_zip") or "").strip()[:5]
-        if not zip_code:
-            continue  # nothing to place a pin on
         sched = sched_by.get(v["id"]) or {}
+        # Pin at the most specific ZIP for where the truck is TODAY:
+        # live location's zip > today's scheduled stop's zip > home base zip.
         if v.get("location_today"):
             status, loc = "live", v["location_today"]
+            zip_code = v.get("location_zip") or v.get("home_zip")
         elif sched.get("location"):
             status, loc = "scheduled", sched["location"]
+            zip_code = sched.get("zip_code") or v.get("home_zip")
         else:
             status, loc = "active", ""
+            zip_code = v.get("home_zip")
+        zip_code = str(zip_code or "").strip()[:5]
+        if not zip_code:
+            continue  # nothing to place a pin on
         out.append({
             "id":         v["id"],
             "truck_name": v.get("truck_name") or "Food Truck",
