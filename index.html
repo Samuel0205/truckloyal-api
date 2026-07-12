@@ -1096,6 +1096,16 @@
           </div>
         </div>
 
+        <!-- Find trucks on a map -->
+        <div onclick="openTruckMap()" style="display:flex;align-items:center;gap:13px;background:linear-gradient(135deg,#FF5722,#FF8A50);color:#fff;border-radius:18px;padding:15px 17px;margin-top:12px;cursor:pointer;box-shadow:0 6px 18px rgba(255,87,34,.32)">
+          <div style="width:44px;height:44px;border-radius:13px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">🗺️</div>
+          <div style="flex:1">
+            <div style="font-family:var(--fd);font-size:16px;font-weight:900;line-height:1.1">Find Trucks Near You</div>
+            <div style="font-size:12px;opacity:.9;font-weight:600;margin-top:2px">See active &amp; scheduled trucks on a map</div>
+          </div>
+          <div style="font-size:22px;flex-shrink:0">›</div>
+        </div>
+
         <!-- Trucks section -->
         <div style="background:#fff;border-radius:26px 26px 0 0;margin:12px -20px 0;padding:18px 20px 0;box-shadow:0 -3px 18px rgba(180,100,40,0.08)">
 
@@ -1443,6 +1453,7 @@
     <div class="screen" id="s-c-map">
       <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-discover')">←</div><div><h1>📍 Truck Map</h1><p>Food trucks near you</p></div></div>
       <div class="bp">
+        <button onclick="locateOnMap()" style="width:100%;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb);margin-bottom:10px">📍 Center on my location</button>
         <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--mu);margin-bottom:10px">
           <span>🟢 Here now</span><span>🟡 Scheduled today</span><span>⚪ Active</span>
         </div>
@@ -2179,7 +2190,7 @@ async function submitCardSetup(){
       payment_method_id: setupIntent.payment_method,
       email: ps.email, password: ps.password, truck_name: ps.truck_name,
       owner_name: ps.owner_name, service_states: ps.service_states,
-      accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
+      home_zip: ps.home_zip, accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
     });
     if(!doneRes.ok){
       throw { msg: doneRes.data?.error || 'Payment could not be completed. Please try again.' };
@@ -2936,8 +2947,11 @@ function showHelp(){
 
 function openInMaps(address){
   if(!address || address==='–') return;
-  const encoded = encodeURIComponent(address);
-  const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
+  // Keep only the location part: strip leading emoji and anything after " · "
+  // (the hours), so Google geocodes "main st" — not "📍 main st · 🕐 5am-5pm".
+  let q = String(address).split('·')[0].replace(/[📍🕐🕒🗺️]/g,'').trim();
+  if(!q) q = String(address).trim();
+  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
   window.open(url, '_blank');
 }
 
@@ -2979,7 +2993,7 @@ function updateRefreshBtn(){
     's-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup',
     's-v-brand','s-v-points',
     's-c-login','s-c-signup','s-c-forgot','s-c-reset',
-    's-c-scan','s-c-spin','s-c-qr','s-c-review','s-c-promo',
+    's-c-scan','s-c-spin','s-c-qr','s-c-review','s-c-promo','s-c-map',
   ]);
   // Check BOTH screens — hide if either current screen is an auth screen
   const visibleScreen = document.querySelector('.screen.on')?.id || '';
@@ -3287,7 +3301,31 @@ async function geocodeZip(zip){
   } catch(e){ return null; }
 }
 
-let _truckMap = null;
+let _truckMap = null, _userMarker = null;
+// Ask for the customer's location and center the map on it. `silent` skips the
+// toasts (used on first load); the "Center on my location" button calls it
+// loudly so the browser reliably shows the permission prompt on a user tap.
+function locateOnMap(silent){
+  if(!_truckMap) return;
+  if(!navigator.geolocation){ if(!silent) showToast('Location isn\'t available on this device'); return; }
+  if(!silent) showToast('📍 Finding your location…');
+  navigator.geolocation.getCurrentPosition(
+    p => {
+      const lat = p.coords.latitude, lng = p.coords.longitude;
+      _truckMap.setView([lat, lng], 12);
+      if(_userMarker){ try { _truckMap.removeLayer(_userMarker); } catch(e){} }
+      _userMarker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1 })
+        .addTo(_truckMap).bindPopup('📍 You are here');
+    },
+    err => {
+      if(!silent) showToast(err && err.code === 1
+        ? 'Location permission denied — turn it on to center the map'
+        : 'Couldn\'t get your location — try again');
+    },
+    { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 }
+  );
+}
+
 async function openTruckMap(){
   goC('s-c-map');
   const mapEl = document.getElementById('truck-map');
@@ -3311,22 +3349,8 @@ async function openTruckMap(){
   }).addTo(_truckMap);
   setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
 
-  // Center on the customer if they allow location.
-  let userLoc = null;
-  try {
-    userLoc = await new Promise((res) => {
-      if(!navigator.geolocation){ res(null); return; }
-      navigator.geolocation.getCurrentPosition(
-        p => res({ lat: p.coords.latitude, lng: p.coords.longitude }),
-        () => res(null), { timeout: 6000, maximumAge: 300000 }
-      );
-    });
-  } catch(e){}
-  if(userLoc){
-    _truckMap.setView([userLoc.lat, userLoc.lng], 11);
-    L.circleMarker([userLoc.lat, userLoc.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1 })
-      .addTo(_truckMap).bindPopup('📍 You are here');
-  }
+  // Try to center on the customer (non-blocking — the map + pins load either way).
+  locateOnMap(true);
 
   const r = await apiGet('/api/trucks/map');
   const trucks = (r.ok && r.data?.data) || [];
@@ -3351,10 +3375,10 @@ async function openTruckMap(){
   if(noteEl){
     noteEl.textContent = trucks.length
       ? 'Pins are approximate (ZIP-level). Tap a truck for details.'
-      : 'No active trucks to show yet.';
+      : 'No active trucks with a location to show yet.';
   }
-  // If we couldn't center on the user, frame all the trucks instead.
-  if(!userLoc && pts.length){
+  // If we haven't centered on the user yet, frame all the trucks instead.
+  if(!_userMarker && pts.length){
     try { _truckMap.fitBounds(pts, { padding: [40, 40], maxZoom: 12 }); } catch(e){}
   }
 }
