@@ -49,6 +49,7 @@
 
   <div class="topbar">
     <div class="tl-logo">Food Truck Rewards</div>
+    <button id="c-notif-bell" onclick="openNotifs()" aria-label="Notifications" style="display:none;position:relative;background:none;border:none;font-size:20px;cursor:pointer;padding:4px 6px;margin-right:2px;line-height:1">🔔<span id="c-notif-badge" style="display:none;position:absolute;top:0;right:-2px;background:#E53935;color:#fff;font-size:9px;font-weight:800;border-radius:99px;min-width:15px;height:15px;line-height:15px;text-align:center;padding:0 3px;font-family:var(--fb)">0</span></button>
     <button class="tb-menu" onclick="openMenu()" aria-label="Menu">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
     </button>
@@ -1474,6 +1475,14 @@
       </div>
     </div>
 
+    <!-- CUSTOMER: NOTIFICATIONS INBOX -->
+    <div class="screen" id="s-c-notifs">
+      <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-home')">←</div><div><h1>🔔 Notifications</h1><p>Announcements from your trucks</p></div></div>
+      <div class="bp">
+        <div id="c-notifs-list"><div style="text-align:center;padding:32px;color:var(--mu);font-size:13px;font-weight:600">Loading…</div></div>
+      </div>
+    </div>
+
     <!-- CUSTOMER: SOCIAL FEED -->
     <div class="screen" id="s-c-feed">
       <div class="sh"><h1>📰 Feed</h1><p>Latest from your trucks</p></div>
@@ -1819,6 +1828,7 @@ function openMenu(){
 
 function setMode(mode){
   S.mode=mode;
+  setTimeout(updateNotifBell, 0);
   document.getElementById('mb-v').classList.toggle('on',mode==='vendor');
   document.getElementById('mb-c').classList.toggle('on',mode==='customer');
   if(mode==='vendor'){
@@ -1900,6 +1910,8 @@ function goV(id){
 
 function goC(id){
   S.cScreen=id; show(id); renderNav(CNAV,id);
+  if(id==='s-c-home')      updateNotifBell();
+  if(id==='s-c-notifs')    loadCustomerNotifs();
   if(id==='s-c-feed')      loadCustomerFeed();
   if(id==='s-c-discover')  loadDiscover();
   if(id==='s-c-leaderboard') loadLeaderboard();
@@ -2901,6 +2913,7 @@ async function customerSignup(){
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
   requestPushPermission();
+  updateNotifBell();
   showToast('🎉 Account created! Scan a food truck QR to start earning.');
 }
 
@@ -2931,6 +2944,7 @@ async function customerLogin(){
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
   requestPushPermission();
+  updateNotifBell();
   // Fetch fresh truck data in background (includes profile_picture_url)
   apiGet('/api/customer/'+S.customer.id+'/trucks').then(tr=>{
     if(tr.ok && tr.data.data){
@@ -2943,6 +2957,7 @@ async function customerLogin(){
 }
 
 function customerLogout(){
+  setTimeout(updateNotifBell, 0);
   S.customer=null; S.myTrucks=[]; S.activeTruck=null;
   ['tl_customer','tl_my_trucks','tl_active_truck','tl_active_truck_pts','tl_ctoken','tl_cpic','tl_c_remember','tl_c_remember_email'].forEach(k=>localStorage.removeItem(k));
   S.cScreen='s-c-login'; show('s-c-login'); renderNav([],'' );
@@ -2995,6 +3010,7 @@ function refreshCurrentScreen(){
       's-c-home':        ()=>renderMyTrucks(),
       's-c-truck':       ()=>renderTruckDash(),
       's-c-feed':        ()=>loadCustomerFeed(),
+      's-c-notifs':      ()=>{S._notifs=null;loadCustomerNotifs();},
       's-c-discover':    ()=>loadDiscover(),
       's-c-leaderboard': ()=>loadLeaderboard(),
       's-c-history':     ()=>renderHistory(),
@@ -4312,6 +4328,67 @@ async function enableWebPush(silent){
   }
 }
 
+/* ── In-app notification bell (works with or without phone push) ── */
+async function updateNotifBell(){
+  const bell = document.getElementById('c-notif-bell');
+  if(!bell) return;
+  const showBell = S.mode === 'customer' && !!S.customer;
+  bell.style.display = showBell ? 'inline-block' : 'none';
+  if(!showBell) return;
+  try {
+    const r = await apiGet('/api/customer/notifications');
+    const items = (r.ok && r.data?.data) || [];
+    S._notifs = items;
+    const seen = localStorage.getItem('tl_notif_seen') || '';
+    const unread = items.filter(n => (n.created_at || '') > seen).length;
+    const badge = document.getElementById('c-notif-badge');
+    if(badge){
+      badge.textContent = unread > 9 ? '9+' : String(unread);
+      badge.style.display = unread ? 'block' : 'none';
+    }
+  } catch(e){}
+}
+
+function openNotifs(){ goC('s-c-notifs'); }
+
+async function loadCustomerNotifs(){
+  const el = document.getElementById('c-notifs-list');
+  if(!el) return;
+  let items = S._notifs;
+  if(!items){
+    const r = await apiGet('/api/customer/notifications');
+    items = (r.ok && r.data?.data) || [];
+    S._notifs = items;
+  }
+  if(!items.length){
+    el.innerHTML = '<div style="text-align:center;padding:44px 20px;color:var(--mu)"><div style="font-size:44px;margin-bottom:12px">🔔</div><div style="font-size:15px;font-weight:700">No notifications yet</div><div style="font-size:13px;margin-top:6px;line-height:1.6">When your trucks send announcements they\'ll show up here — even if phone notifications are off.</div></div>';
+  } else {
+    const seen = localStorage.getItem('tl_notif_seen') || '';
+    el.innerHTML = items.map(n=>{
+      const v = n.vendors || {};
+      const pic = v.profile_picture_url;
+      const av  = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (v.emoji || '🚚');
+      const isNew = (n.created_at || '') > seen;
+      return `
+      <div class="card" style="margin-bottom:10px;${isNew ? 'border-left:4px solid var(--brand);' : 'opacity:.85;'}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+          <div style="width:36px;height:36px;border-radius:50%;background:rgba(255,87,34,.12);display:flex;align-items:center;justify-content:center;font-size:16px;overflow:hidden;flex-shrink:0">${av}</div>
+          <div style="flex:1;min-width:0"><div style="font-weight:800;font-size:13px">${esc(v.truck_name||'Food Truck')}${isNew?' <span style="font-size:9px;background:var(--brand);color:#fff;border-radius:8px;padding:2px 6px;font-weight:800;vertical-align:middle">NEW</span>':''}</div></div>
+          <div style="font-size:11px;color:var(--mu);flex-shrink:0">${fmtMemberDate(n.created_at)}</div>
+        </div>
+        <div style="font-weight:800;font-size:14px;margin-bottom:2px">${esc(n.title||'')}</div>
+        <div style="font-size:13.5px;line-height:1.6;color:var(--tx)">${esc(n.message||'')}</div>
+      </div>`;
+    }).join('');
+  }
+  // Everything is now read — remember the newest and clear the badge.
+  if(items.length && items[0].created_at){
+    localStorage.setItem('tl_notif_seen', items[0].created_at);
+  }
+  const badge = document.getElementById('c-notif-badge');
+  if(badge) badge.style.display = 'none';
+}
+
 function maybeShowPushBanner(){
   const banner = document.getElementById('push-banner');
   if (!banner) return;
@@ -4367,6 +4444,7 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
     S.cScreen='s-c-home';
     if(S.activeTruck) S.cScreen='s-c-truck';
     requestPushPermission();
+    updateNotifBell();
   }
   drawWheel(0);
 })();
