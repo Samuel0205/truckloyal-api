@@ -2948,13 +2948,17 @@ function showHelp(){
 }
 
 function openInMaps(address){
-  if(!address || address==='–') return;
-  // Keep only the location part: strip leading emoji and anything after " · "
-  // (the hours), so Google geocodes "main st" — not "📍 main st · 🕐 5am-5pm".
-  let q = String(address).split('·')[0].replace(/[📍🕐🕒🗺️]/g,'').trim();
-  if(!q) q = String(address).trim();
-  const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
-  window.open(url, '_blank');
+  if(!address) return;
+  // Build a clean query: drop hours (after " · "), strip ALL non-ASCII (emoji —
+  // removing whole characters so we never leave a lone surrogate that would make
+  // encodeURIComponent throw), and drop a leading "Live:"/"Scheduled:" label.
+  let q = String(address)
+    .split('·')[0]
+    .replace(/[^\x00-\x7F]/g, '')
+    .replace(/^\s*(live|scheduled|today)\s*:?\s*/i, '')
+    .trim();
+  if(!q || q === '–') return;
+  window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
 }
 
 function refreshCurrentScreen(){
@@ -3884,8 +3888,9 @@ function renderSpinPreview(){
     return;
   }
   const prizes=S.prizes.length?S.prizes:DEFAULT_PRIZES;
-  // Use prize_value from API or pts fallback
-  const withPts = prizes.map(p=>({...p, pts: parseInt(p.prize_value||p.pts||25)}));
+  // Points value, guarded so a non-numeric prize_value can't render "+NaN".
+  const ptsOf = p => { const n = parseInt(p.prize_value); return !isNaN(n) ? n : (parseInt(p.pts) || 0); };
+  const withPts = prizes.map(p=>({...p, pts: ptsOf(p)}));
   const sorted=[...withPts].sort((a,b)=>b.pts-a.pts);
   const maxPts=Math.max(...withPts.map(p=>p.pts));
   el.innerHTML=sorted.slice(0,6).map(p=>{
@@ -4964,10 +4969,13 @@ async function joinFromDiscover(slug){
   const r = await apiPost('/api/customer/join-truck', {customer_id:S.customer.id, slug});
   hideLoad();
   if(r.ok){
-    showToast('✅ Joined! Find it in My Trucks.');
+    showToast('✅ Joined!');
     const trucks = await apiGet('/api/customer/'+S.customer.id+'/trucks');
     if(trucks.ok){ S.myTrucks=trucks.data.data||[]; localStorage.setItem('tl_my_trucks',JSON.stringify(S.myTrucks)); }
-    goC('s-c-home'); renderMyTrucks();
+    // Open the truck's card right away instead of dumping to the home list.
+    const truck = (S.myTrucks||[]).find(t=>t.slug===slug);
+    if(truck){ S.activeTruck=truck; localStorage.setItem('tl_active_truck',JSON.stringify(truck)); renderTruckDash(); goC('s-c-truck'); }
+    else { goC('s-c-home'); renderMyTrucks(); }
   } else showToast('❌ '+(r.data?.error||'Could not join'));
 }
 
