@@ -31,9 +31,11 @@ services:
         sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
-      # Publishable key served to the app via /api/config. Set to pk_test_… (with
-      # the matching test secret/price/webhook) to run the whole app in Stripe
-      # test mode; swap back to pk_live_… for production. No code change needed.
+      # Publishable key served to the app via /api/config. REQUIRED — there is
+      # no hardcoded fallback, so if this is unset the app shows "payments not
+      # configured" instead of using a wrong key. Must match the mode of
+      # STRIPE_SECRET_KEY: pk_test_… with sk_test_… for testing, pk_live_… with
+      # sk_live_… for production. From the SAME Stripe account as the secret key.
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
