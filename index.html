@@ -2072,7 +2072,9 @@ async function initStripeCard(){
       const pk = await loadStripeKey();
       if(!pk){
         const errEl = document.getElementById('v-card-err');
-        if(errEl) showErr(errEl, 'Payment is temporarily unavailable — please try again in a moment.');
+        if(errEl) showErr(errEl, 'Payments aren\'t set up on the server yet (missing publishable key). Please contact support — nothing was charged.');
+        const btn = document.getElementById('v-card-btn');
+        if(btn){ btn.disabled = true; btn.textContent = 'Payments unavailable'; }
         return;
       }
       stripeInstance = Stripe(pk);
