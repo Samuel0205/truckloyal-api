@@ -1381,6 +1381,7 @@
     <div class="screen" id="s-c-discover">
       <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-home')">←</div><div><h1>🗺️ Discover Trucks</h1><p>Active food trucks using Food Truck Rewards</p></div></div>
       <div class="bp">
+        <button onclick="openTruckMap()" style="width:100%;background:linear-gradient(135deg,#FF5722,#ff7d4d);color:#fff;border:none;border-radius:12px;padding:13px;font-weight:800;font-size:15px;cursor:pointer;font-family:var(--fb);margin-bottom:14px;box-shadow:0 6px 16px rgba(255,87,34,.28)">📍 View Trucks on Map</button>
         <select id="discover-state-filter" onchange="loadDiscover()" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--b2);background:white;font-family:var(--fb);font-size:14px;color:var(--tx);margin-bottom:14px;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23FF5722%22 stroke-width=%222.5%22><polyline points=%226 9 12 15 18 9%22/></svg>');background-repeat:no-repeat;background-position:right 14px center;padding-right:36px">
           <option value="">🗺️ All States</option>
           <option value="AL">Alabama</option>
@@ -1435,6 +1436,18 @@
           <option value="WY">Wyoming</option>
         </select>
         <div id="discover-list"><div style="text-align:center;padding:40px;color:var(--mu)"><div style="font-size:40px;margin-bottom:12px">🔍</div><div style="font-size:15px;font-weight:700">Loading trucks...</div></div></div>
+      </div>
+    </div>
+
+    <!-- CUSTOMER: TRUCK MAP -->
+    <div class="screen" id="s-c-map">
+      <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-discover')">←</div><div><h1>📍 Truck Map</h1><p>Food trucks near you</p></div></div>
+      <div class="bp">
+        <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--mu);margin-bottom:10px">
+          <span>🟢 Here now</span><span>🟡 Scheduled today</span><span>⚪ Active</span>
+        </div>
+        <div id="truck-map" style="width:100%;height:62vh;min-height:360px;border-radius:16px;overflow:hidden;background:#e9eef2;border:1.5px solid var(--b2)"></div>
+        <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px"></div>
       </div>
     </div>
 
@@ -3241,6 +3254,109 @@ function loadScript(src){
     s.src = src; s.onload = resolve; s.onerror = reject;
     document.head.appendChild(s);
   });
+}
+function loadCss(href){
+  return new Promise((resolve) => {
+    if(document.querySelector(`link[href="${href}"]`)){resolve();return;}
+    const l = document.createElement('link');
+    l.rel = 'stylesheet'; l.href = href;
+    l.onload = resolve; l.onerror = resolve;   // resolve either way; map still works
+    document.head.appendChild(l);
+  });
+}
+
+/* ════════════════════════════════════
+   CUSTOMER: TRUCK MAP (Leaflet + OSM, ZIP-level pins)
+════════════════════════════════════ */
+// ZIP -> {lat,lng} via the free zippopotam.us API, cached in localStorage so
+// each ZIP is only looked up once ever.
+async function geocodeZip(zip){
+  if(!zip) return null;
+  const key = 'zipgeo_' + zip;
+  try { const c = localStorage.getItem(key); if(c) return JSON.parse(c); } catch(e){}
+  try {
+    const r = await fetch('https://api.zippopotam.us/us/' + encodeURIComponent(zip));
+    if(!r.ok) return null;
+    const d = await r.json();
+    const p = d.places && d.places[0];
+    if(!p) return null;
+    const coords = { lat: parseFloat(p.latitude), lng: parseFloat(p.longitude) };
+    if(isNaN(coords.lat) || isNaN(coords.lng)) return null;
+    try { localStorage.setItem(key, JSON.stringify(coords)); } catch(e){}
+    return coords;
+  } catch(e){ return null; }
+}
+
+let _truckMap = null;
+async function openTruckMap(){
+  goC('s-c-map');
+  const mapEl = document.getElementById('truck-map');
+  const noteEl = document.getElementById('truck-map-note');
+  if(noteEl) noteEl.textContent = '';
+  mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8a8a8a;font-weight:700">Loading map…</div>';
+
+  try {
+    await loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+    await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+  } catch(e){
+    mapEl.innerHTML = '<div style="padding:28px;text-align:center;color:#8a8a8a;font-weight:700">Map couldn\'t load — check your connection and try again.</div>';
+    return;
+  }
+
+  if(_truckMap){ try { _truckMap.remove(); } catch(e){} _truckMap = null; }
+  mapEl.innerHTML = '';
+  _truckMap = L.map('truck-map', { zoomControl: true }).setView([39.5, -98.35], 4); // US
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+  }).addTo(_truckMap);
+  setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
+
+  // Center on the customer if they allow location.
+  let userLoc = null;
+  try {
+    userLoc = await new Promise((res) => {
+      if(!navigator.geolocation){ res(null); return; }
+      navigator.geolocation.getCurrentPosition(
+        p => res({ lat: p.coords.latitude, lng: p.coords.longitude }),
+        () => res(null), { timeout: 6000, maximumAge: 300000 }
+      );
+    });
+  } catch(e){}
+  if(userLoc){
+    _truckMap.setView([userLoc.lat, userLoc.lng], 11);
+    L.circleMarker([userLoc.lat, userLoc.lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1 })
+      .addTo(_truckMap).bindPopup('📍 You are here');
+  }
+
+  const r = await apiGet('/api/trucks/map');
+  const trucks = (r.ok && r.data?.data) || [];
+  const pts = [];
+  for(const t of trucks){
+    const coords = await geocodeZip(t.zip);
+    if(!coords) continue;
+    const color = t.status === 'live' ? '#22c55e' : (t.status === 'scheduled' ? '#f59e0b' : '#9ca3af');
+    const badge = t.status === 'live' ? '🟢 Here now' : (t.status === 'scheduled' ? '🟡 Scheduled today' : '⚪ Active');
+    const html = `<div style="min-width:150px">
+      <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
+      <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
+      ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
+      ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
+      <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
+    </div>`;
+    L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+      .addTo(_truckMap).bindPopup(html);
+    pts.push([coords.lat, coords.lng]);
+  }
+
+  if(noteEl){
+    noteEl.textContent = trucks.length
+      ? 'Pins are approximate (ZIP-level). Tap a truck for details.'
+      : 'No active trucks to show yet.';
+  }
+  // If we couldn't center on the user, frame all the trucks instead.
+  if(!userLoc && pts.length){
+    try { _truckMap.fitBounds(pts, { padding: [40, 40], maxZoom: 12 }); } catch(e){}
+  }
 }
 
 /* ════════════════════════════════════

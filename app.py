@@ -3512,6 +3512,55 @@ def discover():
     return ok(result)
 
 
+@app.route("/api/trucks/map", methods=["GET"])
+def trucks_map():
+    """Active trucks that have a ZIP, for the customer map (ZIP-level pins).
+    status reflects today: 'live' (location set today), 'scheduled' (on today's
+    schedule), or 'active' (subscription active, no location set today). The
+    client geocodes the ZIP to a pin."""
+    dow = _local_today().weekday()
+    vendors = sb.table("vendors").select(
+        "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
+        "location_today, location_zip, home_zip, plan_active, trial_ends_at, "
+        "promo_expires_at, payment_failed_at"
+    ).execute().data or []
+
+    active = [v for v in vendors if _vendor_is_active(v)]
+    if not active:
+        return ok([])
+    ids = [v["id"] for v in active]
+
+    sched_by = {}
+    for row in (sb.table("vendor_schedule").select("vendor_id, location, hours")
+                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
+        sched_by.setdefault(row["vendor_id"], row)
+
+    out = []
+    for v in active:
+        zip_code = str(v.get("location_zip") or v.get("home_zip") or "").strip()[:5]
+        if not zip_code:
+            continue  # nothing to place a pin on
+        sched = sched_by.get(v["id"]) or {}
+        if v.get("location_today"):
+            status, loc = "live", v["location_today"]
+        elif sched.get("location"):
+            status, loc = "scheduled", sched["location"]
+        else:
+            status, loc = "active", ""
+        out.append({
+            "id":         v["id"],
+            "truck_name": v.get("truck_name") or "Food Truck",
+            "slug":       v.get("slug"),
+            "emoji":      v.get("emoji") or "🚚",
+            "color":      v.get("color_primary") or "#FF5722",
+            "zip":        zip_code,
+            "status":     status,
+            "location":   loc,
+            "hours":      sched.get("hours") or "",
+        })
+    return ok(out)
+
+
 # ══════════════════════════════════════════════════════
 #  RUN
 # ══════════════════════════════════════════════════════
