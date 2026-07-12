@@ -537,7 +537,6 @@ def _create_vendor_account(*, email, password, truck_name, owner_name, service_s
         "slug":             slug,
         "vendor_number":    vendor_number,
         "service_states":   service_states,
-        "home_zip":         (str(home_zip).strip()[:10] if home_zip else None),
         "trial_ends_at":    trial_end,
         "promo_expires_at": promo_expires,
         "plan_active":      plan_active,
@@ -565,6 +564,12 @@ def _create_vendor_account(*, email, password, truck_name, owner_name, service_s
             sb.table("vendors").update({"stripe_trial_used": True}).eq("id", vendor["id"]).execute()
         except Exception:
             pass
+    if home_zip:
+        # Best-effort — needs the home_zip column; never block signup on it.
+        try:
+            sb.table("vendors").update({"home_zip": str(home_zip).strip()[:10]}).eq("id", vendor["id"]).execute()
+        except Exception as e:
+            print(f"[SIGNUP] home_zip not saved (add the column): {e}")
 
     _record_tos_acceptance("vendors", vendor["id"])
     _send_verification("vendor", vendor["id"], email, owner_name or truck_name)
