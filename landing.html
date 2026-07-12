@@ -38,6 +38,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Food Truck Rewards">
+<link rel="icon" type="image/png" href="/icon-192.png">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
@@ -67,7 +68,7 @@
   header { position: sticky; top: 0; z-index: 50; background: rgba(255,248,240,0.9); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
   .nav-inner { max-width: 1080px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; }
   .logo { font-weight: 900; font-size: 20px; display: flex; align-items: center; gap: 8px; color: var(--dark); text-decoration: none; }
-  .logo .truck { width: 32px; height: 32px; border-radius: 9px; background: var(--orange); display: inline-flex; align-items: center; justify-content: center; font-size: 17px; }
+  .logo .truck { width: 32px; height: 32px; border-radius: 9px; object-fit: cover; display: inline-block; vertical-align: middle; }
   .nav-links { display: flex; align-items: center; gap: 26px; }
   .nav-links a.lnk { color: var(--dark); text-decoration: none; font-size: 15px; font-weight: 800; }
   .nav-links a.lnk:hover { color: var(--orange); }
@@ -174,7 +175,7 @@
   footer { background: var(--dark); color: #fff8f0; padding: 50px 20px 36px; }
   .foot-grid { max-width: 1080px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
   .foot-logo { font-size: 20px; font-weight: 900; display: flex; align-items: center; gap: 8px; }
-  .foot-logo .truck { width: 32px; height: 32px; border-radius: 9px; background: var(--orange); display: inline-flex; align-items: center; justify-content: center; font-size: 17px; }
+  .foot-logo .truck { width: 32px; height: 32px; border-radius: 9px; object-fit: cover; display: inline-block; vertical-align: middle; }
   .foot-links { display: flex; gap: 24px; flex-wrap: wrap; }
   .foot-links a { color: #f0d9c4; text-decoration: none; font-weight: 800; font-size: 15px; }
   .foot-links a:hover { color: #fff; }
@@ -213,7 +214,7 @@
 
 <header>
   <div class="nav-inner">
-    <a class="logo" href="#hero"><span class="truck">🚚</span> Food Truck Rewards</a>
+    <a class="logo" href="#hero"><img class="truck" src="/logo.png" alt="Food Truck Rewards logo"> Food Truck Rewards</a>
     <div class="nav-links">
       <a class="lnk" href="#how">How it works</a>
       <a class="lnk" href="#features">Features</a>
@@ -407,7 +408,7 @@
 
 <footer>
   <div class="foot-grid">
-    <div class="foot-logo"><span class="truck">🚚</span> Food Truck Rewards</div>
+    <div class="foot-logo"><img class="truck" src="/logo.png" alt="Food Truck Rewards logo"> Food Truck Rewards</div>
     <div class="foot-links">
       <a href="#how">How it works</a>
       <a href="#features">Features</a>

@@ -129,7 +129,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
+_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -662,6 +662,21 @@ def serve_icon_192():
 @app.route("/icon-512.png")
 def serve_icon_512():
     resp = send_from_directory('.', 'icon-512.png')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/logo.png")
+def serve_logo():
+    resp = send_from_directory('.', 'logo.png')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/favicon.ico")
+def serve_favicon():
+    # Browser tab icon — reuse the 192 logo (browsers accept PNG for favicons).
+    resp = send_from_directory('.', 'icon-192.png')
     resp.headers['Cache-Control'] = 'public, max-age=604800'
     return resp
 
