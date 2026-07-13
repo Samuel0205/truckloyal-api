@@ -3961,10 +3961,11 @@ def discover():
 
 @app.route("/api/trucks/map", methods=["GET"])
 def trucks_map():
-    """Active trucks that have a ZIP, for the customer map (ZIP-level pins).
-    status reflects today: 'live' (location set today), 'scheduled' (on today's
-    schedule), or 'active' (subscription active, no location set today). The
-    client geocodes the ZIP to a pin."""
+    """Trucks to show on the customer map. A truck appears ONLY if it has a
+    location for today: its posted Today's Location ('live') or, if none, its
+    scheduled stop for today ('scheduled'). Trucks with no location today are
+    NOT shown. Returns the address (geocoded precisely by the client) with the
+    ZIP as a coarse fallback."""
     dow = _local_today().weekday()
     base_cols = ("id, truck_name, slug, emoji, color_primary, profile_picture_url, "
                  "location_today, home_zip, plan_active, trial_ends_at, "
@@ -3993,30 +3994,35 @@ def trucks_map():
     out = []
     for v in active:
         sched = sched_by.get(v["id"]) or {}
-        # Pin at the most specific ZIP for where the truck is TODAY:
-        # live location's zip > today's scheduled stop's zip > home base zip.
+        # Today's Location wins; else today's scheduled stop. No location = no pin.
         if v.get("location_today"):
-            status, loc = "live", v["location_today"]
+            status = "live"
+            loc    = v["location_today"]
             zip_code = v.get("location_zip") or v.get("home_zip")
+            hours  = sched.get("hours") or ""
         elif sched.get("location"):
-            status, loc = "scheduled", sched["location"]
+            status = "scheduled"
+            loc    = sched["location"]
             zip_code = sched.get("zip_code") or v.get("home_zip")
+            hours  = sched.get("hours") or ""
         else:
-            status, loc = "active", ""
-            zip_code = v.get("home_zip")
+            continue  # not operating today → not on the map
+
+        loc      = str(loc or "").strip()
         zip_code = str(zip_code or "").strip()[:5]
-        if not zip_code:
-            continue  # nothing to place a pin on
+        if not loc and not zip_code:
+            continue  # nothing to geocode
         out.append({
             "id":         v["id"],
             "truck_name": v.get("truck_name") or "Food Truck",
             "slug":       v.get("slug"),
             "emoji":      v.get("emoji") or "🚚",
             "color":      v.get("color_primary") or "#FF5722",
-            "zip":        zip_code,
+            "address":    loc,       # client geocodes this precisely
+            "zip":        zip_code,  # coarse fallback
             "status":     status,
             "location":   loc,
-            "hours":      sched.get("hours") or "",
+            "hours":      hours,
         })
     return ok(out)
 

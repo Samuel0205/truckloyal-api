@@ -384,7 +384,7 @@
               <div id="v-loc-status" style="font-size:10px;font-weight:800;letter-spacing:.4px;padding:4px 10px;border-radius:99px;background:var(--s2);color:var(--mu);flex-shrink:0">NOT POSTED</div>
             </div>
             <div style="display:flex;gap:8px;margin-bottom:9px">
-              <input type="text" id="v-location-input" placeholder="Street address — e.g. 1885 Rosewood Dr" oninput="debounceSaveLocation()" style="flex:1;min-width:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:14px;font-family:var(--fb);outline:none">
+              <input type="text" id="v-location-input" placeholder="Street address — e.g. 123 Main St" autocomplete="street-address" oninput="debounceSaveLocation()" style="flex:1;min-width:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:14px;font-family:var(--fb);outline:none">
               <input type="text" id="v-location-zip" placeholder="ZIP" maxlength="5" inputmode="numeric" oninput="debounceSaveLocation()" style="width:86px;flex-shrink:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:12px 10px;color:var(--tx);font-size:14px;font-family:var(--fb);outline:none;text-align:center">
             </div>
             <div style="display:flex;gap:8px;align-items:center">
@@ -777,7 +777,7 @@
     <div class="screen" id="s-v-schedule">
       <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>📅 Weekly Schedule</h1><p>Let customers know where you'll be</p></div></div>
       <div class="bp">
-        <div class="callout co-bl"><div class="co-icon">💡</div><div><div class="co-desc">Customers can see your weekly schedule in the app. Fill in the days you operate — leave blank for days you're closed. <strong>Full street addresses + ZIP show up best on Maps</strong> (e.g. "1885 Rosewood Dr, Mansfield").</div></div></div>
+        <div class="callout co-bl"><div class="co-icon">💡</div><div><div class="co-desc">Customers can see your weekly schedule in the app. Fill in the days you operate — leave blank for days you're closed. <strong>Full street addresses + ZIP show up best on Maps</strong> (e.g. "123 Main St, Mansfield").</div></div></div>
         <div class="callout co-gd" style="margin-top:8px"><div class="co-icon">📍</div><div><div class="co-desc"><strong>Heads up:</strong> posting a <strong>Today's Location</strong> from your dashboard overrides that day's scheduled stop until midnight — customers will see the live location instead.</div></div></div>
         <div id="schedule-days"></div>
         <button class="btn btn-p" onclick="saveSchedule()">💾 Save Schedule</button>
@@ -1510,7 +1510,7 @@
       <div class="bp">
         <button onclick="locateOnMap()" style="width:100%;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb);margin-bottom:10px">📍 Center on my location</button>
         <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--mu);margin-bottom:10px">
-          <span>🟢 Here now</span><span>🟡 Scheduled today</span><span>⚪ Active</span>
+          <span>🟢 Here now</span><span>🟡 Scheduled today</span>
         </div>
         <div id="truck-map" style="width:100%;height:62vh;min-height:360px;border-radius:16px;overflow:hidden;background:#e9eef2;border:1.5px solid var(--b2)"></div>
         <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px"></div>
@@ -3385,8 +3385,29 @@ function loadCss(href){
 /* ════════════════════════════════════
    CUSTOMER: TRUCK MAP (Leaflet + OSM, ZIP-level pins)
 ════════════════════════════════════ */
-// ZIP -> {lat,lng} via the free zippopotam.us API, cached in localStorage so
-// each ZIP is only looked up once ever.
+// Street address -> {lat,lng} via the free OSM Nominatim geocoder, cached in
+// localStorage. Handles the actual posted/scheduled address ("132 Park Ave,
+// Mansfield") — precise pins, not just ZIP centroids.
+async function geocodeAddress(addr){
+  if(!addr) return null;
+  const q = String(addr).trim();
+  if(q.length < 4) return null;
+  const key = 'addrgeo_' + q.toLowerCase();
+  try { const c = localStorage.getItem(key); if(c) return JSON.parse(c); } catch(e){}
+  try {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' + encodeURIComponent(q),
+      { headers: { 'Accept': 'application/json' } });
+    if(!r.ok) return null;
+    const d = await r.json();
+    if(!d || !d.length) return null;
+    const coords = { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+    if(isNaN(coords.lat) || isNaN(coords.lng)) return null;
+    try { localStorage.setItem(key, JSON.stringify(coords)); } catch(e){}
+    return coords;
+  } catch(e){ return null; }
+}
+
+// ZIP -> {lat,lng} via the free zippopotam.us API (coarse fallback), cached.
 async function geocodeZip(zip){
   if(!zip) return null;
   const key = 'zipgeo_' + zip;
@@ -3402,6 +3423,11 @@ async function geocodeZip(zip){
     try { localStorage.setItem(key, JSON.stringify(coords)); } catch(e){}
     return coords;
   } catch(e){ return null; }
+}
+
+// Best coords for a truck: precise address first, ZIP centroid as fallback.
+async function geocodeTruck(t){
+  return (await geocodeAddress(t.address)) || (await geocodeZip(t.zip));
 }
 
 let _truckMap = null, _userMarker = null;
@@ -3459,10 +3485,10 @@ async function openTruckMap(){
   const trucks = (r.ok && r.data?.data) || [];
   const pts = [];
   for(const t of trucks){
-    const coords = await geocodeZip(t.zip);
+    const coords = await geocodeTruck(t);
     if(!coords) continue;
-    const color = t.status === 'live' ? '#22c55e' : (t.status === 'scheduled' ? '#f59e0b' : '#9ca3af');
-    const badge = t.status === 'live' ? '🟢 Here now' : (t.status === 'scheduled' ? '🟡 Scheduled today' : '⚪ Active');
+    const color = t.status === 'live' ? '#22c55e' : '#f59e0b';
+    const badge = t.status === 'live' ? '🟢 Here now' : '🟡 Scheduled today';
     const html = `<div style="min-width:150px">
       <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
       <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
@@ -3477,8 +3503,8 @@ async function openTruckMap(){
 
   if(noteEl){
     noteEl.textContent = trucks.length
-      ? 'Pins are approximate (ZIP-level). Tap a truck for details.'
-      : 'No active trucks with a location to show yet.';
+      ? 'Showing trucks operating today. Tap a pin for details.'
+      : 'No trucks have posted a location for today yet.';
   }
   // If we haven't centered on the user yet, frame all the trucks instead.
   if(!_userMarker && pts.length){
@@ -5015,7 +5041,7 @@ async function loadSchedule(){
     <div class="card" style="margin-bottom:10px">
       <div style="font-weight:800;font-size:14px;margin-bottom:10px">${day}</div>
       <div class="two-col">
-        <div class="field"><label>Location</label><input type="text" id="sched-loc-${i}" placeholder="e.g. 1885 Rosewood Dr, Mansfield" value="${existing.location||''}"></div>
+        <div class="field"><label>Location</label><input type="text" id="sched-loc-${i}" placeholder="e.g. 123 Main St, Mansfield" autocomplete="street-address" value="${existing.location||''}"></div>
         <div class="field"><label>Hours</label><input type="text" id="sched-hrs-${i}" placeholder="11am–3pm" value="${existing.hours||''}"></div>
       </div>
       <div class="field" style="margin-top:6px"><label>ZIP Code</label><input type="text" id="sched-zip-${i}" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" value="${existing.zip_code||''}" style="width:140px"></div>
