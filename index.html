@@ -194,6 +194,7 @@
           <div class="auth-form">
             <div class="field"><label>Truck / Business Name <span style="color:var(--rd)">*</span></label><input type="text" id="v-su-name" placeholder="e.g. Flavor on Wheels" required></div>
             <div class="field"><label>Your Name <span style="color:var(--rd)">*</span></label><input type="text" id="v-su-owner" placeholder="First and last name" required></div>
+            <div class="field"><label>Business Phone <span style="color:var(--rd)">*</span></label><input type="tel" id="v-su-phone" placeholder="(555) 000-0000" maxlength="14" oninput="formatPhone(this)" autocomplete="tel" required></div>
             <div class="field">
               <label>Email <span style="color:var(--rd)">*</span></label>
               <div class="field-icon-wrap">
@@ -856,6 +857,12 @@
           <div class="field"><label>Truck Name</label><input type="text" id="v-set-truck" placeholder="Your truck name"></div>
           <div class="field"><label>Phone Number</label><input type="tel" id="v-set-phone" placeholder="(555) 000-0000" maxlength="14" oninput="formatPhone(this)"></div>
           <div class="field"><label>Email Address</label><input type="email" id="v-set-email" placeholder="you@yourtruck.com" autocomplete="off"></div>
+          <div style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;margin-bottom:10px">
+            <div style="font-size:11px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px">Public contact info</div>
+            <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--tx);margin-bottom:9px;cursor:pointer">📞 Show phone on my truck page<input type="checkbox" id="v-set-phone-public" style="width:19px;height:19px;accent-color:var(--brand);flex-shrink:0"></label>
+            <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--tx);cursor:pointer">✉️ Show email on my truck page<input type="checkbox" id="v-set-email-public" style="width:19px;height:19px;accent-color:var(--brand);flex-shrink:0"></label>
+            <div style="font-size:11px;color:var(--mu);margin-top:9px;line-height:1.5">Private by default — customers only see what you turn on. Shown as Call / Email buttons when they view your truck.</div>
+          </div>
           <button class="btn btn-p btn-sm" style="width:100%" onclick="saveVendorProfile()">Save Changes</button>
         </div>
 
@@ -954,6 +961,7 @@
           <div class="auth-err" id="c-signup-err"></div>
           <div class="auth-form">
             <div class="field"><label>Full Name</label><input type="text" id="c-su-name" placeholder="Your name" autocomplete="name" required></div>
+            <div class="field"><label>Phone Number</label><input type="tel" id="c-su-phone" placeholder="(555) 000-0000" maxlength="14" oninput="formatPhone(this)" autocomplete="tel" required></div>
             <div class="field">
               <label>Email Address</label>
               <div class="field-icon-wrap">
@@ -1243,6 +1251,11 @@
         <div id="ct-location-bar" style="background:#E3F2FD;border:1.5px solid #90CAF9;border-radius:10px;padding:8px 12px;font-size:12px;color:#1565C0;margin-bottom:12px;display:none;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px">
           <div>📍 <span id="ct-location-text">–</span></div>
           <button onclick="openInMaps(document.getElementById('ct-location-bar')?.dataset.mapsq||document.getElementById('ct-location-text').textContent)" style="background:#1565C0;color:white;border:none;border-radius:8px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">🗺️ Maps</button>
+        </div>
+        <!-- Public contact — only shows what the vendor opted to share -->
+        <div id="ct-contact-bar" style="display:none;gap:8px;margin-bottom:12px">
+          <a id="ct-call-btn" href="#" style="display:none;flex:1;align-items:center;justify-content:center;gap:7px;background:#E8F5E9;border:1.5px solid #A5D6A7;color:#2E7D32;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:800;text-decoration:none">📞 <span>Call</span></a>
+          <a id="ct-email-btn" href="#" style="display:none;flex:1;align-items:center;justify-content:center;gap:7px;background:#FFF3E0;border:1.5px solid #FFCC80;color:#E65100;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:800;text-decoration:none">✉️ <span>Email</span></a>
         </div>
         <!-- Weekly schedule -->
         <div id="ct-schedule-bar" style="display:none;background:white;border:1.5px solid var(--b2);border-radius:12px;padding:10px 14px;margin-bottom:12px">
@@ -2053,6 +2066,7 @@ function backToSignup(){
 async function vendorSignup(){
   const name   = document.getElementById('v-su-name').value.trim();
   const owner  = document.getElementById('v-su-owner').value.trim();
+  const vphone = (document.getElementById('v-su-phone')?.value||'').replace(/\D/g,'');
   const email  = document.getElementById('v-su-email').value.trim();
   const pass   = document.getElementById('v-su-pass').value;
   const states = (document.getElementById('v-su-states')?.value||'').trim().toUpperCase();
@@ -2062,6 +2076,7 @@ async function vendorSignup(){
   errEl.classList.remove('show');
 
   if(!name||!owner||!email||!pass){showErr(errEl,'Please fill in all fields');return}
+  if(vphone.length!==10){showErr(errEl,'Please enter a valid 10-digit business phone number');return}
   if(pass.length<8){showErr(errEl,'Password must be at least 8 characters');return}
   if(!email.includes('@')){showErr(errEl,'Enter a valid email address');return}
   if(!states){showErr(errEl,'Enter at least one state you operate in (e.g. OH)');return}
@@ -2079,7 +2094,7 @@ async function vendorSignup(){
   }
 
   // Store signup info — account is NOT created until payment succeeds
-  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, service_states:states, home_zip:zip, accepted_tos:true, ...(promo && {promo_code:promo})};
+  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, phone:vphone, service_states:states, home_zip:zip, accepted_tos:true, ...(promo && {promo_code:promo})};
 
   // Show trial end date
   const trialEnd = new Date();
@@ -2245,7 +2260,7 @@ async function submitCardSetup(){
       payment_method_id: setupIntent.payment_method,
       email: ps.email, password: ps.password, truck_name: ps.truck_name,
       owner_name: ps.owner_name, service_states: ps.service_states,
-      home_zip: ps.home_zip, accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
+      home_zip: ps.home_zip, phone: ps.phone, accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
     });
     if(!doneRes.ok){
       throw { msg: doneRes.data?.error || 'Payment could not be completed. Please try again.' };
@@ -2887,6 +2902,8 @@ async function renderVSettings(){
   setVal('v-set-truck', S.vendor.truck_name||'');
   setVal('v-set-phone', formatPhoneDisplay(S.vendor.phone||''));
   setVal('v-set-email', S.vendor.email||'');
+  const pp=document.getElementById('v-set-phone-public'); if(pp) pp.checked=!!S.vendor.phone_public;
+  const ep=document.getElementById('v-set-email-public'); if(ep) ep.checked=!!S.vendor.email_public;
 
   // Status badge
   const statusEl = document.getElementById('v-plan-status');
@@ -2937,18 +2954,20 @@ function shareVendorLink(){
 ════════════════════════════════════ */
 async function customerSignup(){
   const name    = document.getElementById('c-su-name').value.trim();
+  const phone   = (document.getElementById('c-su-phone')?.value||'').replace(/\D/g,'');
   const email   = document.getElementById('c-su-email').value.trim();
   const pass    = document.getElementById('c-su-pass').value;
   const confirm = document.getElementById('c-su-confirm').value;
   const errEl   = document.getElementById('c-signup-err');
   errEl.classList.remove('show');
   if(!name){showErr(errEl,'Please enter your name');return}
+  if(phone.length!==10){showErr(errEl,'Please enter a valid 10-digit phone number');return}
   if(!email||!email.includes('@')){showErr(errEl,'Please enter a valid email address');return}
   if(!pass||pass.length<8){showErr(errEl,'Password must be at least 8 characters');return}
   if(pass!==confirm){showErr(errEl,'Passwords do not match');return}
   if(!document.getElementById('c-agree-tos')?.checked){showErr(errEl,'Please accept the Terms and Privacy Policy to continue');return}
   showLoad('Creating your account...');
-  const r=await apiPost('/api/customer/signup',{name,email,password:pass,accepted_tos:true});
+  const r=await apiPost('/api/customer/signup',{name,phone,email,password:pass,accepted_tos:true});
   hideLoad();
   if(!r.ok){showErr(errEl,r.data.error||'Signup failed');return}
   const ctoken = r.data.data.token;
@@ -3468,6 +3487,16 @@ async function openTruckMap(){
 async function renderTruckDash(){
   const t=S.activeTruck;
   if(!t) return;
+
+  // Public contact buttons (vendor opt-in; hidden otherwise)
+  const cbar=document.getElementById('ct-contact-bar');
+  if(cbar){
+    const ph=t.public_phone||'', em=t.public_email||'';
+    const callB=document.getElementById('ct-call-btn'), emB=document.getElementById('ct-email-btn');
+    if(callB){ callB.style.display=ph?'flex':'none'; if(ph){ callB.href='tel:+1'+ph; const sp=callB.querySelector('span'); if(sp) sp.textContent=formatPhoneDisplay(ph); } }
+    if(emB){ emB.style.display=em?'flex':'none'; if(em) emB.href='mailto:'+em; }
+    cbar.style.display=(ph||em)?'flex':'none';
+  }
 
   // Refresh per-truck data from API to ensure points are current
   if(t.id && S.customer?.id){
@@ -5546,6 +5575,8 @@ async function saveVendorProfile(){
     owner_name: owner||undefined,
     phone:      phone||undefined,
     email:      email||undefined,
+    phone_public: !!document.getElementById('v-set-phone-public')?.checked,
+    email_public: !!document.getElementById('v-set-email-public')?.checked,
   });
   hideLoad();
   if(r1.ok || r2.ok){
