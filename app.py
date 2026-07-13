@@ -20,7 +20,8 @@ from datetime import datetime, timedelta, date
 from functools import wraps
 from collections import defaultdict
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
+import csv, io
 from flask_cors import CORS
 from supabase import create_client, Client
 from jose import jwt, JWTError
@@ -81,7 +82,7 @@ APP_URL            = os.environ.get("APP_URL", "https://foodtruckrewards.com/app
 SUPPORT_EMAIL      = os.environ.get("SUPPORT_EMAIL", "flavoronwheels26@gmail.com")
 # Version of the Terms/Privacy/Vendor Agreement in force — recorded when a user
 # accepts at signup. Bump this whenever the legal docs change materially.
-TOS_VERSION        = os.environ.get("TOS_VERSION", "2026-07-07")
+TOS_VERSION        = os.environ.get("TOS_VERSION", "2026-07-13")
 # No insecure default — if unset, admin login and the cron are disabled (fail closed).
 ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "")
 # Cron/automation secret; falls back to ADMIN_PASSWORD if a dedicated one isn't set.
@@ -961,11 +962,94 @@ def admin_override_vendor(vendor_id):
                             "promo_expires_at": past, "payment_failed_at": None})
             action = "deactivated"
 
+    # Comp / extend free access — grant N days of complimentary access without
+    # a payment (early adopters, goodwill, making good on an issue). Extends
+    # from the later of now or the current promo expiry, and clears any block.
+    if "grant_days" in body:
+        try:
+            days = int(body["grant_days"])
+        except (TypeError, ValueError):
+            return err("grant_days must be a number")
+        if not 0 < days <= 3650:
+            return err("grant_days must be between 1 and 3650")
+        row = sb.table("vendors").select("promo_expires_at").eq("id", vendor_id).execute().data
+        base = datetime.utcnow()
+        cur  = _parse_dt(row[0].get("promo_expires_at")) if row else None
+        if cur and cur > base:
+            base = cur
+        updates.update({
+            "promo_expires_at": (base + timedelta(days=days)).isoformat(),
+            "payment_failed_at": None, "is_blocked": False,
+        })
+        action = f"comped {days} day(s)"
+
     if not updates:
-        return err("plan_active or is_blocked is required")
+        return err("plan_active, is_blocked, or grant_days is required")
 
     sb.table("vendors").update(updates).eq("id", vendor_id).execute()
     return ok(f"Vendor {action}")
+
+
+@app.route("/api/admin/vendor/<vendor_id>/edit", methods=["PATCH"])
+@admin_required
+def admin_edit_vendor(vendor_id):
+    """Fix a vendor's core details (typos, contact info, clear a stale
+    location) without them having to do it themselves."""
+    body    = request.json or {}
+    allowed = ["truck_name", "owner_name", "phone", "location_today", "service_states"]
+    updates = {}
+    for k in allowed:
+        if k in body:
+            updates[k] = (str(body[k]).strip() if body[k] is not None else "")
+
+    if "email" in body:
+        new_email = (body["email"] or "").strip().lower()
+        if new_email and "@" not in new_email:
+            return err("Invalid email")
+        if new_email:
+            clash = sb.table("vendors").select("id").ilike("email", new_email)\
+                .neq("id", vendor_id).execute().data
+            if clash:
+                return err("That email is already in use by another vendor")
+            updates["email"] = new_email
+
+    if "truck_name" in updates and updates["truck_name"]:
+        base = slugify(updates["truck_name"]); slug = base; i = 1
+        while sb.table("vendors").select("id").eq("slug", slug).neq("id", vendor_id).execute().data:
+            slug = f"{base}{i}"; i += 1
+        updates["slug"] = slug
+
+    if not updates:
+        return err("No editable fields provided")
+    try:
+        row = sb.table("vendors").update(updates).eq("id", vendor_id).execute().data
+    except Exception as e:
+        print(f"[ADMIN EDIT VENDOR] {e}")
+        return err("Could not save changes")
+    if not row:
+        return err("Vendor not found", 404)
+    return ok(_safe_vendor(row[0]))
+
+
+@app.route("/api/admin/vendor/<vendor_id>", methods=["DELETE"])
+@admin_required
+def admin_delete_vendor(vendor_id):
+    """Permanently delete a vendor and all their data (e.g. an account-deletion
+    request the owner must action). Cancels Stripe, wipes child rows, logs
+    anonymous churn — same as the vendor's own delete."""
+    if not sb.table("vendors").select("id").eq("id", vendor_id).execute().data:
+        return err("Vendor not found", 404)
+    try:
+        _purge_vendor(vendor_id)
+    except Exception as e:
+        print(f"[ADMIN DELETE VENDOR] {e}")
+        return err("Could not fully delete the vendor")
+    try:
+        sb.table("account_deletions").insert(
+            {"user_type": "vendor", "deleted_at": datetime.utcnow().isoformat()}).execute()
+    except Exception:
+        pass
+    return ok("Vendor permanently deleted")
 
 
 @app.route("/api/admin/customer/<customer_id>/block", methods=["POST"])
@@ -982,6 +1066,61 @@ def admin_block_customer(customer_id):
         "blocked_email": customer[0]["email"] if is_blocked else "",
     }).eq("id", customer_id).execute()
     return ok(f"Customer {'blocked' if is_blocked else 'unblocked'}")
+
+
+@app.route("/api/admin/customer/<customer_id>", methods=["GET"])
+@admin_required
+def admin_get_customer(customer_id):
+    """Full customer detail for support: profile + the trucks they've joined
+    with points/visits at each."""
+    rows = sb.table("customers").select(
+        "id, name, email, phone, created_at, is_blocked, referral_code, email_verified"
+    ).eq("id", customer_id).execute().data
+    if not rows:
+        return err("Customer not found", 404)
+    c = rows[0]
+    memberships = sb.table("customer_trucks").select(
+        "points_balance, points_total, visit_count, current_streak, "
+        "vendors(truck_name, vendor_number)"
+    ).eq("customer_id", customer_id).execute().data or []
+    c["trucks"] = [{
+        "truck_name":    (m.get("vendors") or {}).get("truck_name"),
+        "vendor_number": (m.get("vendors") or {}).get("vendor_number"),
+        "points_balance": m.get("points_balance", 0),
+        "points_total":   m.get("points_total", 0),
+        "visit_count":    m.get("visit_count", 0),
+        "current_streak": m.get("current_streak", 0),
+    } for m in memberships]
+    return ok(c)
+
+
+@app.route("/api/admin/customer/<customer_id>", methods=["DELETE"])
+@admin_required
+def admin_delete_customer(customer_id):
+    """Permanently delete a customer and all their data (account-deletion
+    request handled by the owner). Wipes child rows, logs anonymous churn."""
+    if not sb.table("customers").select("id").eq("id", customer_id).execute().data:
+        return err("Customer not found", 404)
+    for tbl in ("redemptions", "spin_results", "visits", "reviews", "promo_uses", "customer_trucks"):
+        try:
+            sb.table(tbl).delete().eq("customer_id", customer_id).execute()
+        except Exception as e:
+            print(f"[ADMIN DELETE CUSTOMER] {tbl}: {e}")
+    try:
+        sb.table("push_subscriptions").delete().eq("customer_id", customer_id).execute()
+    except Exception:
+        pass
+    try:
+        sb.table("password_reset_tokens").delete().eq("user_id", customer_id).eq("user_type", "customer").execute()
+    except Exception:
+        pass
+    sb.table("customers").delete().eq("id", customer_id).execute()
+    try:
+        sb.table("account_deletions").insert(
+            {"user_type": "customer", "deleted_at": datetime.utcnow().isoformat()}).execute()
+    except Exception:
+        pass
+    return ok("Customer permanently deleted")
 
 
 @app.route("/api/admin/customers", methods=["GET"])
@@ -1002,6 +1141,79 @@ def admin_get_customers():
     for c in customers:
         c["total_visits"] = visits_by.get(c["id"], 0)
     return ok(customers)
+
+
+def _csv_response(filename, header, rows):
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(header)
+    for r in rows:
+        w.writerow(r)
+    resp = Response(buf.getvalue(), mimetype="text/csv")
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/admin/export/vendors.csv", methods=["GET"])
+@admin_required
+def admin_export_vendors():
+    """All vendors as CSV (not capped) with member/visit counts."""
+    vendors = sb.table("vendors").select(
+        "id, vendor_number, truck_name, owner_name, email, phone, slug, "
+        "service_states, home_zip, plan_active, trial_ends_at, promo_expires_at, "
+        "payment_failed_at, is_blocked, created_at"
+    ).order("created_at", desc=True).execute().data or []
+    ids = [v["id"] for v in vendors]
+    members_by, visits_by = {}, {}
+    for chunk_start in range(0, len(ids), 200):
+        chunk = ids[chunk_start:chunk_start + 200]
+        for row in (sb.table("customer_trucks").select("vendor_id").in_("vendor_id", chunk).execute().data or []):
+            members_by[row["vendor_id"]] = members_by.get(row["vendor_id"], 0) + 1
+        for row in (sb.table("visits").select("vendor_id").in_("vendor_id", chunk).execute().data or []):
+            visits_by[row["vendor_id"]] = visits_by.get(row["vendor_id"], 0) + 1
+
+    header = ["Vendor #", "Truck Name", "Owner", "Email", "Phone", "Status",
+              "Blocked", "Members", "Total Visits", "States", "Home ZIP", "Joined"]
+    rows = []
+    for v in vendors:
+        rows.append([
+            v.get("vendor_number", ""), v.get("truck_name", ""), v.get("owner_name", ""),
+            v.get("email", ""), v.get("phone", ""), _vendor_status(v),
+            "yes" if v.get("is_blocked") else "no",
+            members_by.get(v["id"], 0), visits_by.get(v["id"], 0),
+            v.get("service_states", ""), v.get("home_zip", ""),
+            (v.get("created_at", "") or "")[:10],
+        ])
+    return _csv_response("vendors.csv", header, rows)
+
+
+@app.route("/api/admin/export/customers.csv", methods=["GET"])
+@admin_required
+def admin_export_customers():
+    """All customers as CSV (not capped) with visit counts."""
+    customers = sb.table("customers").select(
+        "id, name, email, phone, referral_code, is_blocked, email_verified, created_at"
+    ).order("created_at", desc=True).execute().data or []
+    ids = [c["id"] for c in customers]
+    visits_by = {}
+    for chunk_start in range(0, len(ids), 200):
+        chunk = ids[chunk_start:chunk_start + 200]
+        for row in (sb.table("visits").select("customer_id").in_("customer_id", chunk).execute().data or []):
+            visits_by[row["customer_id"]] = visits_by.get(row["customer_id"], 0) + 1
+
+    header = ["Name", "Email", "Phone", "Referral Code", "Email Verified",
+              "Blocked", "Total Visits", "Joined"]
+    rows = []
+    for c in customers:
+        rows.append([
+            c.get("name", ""), c.get("email", ""), c.get("phone", ""),
+            c.get("referral_code", ""), "yes" if c.get("email_verified") else "no",
+            "yes" if c.get("is_blocked") else "no", visits_by.get(c["id"], 0),
+            (c.get("created_at", "") or "")[:10],
+        ])
+    return _csv_response("customers.csv", header, rows)
+
 
 # ══════════════════════════════════════════════════════
 #  ADMIN — PROMO CODES
