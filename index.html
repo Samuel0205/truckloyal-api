@@ -359,8 +359,20 @@
           </div>
         </div>
 
+        <!-- At the Window — the register-side workflow, front and center -->
+        <div style="padding:16px 20px 0">
+          <div onclick="goV('s-v-award')" style="display:flex;align-items:center;gap:14px;background:linear-gradient(135deg,#1FA463,#2ECC8E);border-radius:18px;padding:17px 18px;cursor:pointer;box-shadow:0 8px 22px rgba(46,204,142,.35)">
+            <div style="width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0">🪟</div>
+            <div style="flex:1;min-width:0;color:#fff">
+              <div style="font-family:var(--fd);font-size:18px;font-weight:900;line-height:1.1">At the Window</div>
+              <div style="font-size:12.5px;opacity:.92;font-weight:600;margin-top:2px">Award points &amp; confirm rewards at checkout</div>
+            </div>
+            <div style="color:#fff;font-size:24px;flex-shrink:0">›</div>
+          </div>
+        </div>
+
         <!-- Today's Location — the vendor's #1 daily action, so it lives above the tools -->
-        <div style="padding:16px 20px 4px">
+        <div style="padding:12px 20px 4px">
           <div style="background:linear-gradient(135deg,#FFF8F2,#FFF3E8);border:1.5px solid rgba(255,87,34,.22);border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(255,87,34,.08)">
             <div style="display:flex;align-items:center;gap:11px;margin-bottom:11px">
               <div style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--brand),#FF8A50);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 3px 10px rgba(255,87,34,.3)">📍</div>
@@ -383,11 +395,6 @@
         </div>
 
         <div class="qa-grid">
-          <!-- PRIMARY ACTION: At the Window — award points + confirm rewards in one screen -->
-          <div class="qa wide accent-gn" onclick="goV('s-v-award')">
-            <div class="qa-ico">🪟</div>
-            <div><div class="qa-lbl" style="color:var(--gn)">At the Window</div><div class="qa-sub">Award points &amp; confirm rewards at checkout</div></div>
-          </div>
           <div class="qa" onclick="goV('s-v-rewards')"><div class="qa-ico">🎁</div><div class="qa-lbl">Rewards</div><div class="qa-sub">What customers earn</div></div>
           <div class="qa" onclick="goV('s-v-spin')"><div class="qa-ico">🎰</div><div class="qa-lbl">Spin Prizes</div><div class="qa-sub">Bonus points on wheel</div></div>
           <div class="qa" onclick="goV('s-v-notify')"><div class="qa-ico">📣</div><div class="qa-lbl">Notify</div><div class="qa-sub">Message your members</div></div>
@@ -410,41 +417,56 @@
 
         <!-- Step 1: Find the customer -->
         <div id="award-find-section">
-          <div style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;color:var(--mu);margin-bottom:10px">Step 1 — Find the customer</div>
-          <div class="award-tabs">
-            <button class="award-tab on" onclick="switchAwardTab('phone')">📱 Phone</button>
-            <button class="award-tab" onclick="switchAwardTab('id')">🔢 Rewards ID</button>
-            <button class="award-tab" onclick="switchAwardTab('qr')">📷 Scan QR</button>
-          </div>
-
-          <div class="award-method on" id="award-phone">
-            <div class="field"><label>Customer Phone Number</label>
-              <input type="tel" id="award-phone-input" placeholder="(555) 000-0000" maxlength="14" oninput="formatAwardPhone(this)" autocomplete="off">
+          <div style="background:#fff;border:1.5px solid var(--b2);border-radius:18px;padding:18px 16px;box-shadow:0 4px 16px rgba(180,100,40,.08)">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+              <div style="background:linear-gradient(135deg,#1FA463,#2ECC8E);color:#fff;font-size:10px;font-weight:900;letter-spacing:.6px;padding:5px 11px;border-radius:99px;flex-shrink:0">STEP 1</div>
+              <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx)">Find the customer</div>
             </div>
-            <button class="btn btn-s" onclick="lookupByPhone()">Find Customer →</button>
-          </div>
-
-          <div class="award-method" id="award-id">
-            <div class="field"><label>Customer Rewards ID</label>
-              <input type="text" id="award-id-input" placeholder="e.g. FTR-000001" autocomplete="off" style="font-family:monospace;letter-spacing:2px;font-size:18px;text-transform:uppercase">
+            <div class="award-tabs">
+              <button class="award-tab on" onclick="switchAwardTab('phone')">📱 Phone</button>
+              <button class="award-tab" onclick="switchAwardTab('id')">🔢 Rewards ID</button>
+              <button class="award-tab" onclick="switchAwardTab('qr')">📷 Scan QR</button>
             </div>
-            <button class="btn btn-s" onclick="lookupByID()">Find Customer →</button>
-          </div>
 
-          <div class="award-method" id="award-qr">
-            <div style="background:var(--s2);border:1.5px dashed var(--b2);border-radius:14px;padding:32px 20px;text-align:center;cursor:pointer;margin-bottom:12px" onclick="startQRScan()">
-              <div style="font-size:36px;margin-bottom:6px">📷</div>
-              <div style="font-size:14px;font-weight:700">Tap to scan customer QR</div>
-              <div style="font-size:12px;color:var(--mu);margin-top:4px">Ask them to open their Profile tab and show their QR</div>
+            <div class="award-method on" id="award-phone">
+              <div class="field"><label>Customer Phone Number</label>
+                <input type="tel" id="award-phone-input" placeholder="(555) 000-0000" maxlength="14" oninput="formatAwardPhone(this)" autocomplete="off" style="font-size:22px;font-family:var(--fd);font-weight:800;text-align:center;letter-spacing:1px">
+              </div>
+              <button onclick="lookupByPhone()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:15px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;box-shadow:0 5px 14px rgba(255,87,34,.3)">Find Customer →</button>
             </div>
-            <div style="font-size:12px;color:var(--mu);text-align:center;margin-bottom:8px">— or enter their ID —</div>
-            <div class="field"><input type="text" id="award-qr-manual" placeholder="FTR-000001" autocomplete="off" style="font-family:monospace;letter-spacing:2px;text-transform:uppercase;font-size:16px" oninput="this.value=this.value.toUpperCase()"></div>
-            <button class="btn btn-s" onclick="lookupByQRManual()">Find Customer →</button>
+
+            <div class="award-method" id="award-id">
+              <div class="field"><label>Customer Rewards ID</label>
+                <input type="text" id="award-id-input" placeholder="FTR-000001" autocomplete="off" style="font-family:monospace;letter-spacing:2px;font-size:20px;text-transform:uppercase;text-align:center">
+              </div>
+              <button onclick="lookupByID()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:15px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;box-shadow:0 5px 14px rgba(255,87,34,.3)">Find Customer →</button>
+            </div>
+
+            <div class="award-method" id="award-qr">
+              <div style="background:linear-gradient(135deg,#FFF8F2,#FFF3E8);border:2px dashed rgba(255,87,34,.4);border-radius:16px;padding:30px 20px;text-align:center;cursor:pointer;margin-bottom:12px" onclick="startQRScan()">
+                <div style="font-size:38px;margin-bottom:8px">📷</div>
+                <div style="font-size:15px;font-weight:800;color:var(--brand)">Tap to scan customer QR</div>
+                <div style="font-size:12px;color:var(--mu);margin-top:5px;line-height:1.5">Ask them to open <strong>My Rewards Card</strong> in their app</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <div style="flex:1;height:1px;background:var(--b2)"></div>
+                <div style="font-size:11px;font-weight:700;color:var(--mu)">or enter their ID</div>
+                <div style="flex:1;height:1px;background:var(--b2)"></div>
+              </div>
+              <div class="field"><input type="text" id="award-qr-manual" placeholder="FTR-000001" autocomplete="off" style="font-family:monospace;letter-spacing:2px;text-transform:uppercase;font-size:18px;text-align:center" oninput="this.value=this.value.toUpperCase()"></div>
+              <button onclick="lookupByQRManual()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:15px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;box-shadow:0 5px 14px rgba(255,87,34,.3)">Find Customer →</button>
+            </div>
           </div>
+          <div style="font-size:11.5px;color:var(--mu);text-align:center;margin-top:12px;line-height:1.6">💡 Fastest at a busy window: scan their QR — one tap, no typing.</div>
         </div>
 
         <!-- Step 2: Customer found — show everything in one place -->
         <div id="award-customer-found" style="display:none">
+
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+            <div style="background:linear-gradient(135deg,#1FA463,#2ECC8E);color:#fff;font-size:10px;font-weight:900;letter-spacing:.6px;padding:5px 11px;border-radius:99px;flex-shrink:0">STEP 2</div>
+            <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx)">Award points or confirm a reward</div>
+          </div>
 
           <!-- Customer info card -->
           <div class="card" style="border-color:rgba(46,204,142,.3);background:rgba(46,204,142,.04);margin-bottom:14px">
