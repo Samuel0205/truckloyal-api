@@ -448,7 +448,7 @@ def _get_customer_trucks(customer_id: str) -> list:
               "plan_active, trial_ends_at, promo_expires_at, payment_failed_at")
     try:
         ct_rows = sb.table("customer_trucks").select(
-            f"*, vendors({_vcols}, location_zip, home_zip)"
+            f"*, vendors({_vcols}, location_zip, home_zip, phone, email, phone_public, email_public)"
         ).eq("customer_id", customer_id).execute().data
     except Exception:
         # zip columns not added yet — this is the critical trucks-list path, so
@@ -466,6 +466,11 @@ def _get_customer_trucks(customer_id: str) -> list:
         # reappear automatically if the vendor is reactivated.
         if not is_active:
             continue
+        # Vendor contact is opt-in public (private by default)
+        vendor["public_phone"] = vendor.get("phone") if vendor.get("phone_public") else None
+        vendor["public_email"] = vendor.get("email") if vendor.get("email_public") else None
+        for k in ("phone", "email", "phone_public", "email_public"):
+            vendor.pop(k, None)
         # Strip raw billing fields — only expose the computed status to customers
         for k in ("plan_active", "trial_ends_at", "promo_expires_at", "payment_failed_at"):
             vendor.pop(k, None)
@@ -530,7 +535,7 @@ def _purge_vendor(vendor_id: str):
 
 
 def _create_vendor_account(*, email, password, truck_name, owner_name, service_states,
-                           home_zip=None, stripe_customer_id=None, stripe_sub_id=None,
+                           home_zip=None, phone=None, stripe_customer_id=None, stripe_sub_id=None,
                            plan_active=False, promo_expires=None, trial_days=14):
     """Insert a vendor row (+ defaults, TOS record, verification email) and
     return it. Called only AFTER a subscription is confirmed (paying vendors)
@@ -586,6 +591,11 @@ def _create_vendor_account(*, email, password, truck_name, owner_name, service_s
             sb.table("vendors").update({"home_zip": str(home_zip).strip()[:10]}).eq("id", vendor["id"]).execute()
         except Exception as e:
             print(f"[SIGNUP] home_zip not saved (add the column): {e}")
+    if phone:
+        try:
+            sb.table("vendors").update({"phone": re.sub(r"\D", "", str(phone))[:15]}).eq("id", vendor["id"]).execute()
+        except Exception as e:
+            print(f"[SIGNUP] phone not saved: {e}")
 
     _record_tos_acceptance("vendors", vendor["id"])
     _send_verification("vendor", vendor["id"], email, owner_name or truck_name)
@@ -1085,6 +1095,7 @@ def vendor_signup():
     owner_name  = (body.get("owner_name") or "").strip()
     service_states = (body.get("service_states") or "").strip().upper()
     home_zip    = (body.get("home_zip") or "").strip()
+    phone       = re.sub(r"\D", "", body.get("phone") or "")
 
     if not email or "@" not in email or not password:
         return err("Email and password are required")
@@ -1106,7 +1117,7 @@ def vendor_signup():
     vendor = _create_vendor_account(
         email=email, password=password, truck_name=truck_name,
         owner_name=owner_name, service_states=service_states, home_zip=home_zip,
-        plan_active=True,
+        phone=phone, plan_active=True,
     )
     token = make_vendor_token(vendor["id"])
     return ok({
@@ -1174,6 +1185,7 @@ def vendor_complete_signup():
     owner_name     = (body.get("owner_name") or "").strip()
     service_states = (body.get("service_states") or "").strip().upper()
     home_zip       = (body.get("home_zip") or "").strip()
+    phone          = re.sub(r"\D", "", body.get("phone") or "")
     promo_code     = (body.get("promo_code") or "").strip().upper()
 
     if len(password) < 8:
@@ -1190,6 +1202,9 @@ def vendor_complete_signup():
         except Exception as e:
             print(f"[COMPLETE SIGNUP] reclaim: {e}")
             return err("An account with this email already exists")
+
+    if len(phone) != 10:
+        return err("A valid 10-digit business phone number is required")
 
     # Validate promo BEFORE creating the subscription so we never charge and
     # then reject on a bad code.
@@ -1228,7 +1243,8 @@ def vendor_complete_signup():
     try:
         vendor = _create_vendor_account(
             email=email, password=password, truck_name=truck_name, owner_name=owner_name,
-            service_states=service_states, home_zip=home_zip, stripe_customer_id=stripe_customer_id,
+            service_states=service_states, home_zip=home_zip, phone=phone,
+            stripe_customer_id=stripe_customer_id,
             stripe_sub_id=subscription.id, plan_active=True, promo_expires=promo_expires,
         )
     except Exception as e:
@@ -1567,7 +1583,7 @@ def update_brand():
 @vendor_active_required
 def update_vendor_profile():
     body    = request.json or {}
-    allowed = ["owner_name", "phone", "profile_picture_url"]
+    allowed = ["owner_name", "phone", "profile_picture_url", "phone_public", "email_public"]
     updates = {k: v for k, v in body.items() if k in allowed}
 
     if body.get("email"):
@@ -1586,7 +1602,23 @@ def update_vendor_profile():
             return err("Current password is incorrect")
         updates["password_hash"] = bcrypt.hashpw(body["new_password"].encode(), bcrypt.gensalt()).decode()
 
-    vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
+    for k in ("phone_public", "email_public"):
+        if k in updates:
+            updates[k] = bool(updates[k])
+
+    try:
+        vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
+    except Exception as e:
+        # phone_public / email_public columns may not exist yet — drop and retry.
+        print(f"[PROFILE] update failed, retrying without privacy flags: {e}")
+        for k in ("phone_public", "email_public"):
+            updates.pop(k, None)
+        if not updates:
+            row = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
+            if not row:
+                return err("Vendor not found", 404)
+            return ok(_safe_vendor(row[0]))
+        vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
     return ok(_safe_vendor(vendor))
 
 
@@ -2087,7 +2119,7 @@ def get_truck_config(slug):
              "pts_referral, double_first_visit, streak_bonus, "
              "plan_active, trial_ends_at, promo_expires_at, location_today, location_updated_date")
     try:
-        row = sb.table("vendors").select(_cols + ", location_zip").eq("slug", slug).execute().data
+        row = sb.table("vendors").select(_cols + ", location_zip, phone, email, phone_public, email_public").eq("slug", slug).execute().data
     except Exception:
         # location_zip column not added yet
         row = sb.table("vendors").select(_cols).eq("slug", slug).execute().data
@@ -2101,6 +2133,12 @@ def get_truck_config(slug):
     last_loc_date = vendor.get("location_updated_date", "")
     if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
         vendor["location_today"] = ""
+
+    # Vendor contact is opt-in public (private by default)
+    vendor["public_phone"] = vendor.get("phone") if vendor.get("phone_public") else None
+    vendor["public_email"] = vendor.get("email") if vendor.get("email_public") else None
+    for k in ("phone", "email", "phone_public", "email_public"):
+        vendor.pop(k, None)
 
     rewards = sb.table("rewards").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).order("sort_order").execute().data
     prizes  = sb.table("spin_prizes").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).execute().data
@@ -2125,8 +2163,14 @@ def customer_signup():
     if not email or "@" not in email: return err("Valid email is required")
     if not password or len(password) < 8:
         return err("Password must be at least 8 characters")
+    phone = re.sub(r"\D", "", body.get("phone") or "")
+    if len(phone) != 10:
+        return err("A valid 10-digit phone number is required")
     if not body.get("accepted_tos"):
         return err("Please accept the Terms of Service and Privacy Policy to continue")
+    clash = sb.table("customers").select("id").eq("phone", phone).execute().data
+    if clash:
+        return err("An account with this phone number already exists. Please sign in.")
 
     try:
         blocked = sb.table("customers").select("id").eq("blocked_email", email).execute().data
@@ -2158,7 +2202,7 @@ def customer_signup():
 
     customer = sb.table("customers").insert({
         "name": name, "email": email,
-        "password_hash": pw_hash, "phone": "",
+        "password_hash": pw_hash, "phone": phone,
         "rewards_id": rid, "referral_code": ref_code, "referred_by": referred_by,
     }).execute().data[0]
 
