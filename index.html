@@ -4552,6 +4552,11 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
     updateNotifBell();
   }
   drawWheel(0);
+  // Keep the bell badge fresh while the app stays open. updateNotifBell()
+  // fetches only in customer mode, so this is a no-op otherwise. Also refresh
+  // when the tab regains focus (phones freeze background timers).
+  setInterval(updateNotifBell, 90000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) updateNotifBell(); });
 })();
 /* ── TRUCK SEARCH ── */
 async function searchTrucks(query) {

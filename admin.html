@@ -235,6 +235,7 @@
       var res = await fetch(API + '/api/admin/export/' + kind + '.csv', {
         headers: { 'Authorization':'Bearer '+TOKEN }
       });
+      if(res.status===401){ toast('⚠️ Session expired'); logout(); return; }
       if(!res.ok){ toast('⚠️ Export failed'); return; }
       var blob = await res.blob();
       var url  = URL.createObjectURL(blob);

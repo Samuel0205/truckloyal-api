@@ -15,8 +15,8 @@ Environment variables (Render dashboard):
   GRACE_PERIOD_DAYS          ← days before locking after failed payment (default 5)
 """
 
-import os, re, bcrypt, random, string, time
-from datetime import datetime, timedelta, date
+import os, re, bcrypt, random, string, time, hmac
+from datetime import datetime, timedelta, date, timezone
 from functools import wraps
 from collections import defaultdict
 
@@ -306,6 +306,16 @@ def _local_today():
     if _APP_TZ is not None:
         return datetime.now(_APP_TZ).date()
     return datetime.utcnow().date()
+
+
+def _local_day_start_utc():
+    """UTC timestamp for the start of the current business-local day — use for
+    created_at >= filters (e.g. 'visits today') so evening check-ins count on
+    the right day, not UTC's."""
+    if _APP_TZ is not None:
+        midnight = datetime.now(_APP_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
+        return midnight.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+    return datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
 
 
 def _safe_date(v):
@@ -829,10 +839,10 @@ def vendor_agreement():
 def reset_locations():
     """Reset all stale location_today fields — call this daily at midnight via cron."""
     body = request.json or {}
-    if not CRON_SECRET or body.get("secret") != CRON_SECRET:
+    if not CRON_SECRET or not hmac.compare_digest(str(body.get("secret") or ""), CRON_SECRET):
         return err("Unauthorized", 401)
 
-    today = date.today().isoformat()
+    today = _local_today().isoformat()
     result = sb.table("vendors")\
         .update({"location_today": ""})\
         .neq("location_updated_date", today)\
@@ -849,7 +859,7 @@ def admin_login():
     body = request.json or {}
     if not ADMIN_PASSWORD:
         return err("Admin access is not configured on this server", 503)
-    if body.get("password") != ADMIN_PASSWORD:
+    if not hmac.compare_digest(str(body.get("password") or ""), ADMIN_PASSWORD):
         return err("Invalid password", 401)
     return ok({"token": make_admin_token()})
 
@@ -1143,6 +1153,23 @@ def admin_get_customers():
     return ok(customers)
 
 
+def _fetch_all(table, columns, order_col="created_at", desc=True, page=1000):
+    """Page through a table past PostgREST's default 1000-row cap.
+
+    Uses .range() to pull successive windows until a short page signals the
+    end. Ordered so pages don't overlap/skip as rows are added concurrently.
+    """
+    out, start = [], 0
+    while True:
+        q = sb.table(table).select(columns).order(order_col, desc=desc)
+        chunk = q.range(start, start + page - 1).execute().data or []
+        out.extend(chunk)
+        if len(chunk) < page:
+            break
+        start += page
+    return out
+
+
 def _csv_response(filename, header, rows):
     buf = io.StringIO()
     w = csv.writer(buf)
@@ -1159,11 +1186,10 @@ def _csv_response(filename, header, rows):
 @admin_required
 def admin_export_vendors():
     """All vendors as CSV (not capped) with member/visit counts."""
-    vendors = sb.table("vendors").select(
+    vendors = _fetch_all("vendors",
         "id, vendor_number, truck_name, owner_name, email, phone, slug, "
         "service_states, home_zip, plan_active, trial_ends_at, promo_expires_at, "
-        "payment_failed_at, is_blocked, created_at"
-    ).order("created_at", desc=True).execute().data or []
+        "payment_failed_at, is_blocked, created_at")
     ids = [v["id"] for v in vendors]
     members_by, visits_by = {}, {}
     for chunk_start in range(0, len(ids), 200):
@@ -1192,9 +1218,8 @@ def admin_export_vendors():
 @admin_required
 def admin_export_customers():
     """All customers as CSV (not capped) with visit counts."""
-    customers = sb.table("customers").select(
-        "id, name, email, phone, referral_code, is_blocked, email_verified, created_at"
-    ).order("created_at", desc=True).execute().data or []
+    customers = _fetch_all("customers",
+        "id, name, email, phone, referral_code, is_blocked, email_verified, created_at")
     ids = [c["id"] for c in customers]
     visits_by = {}
     for chunk_start in range(0, len(ids), 200):
@@ -1526,8 +1551,8 @@ def vendor_me():
     vendor = rows[0]
 
     last_loc_date = vendor.get("location_updated_date", "")
-    if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
-        sb.table("vendors").update({"location_today": "", "location_updated_date": date.today().isoformat()})\
+    if vendor.get("location_today") and last_loc_date and last_loc_date != _local_today().isoformat():
+        sb.table("vendors").update({"location_today": "", "location_updated_date": _local_today().isoformat()})\
             .eq("id", request.vendor_id).execute()
         vendor["location_today"] = ""
 
@@ -1763,7 +1788,7 @@ def update_brand():
     updates = {k: v for k, v in body.items() if k in allowed}
 
     if "location_today" in updates:
-        updates["location_updated_date"] = date.today().isoformat()
+        updates["location_updated_date"] = _local_today().isoformat()
 
     if "truck_name" in updates:
         base = slugify(updates["truck_name"])
@@ -1809,8 +1834,10 @@ def update_vendor_profile():
     if body.get("new_password"):
         if len(body["new_password"]) < 8:
             return err("Password must be at least 8 characters")
-        vendor = sb.table("vendors").select("password_hash").eq("id", request.vendor_id).execute().data[0]
-        if not bcrypt.checkpw((body.get("current_password","")).encode(), vendor["password_hash"].encode()):
+        vrow = sb.table("vendors").select("password_hash").eq("id", request.vendor_id).execute().data
+        if not vrow or not vrow[0].get("password_hash"):
+            return err("Password change unavailable — please use forgot password")
+        if not bcrypt.checkpw((body.get("current_password","")).encode(), vrow[0]["password_hash"].encode()):
             return err("Current password is incorrect")
         updates["password_hash"] = bcrypt.hashpw(body["new_password"].encode(), bcrypt.gensalt()).decode()
 
@@ -1838,12 +1865,32 @@ def update_vendor_profile():
 @vendor_active_required
 def update_points_config():
     body    = request.json or {}
-    allowed = ["pts_per_visit", "pts_per_dollar", "pts_spin_bonus",
-               "pts_streak_mult", "pts_referral", "double_first_visit",
-               "streak_bonus", "birthday_reward", "winback_enabled", "referral_bonus"]
-    updates = {k: v for k, v in body.items() if k in allowed}
-    vendor  = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
-    return ok(_safe_vendor(vendor))
+    num_fields  = ["pts_per_visit", "pts_per_dollar", "pts_spin_bonus",
+                   "pts_streak_mult", "pts_referral"]
+    bool_fields = ["double_first_visit", "streak_bonus", "birthday_reward",
+                   "winback_enabled", "referral_bonus"]
+    updates = {}
+    for k in num_fields:
+        if k in body:
+            try:
+                val = float(body[k])
+            except (TypeError, ValueError):
+                return err(f"{k} must be a number")
+            if val < 0:
+                return err("Point values can't be negative")
+            if val > 100000:
+                return err("Point value is unreasonably large")
+            # streak multiplier stays a float; the rest are whole points.
+            updates[k] = val if k == "pts_streak_mult" else int(val)
+    for k in bool_fields:
+        if k in body:
+            updates[k] = bool(body[k])
+    if not updates:
+        return err("No valid fields to update")
+    rows = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data
+    if not rows:
+        return err("Vendor not found", 404)
+    return ok(_safe_vendor(rows[0]))
 
 
 # ── Rewards / Prizes / Tiers ──
@@ -1929,7 +1976,7 @@ def update_tier(tier_id):
 @vendor_active_required
 def vendor_analytics():
     vid   = request.vendor_id
-    today = date.today().isoformat()
+    today = _local_day_start_utc()
 
     members      = sb.table("customer_trucks").select("id, points_balance, points_total, visit_count", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
@@ -1999,7 +2046,7 @@ def vendor_members():
 @vendor_active_required
 def vendor_stats():
     vid   = request.vendor_id
-    today = date.today().isoformat()
+    today = _local_day_start_utc()
     members      = sb.table("customer_trucks").select("id", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
     redemptions  = sb.table("redemptions").select("id", count="exact").eq("vendor_id", vid).neq("status", "expired").execute()
@@ -2016,6 +2063,7 @@ def vendor_stats():
 
 @app.route("/api/vendor/find-customer", methods=["POST"])
 @vendor_active_required
+@rate_limit(60, 3600)
 def find_customer():
     body      = request.json or {}
     vendor_id = request.vendor_id
@@ -2038,11 +2086,14 @@ def find_customer():
         return err("Customer not found. Ask them to sign up at foodtruckrewards.com", 404)
 
     ct = sb.table("customer_trucks").select("*").eq("customer_id", customer["id"]).eq("vendor_id", vendor_id).execute().data
+    # Only expose enough to confirm identity at the window — a masked phone,
+    # never the email — so this lookup can't be used to harvest customer PII.
+    ph = customer.get("phone") or ""
+    masked_phone = ("•••-•••-" + ph[-4:]) if len(ph) >= 4 else ""
     return ok({
         "id":             customer["id"],
         "name":           customer["name"],
-        "phone":          customer["phone"],
-        "email":          customer["email"],
+        "phone_masked":   masked_phone,
         "rewards_id":     customer["rewards_id"],
         "points_balance": ct[0]["points_balance"] if ct else 0,
         "visit_count":    ct[0]["visit_count"]    if ct else 0,
@@ -2163,9 +2214,10 @@ def lookup_redemption_code(code):
 
     expires = r.get("expires_at")
     if expires:
-        if datetime.fromisoformat(expires.replace("Z","").replace("+00:00","").split("+")[0].strip()) < datetime.utcnow():
-            sb.table("redemptions").update({"status":"expired"}).eq("id", r["id"]).execute()
-            return err("This code has expired")
+        exp_dt = _parse_dt(expires)
+        if exp_dt and exp_dt < datetime.utcnow():
+            _expire_redemption_refund(r)
+            return err("This code has expired — the points were returned to the customer")
 
     reward_data   = r.get("rewards") or {}
     customer_data = r.get("customers") or {}
@@ -2248,16 +2300,10 @@ def vendor_upload_picture():
 
 
 @app.route("/api/customer/upload-picture", methods=["POST"])
+@customer_required
+@rate_limit(20, 3600)
 def customer_upload_picture():
-    auth = request.headers.get("X-Customer-Token", "")
-    if not auth:
-        return err("Missing customer token", 401)
-    try:
-        payload     = jwt.decode(auth, JWT_SECRET, algorithms=[JWT_ALGO])
-        customer_id = payload["sub"]
-    except JWTError:
-        return err("Invalid token", 401)
-
+    customer_id = request.customer_id
     body = request.json or {}
     b64  = body.get("image_b64", "")
     if not b64:
@@ -2298,7 +2344,7 @@ def search_trucks():
     name_rows = sb.table("vendors").select(
         "id, truck_name, emoji, slug, vendor_number, "
         "color_primary, color_secondary, tagline, plan_active, trial_ends_at, promo_expires_at"
-    ).ilike("truck_name", f"%{q}%").limit(10).execute().data
+    ).ilike("truck_name", f"%{q.replace(chr(92),chr(92)*2).replace(chr(37),chr(92)+chr(37)).replace(chr(95),chr(92)+chr(95))}%").limit(10).execute().data
     results.extend(name_rows)
 
     if q.isdigit() or (q.startswith('#') and q[1:].isdigit()):
@@ -2343,7 +2389,7 @@ def get_truck_config(slug):
         return err("This truck's loyalty program is not currently active", 403)
 
     last_loc_date = vendor.get("location_updated_date", "")
-    if vendor.get("location_today") and last_loc_date and last_loc_date != date.today().isoformat():
+    if vendor.get("location_today") and last_loc_date and last_loc_date != _local_today().isoformat():
         vendor["location_today"] = ""
 
     # Vendor contact is opt-in public (private by default)
@@ -2463,16 +2509,10 @@ def customer_login():
 
 
 @app.route("/api/customer/profile", methods=["PATCH"])
+@customer_required
+@rate_limit(30, 3600)
 def update_customer_profile():
-    auth = request.headers.get("X-Customer-Token", "")
-    if not auth:
-        return err("Missing customer token", 401)
-    try:
-        payload     = jwt.decode(auth, JWT_SECRET, algorithms=[JWT_ALGO])
-        customer_id = payload["sub"]
-    except JWTError:
-        return err("Invalid token", 401)
-
+    customer_id = request.customer_id
     body    = request.json or {}
     allowed = ["name", "profile_picture_url", "birthday"]
     updates = {k: v for k, v in body.items() if k in allowed}
@@ -2496,15 +2536,9 @@ def update_customer_profile():
 
 
 @app.route("/api/customer/delete-account", methods=["DELETE"])
+@customer_required
 def delete_customer_account():
-    auth = request.headers.get("X-Customer-Token", "")
-    if not auth: return err("Missing token", 401)
-    try:
-        payload     = jwt.decode(auth, JWT_SECRET, algorithms=[JWT_ALGO])
-        customer_id = payload["sub"]
-    except JWTError:
-        return err("Invalid token", 401)
-
+    customer_id = request.customer_id
     body = request.json or {}
     if body.get("confirm") != "DELETE":
         return err('Send {"confirm": "DELETE"} to confirm')
@@ -2648,12 +2682,17 @@ def record_visit():
                     new_tier_id = tier["id"]; tier_upgraded = True
                 break
 
-        sb.table("customer_trucks").update({
+        # Atomic same-day guard: claim today by writing last_visit_date only if
+        # it isn't already today. If a concurrent check-in already claimed it,
+        # this matches zero rows and we bail — no double points/streak.
+        claimed = sb.table("customer_trucks").update({
             "points_balance": new_balance, "points_total": new_total,
             "visit_count": new_visits, "current_streak": new_streak,
             "longest_streak": longest, "last_visit_date": today_iso,
             "current_tier_id": new_tier_id,
-        }).eq("id", ct["id"]).execute()
+        }).eq("id", ct["id"]).or_(f"last_visit_date.is.null,last_visit_date.neq.{today_iso}").execute().data
+        if not claimed:
+            return err("Already checked in today — come back tomorrow! 🔥", 409)
     else:
         breakdown  = _calc_points(vendor, 0, 0, 0)
         total_pts  = breakdown["total"]
@@ -2723,6 +2762,45 @@ def record_visit():
 # ══════════════════════════════════════════════════════
 #  CUSTOMER — REDEEM
 # ══════════════════════════════════════════════════════
+
+def _expire_redemption_refund(r):
+    """Mark a pending redemption expired and return its points to the customer.
+    Idempotent: only refunds a row that is still 'pending'."""
+    try:
+        moved = sb.table("redemptions").update({"status": "expired"})\
+            .eq("id", r["id"]).eq("status", "pending").execute().data
+        if not moved:
+            return  # already used/expired — don't double-refund
+        pts = r.get("pts_spent") or 0
+        cid = r.get("customer_id")
+        vid = r.get("vendor_id")
+        if pts and cid and vid:
+            ct = sb.table("customer_trucks").select("points_balance")\
+                .eq("customer_id", cid).eq("vendor_id", vid).execute().data
+            if ct:
+                sb.table("customer_trucks").update({
+                    "points_balance": (ct[0]["points_balance"] or 0) + pts
+                }).eq("customer_id", cid).eq("vendor_id", vid).execute()
+    except Exception as e:
+        print(f"[REDEEM EXPIRE] refund failed for {r.get('id')}: {e}")
+
+
+@app.route("/api/cron/expire-redemptions", methods=["POST"])
+@rate_limit(10, 3600)
+def cron_expire_redemptions():
+    """Sweep pending redemption codes past their expiry, mark them expired and
+    refund the points — so a customer never loses points on a code the vendor
+    never scanned. Gate with CRON_SECRET (point a scheduler at this)."""
+    body = request.json or {}
+    if not CRON_SECRET or not hmac.compare_digest(str(body.get("secret") or ""), CRON_SECRET):
+        return err("Unauthorized", 401)
+    now = datetime.utcnow().isoformat()
+    stale = sb.table("redemptions").select("id, customer_id, vendor_id, pts_spent, status")\
+        .eq("status", "pending").lt("expires_at", now).limit(500).execute().data or []
+    for r in stale:
+        _expire_redemption_refund(r)
+    return ok({"expired_and_refunded": len(stale)})
+
 
 @app.route("/api/customer/redeem", methods=["POST"])
 @customer_required
@@ -2911,7 +2989,7 @@ def forgot_password():
         user = row[0]
 
         try:
-            sb.table("password_reset_tokens").delete().eq("user_id", user["id"]).eq("used", False).execute()
+            sb.table("password_reset_tokens").delete().eq("user_id", user["id"]).eq("used", False).or_("purpose.is.null,purpose.eq.reset").execute()
         except Exception:
             pass
 
@@ -2992,7 +3070,7 @@ def reset_password():
         "used": True,
     }).eq("id", matched["id"]).execute()
 
-    sb.table("password_reset_tokens").delete().eq("user_id", matched["user_id"]).eq("used", False).execute()
+    sb.table("password_reset_tokens").delete().eq("user_id", matched["user_id"]).eq("used", False).or_("purpose.is.null,purpose.eq.reset").execute()
 
     return ok("Password updated successfully. You can now sign in with your new password.")
 
@@ -3195,55 +3273,57 @@ def stripe_webhook():
         print(f"[STRIPE webhook] signature/parse failed: {e}")
         return err("Invalid signature", 400)
 
-    # Idempotency: Stripe re-delivers events on any non-2xx or timeout, so the
-    # same event can arrive several times. Record processed ids and skip dupes.
-    # Best-effort: if the table doesn't exist the webhook still works (just not
-    # de-duped) — create stripe_events to enable it.
+    # Idempotency: skip only events we've already FULLY processed (the id is
+    # recorded after successful handling below — never before, so a mid-handler
+    # failure can be retried by Stripe instead of being skipped as a duplicate).
     try:
         if sb.table("stripe_events").select("id").eq("id", event["id"]).execute().data:
             return ok("duplicate ignored")
-        sb.table("stripe_events").insert({"id": event["id"], "type": event["type"]}).execute()
     except Exception as e:
-        print(f"[STRIPE webhook] idempotency store unavailable: {e}")
+        print(f"[STRIPE webhook] idempotency check unavailable: {e}")
 
     etype = event["type"]
     obj   = event["data"]["object"]
+    cust  = obj.get("customer")
 
-    if etype == "customer.subscription.created":
-        sb.table("vendors").update({
-            "stripe_sub_id": obj["id"], "plan_active": True,
-            "payment_failed_at": None,
-        }).eq("stripe_customer_id", obj["customer"]).execute()
+    try:
+        if etype in ("customer.subscription.created", "customer.subscription.updated"):
+            # Re-fetch the live subscription so an out-of-order delivery (a stale
+            # 'updated' arriving after a 'deleted') can't reactivate a cancelled sub.
+            status = obj.get("status")
+            try:
+                fresh = _stripe().Subscription.retrieve(obj["id"])
+                status = fresh.get("status", status)
+            except Exception as e:
+                print(f"[STRIPE webhook] sub re-fetch failed, using event status: {e}")
+            active = status in ("active", "trialing")
+            updates = {"plan_active": active, "stripe_sub_id": obj["id"]}
+            if active:
+                updates["payment_failed_at"] = None
+            sb.table("vendors").update(updates).eq("stripe_customer_id", cust).execute()
 
-    elif etype == "customer.subscription.updated":
-        active = obj["status"] in ("active", "trialing")
-        updates = {"plan_active": active, "stripe_sub_id": obj["id"]}
-        if active:
-            # Subscription is healthy again — clear any stale payment-failure flag
-            updates["payment_failed_at"] = None
-        sb.table("vendors").update(updates).eq("stripe_customer_id", obj["customer"]).execute()
+        elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
+            sb.table("vendors").update({"plan_active": False}).eq("stripe_customer_id", cust).execute()
 
-    elif etype in ("customer.subscription.deleted", "customer.subscription.paused"):
-        sb.table("vendors").update({
-            "plan_active": False,
-        }).eq("stripe_customer_id", obj["customer"]).execute()
+        elif etype == "invoice.payment_failed":
+            # Suspend, but stamp the grace clock only on the FIRST failure so
+            # Stripe's multi-week dunning retries don't keep resetting grace.
+            sb.table("vendors").update({"plan_active": False}).eq("stripe_customer_id", cust).execute()
+            sb.table("vendors").update({"payment_failed_at": datetime.utcnow().isoformat()})\
+                .eq("stripe_customer_id", cust).is_("payment_failed_at", "null").execute()
 
-    elif etype == "invoice.payment_failed":
-        cust = obj["customer"]
-        # Suspend the paid plan, but only stamp the grace clock on the FIRST
-        # failure. Stripe retries a declining card several times over ~2-3
-        # weeks; overwriting payment_failed_at each retry would restart the
-        # grace window every time and hand the vendor weeks of free access.
-        sb.table("vendors").update({"plan_active": False})\
-            .eq("stripe_customer_id", cust).execute()
-        sb.table("vendors").update({"payment_failed_at": datetime.utcnow().isoformat()})\
-            .eq("stripe_customer_id", cust).is_("payment_failed_at", "null").execute()
+        elif etype == "invoice.payment_succeeded":
+            sb.table("vendors").update({"plan_active": True, "payment_failed_at": None})\
+                .eq("stripe_customer_id", cust).execute()
+    except Exception as e:
+        # Do NOT record the event as processed — return 500 so Stripe retries it.
+        print(f"[STRIPE webhook] handler error for {etype}: {e}")
+        return err("handler error", 500)
 
-    elif etype == "invoice.payment_succeeded":
-        sb.table("vendors").update({
-            "plan_active":        True,
-            "payment_failed_at":  None,
-        }).eq("stripe_customer_id", obj["customer"]).execute()
+    try:
+        sb.table("stripe_events").insert({"id": event["id"], "type": etype}).execute()
+    except Exception as e:
+        print(f"[STRIPE webhook] could not record event id: {e}")
 
     return ok("received")
 
@@ -3251,6 +3331,37 @@ def stripe_webhook():
 # ══════════════════════════════════════════════════════
 #  PUSH NOTIFICATIONS
 # ══════════════════════════════════════════════════════
+
+def _deliver_web_push(subs, note):
+    """Send Web Push to a list of subscription rows off the request thread.
+    Prunes dead (404/410) subscriptions. Best-effort; failures are logged."""
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        print("[WEBPUSH] pywebpush not installed — web push skipped")
+        return
+    for s in subs:
+        try:
+            webpush(
+                subscription_info={"endpoint": s["endpoint"],
+                                   "keys": {"p256dh": s["p256dh"], "auth": s["auth"]}},
+                data=note,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_SUBJECT},
+                timeout=5,
+            )
+        except WebPushException as e:
+            code = getattr(getattr(e, "response", None), "status_code", None)
+            if code in (404, 410):
+                try:
+                    sb.table("push_subscriptions").delete().eq("id", s["id"]).execute()
+                except Exception:
+                    pass
+            else:
+                print(f"[WEBPUSH ERROR] {e}")
+        except Exception as e:
+            print(f"[WEBPUSH ERROR] {e}")
+
 
 @app.route("/api/vendor/push", methods=["POST"])
 @vendor_active_required
@@ -3314,50 +3425,23 @@ def send_push():
             print(f"[PUSH ERROR] {e}")
 
     # ── Delivery channel 2: Web Push to the installed PWA (the real path
-    # today). Sends to every browser subscription of this truck's members. ──
+    # today). Sent on a background thread so a batch of slow/dead endpoints
+    # can't tie up the request thread (each push has its own short timeout). ──
     member_ids = [m["customer_id"] for m in members if m.get("customer_id")]
+    queued = 0
     if member_ids and VAPID_PRIVATE_KEY:
         try:
-            from pywebpush import webpush, WebPushException
-            import json as _json
             subs = sb.table("push_subscriptions").select("*")\
                 .in_("customer_id", member_ids).execute().data or []
-            note = _json.dumps({
-                "title": f"🔥 {truck_name}",
-                "body":  message,
-                "url":   "/app",
-            })
-            for s in subs:
-                try:
-                    webpush(
-                        subscription_info={
-                            "endpoint": s["endpoint"],
-                            "keys": {"p256dh": s["p256dh"], "auth": s["auth"]},
-                        },
-                        data=note,
-                        vapid_private_key=VAPID_PRIVATE_KEY,
-                        vapid_claims={"sub": VAPID_SUBJECT},
-                        timeout=10,
-                    )
-                    sent += 1
-                except WebPushException as e:
-                    code = getattr(getattr(e, "response", None), "status_code", None)
-                    if code in (404, 410):
-                        # Subscription is dead (uninstalled/expired) — prune it.
-                        try:
-                            sb.table("push_subscriptions").delete().eq("id", s["id"]).execute()
-                        except Exception:
-                            pass
-                    else:
-                        print(f"[WEBPUSH ERROR] {e}")
-                except Exception as e:
-                    print(f"[WEBPUSH ERROR] {e}")
-        except ImportError:
-            print("[WEBPUSH] pywebpush not installed — web push skipped")
+            queued = len(subs)
+            if subs:
+                import json as _json, threading
+                note = _json.dumps({"title": f"🔥 {truck_name}", "body": message, "url": "/app"})
+                threading.Thread(target=_deliver_web_push, args=(subs, note), daemon=True).start()
         except Exception as e:
             print(f"[WEBPUSH] subscriptions unavailable (run the migration): {e}")
 
-    return ok({"sent": sent, "total_members": len(members)})
+    return ok({"sent": sent + queued, "total_members": len(members)})
 
 
 @app.route("/api/vendor/notifications", methods=["GET"])
@@ -3512,22 +3596,28 @@ def apply_promo():
         .eq("customer_id", customer_id).execute().data
     if used: return err("You've already used this promo")
 
+    # A bonus-points promo can only be applied by a member of this truck — and
+    # we must NOT burn the one-time use if the points can't actually be credited.
+    ct = None
+    if p["promo_type"] == "bonus_points":
+        ct = sb.table("customer_trucks").select("points_balance, points_total")\
+            .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
+        if not ct:
+            return err("Join this truck (check in once) before applying a points promo")
+
     sb.table("promo_uses").insert({"promo_id": p["id"], "customer_id": customer_id, "vendor_id": vendor_id}).execute()
     sb.table("promos").update({"used_count": (p.get("used_count") or 0) + 1}).eq("id", p["id"]).execute()
 
     bonus_pts = 0
-    if p["promo_type"] == "bonus_points":
+    if p["promo_type"] == "bonus_points" and ct:
         try:
             bonus_pts = int(float(p.get("value") or 0))
         except (TypeError, ValueError):
             bonus_pts = 0
-        ct = sb.table("customer_trucks").select("points_balance, points_total")\
-            .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
-        if ct:
-            new_bal = ct[0]["points_balance"] + bonus_pts
-            new_tot = ct[0]["points_total"] + bonus_pts
-            sb.table("customer_trucks").update({"points_balance": new_bal, "points_total": new_tot})\
-                .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute()
+        new_bal = (ct[0]["points_balance"] or 0) + bonus_pts
+        new_tot = (ct[0]["points_total"] or 0) + bonus_pts
+        sb.table("customer_trucks").update({"points_balance": new_bal, "points_total": new_tot})\
+            .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute()
 
     return ok({"promo": p, "bonus_pts": bonus_pts, "promo_type": p["promo_type"]})
 
@@ -3631,6 +3721,9 @@ def trucks_nearby():
         v["schedule_today"] = sched_by.get(v["id"])
         v["avg_rating"]     = round(sum(rlist)/len(rlist), 1) if rlist else None
         v["review_count"]   = len(rlist)
+        for k in ("plan_active", "trial_ends_at", "promo_expires_at",
+                  "payment_failed_at", "home_zip", "location_zip"):
+            v.pop(k, None)
         result.append(v)
 
     return ok(result)
@@ -3658,6 +3751,13 @@ def submit_review():
             return err("Rating must be 1-5")
     except (ValueError, TypeError):
         return err("Rating must be a number 1-5")
+
+    # Only members who have actually visited can review — stops fake-review
+    # bombing of a truck the customer never went to (ratings are public).
+    membership = sb.table("customer_trucks").select("visit_count")\
+        .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
+    if not membership or (membership[0].get("visit_count") or 0) < 1:
+        return err("You can review a truck after your first visit")
 
     existing = sb.table("reviews").select("id").eq("customer_id", customer_id)\
         .eq("vendor_id", vendor_id).execute().data
@@ -3712,44 +3812,57 @@ def vendor_reviews():
 
 @app.route("/api/customer/referral-complete", methods=["POST"])
 @customer_required
+@rate_limit(10, 3600)
 def referral_complete():
     body        = request.json or {}
     customer_id = request.customer_id
     vendor_id   = body.get("vendor_id")
+    if not vendor_id:
+        return ok("no vendor")
 
     customer = sb.table("customers").select("referred_by, referral_rewarded")\
         .eq("id", customer_id).execute().data
     if not customer: return err("Customer not found", 404)
     c = customer[0]
-
     if c.get("referral_rewarded"): return ok("already rewarded")
     if not c.get("referred_by"):   return ok("no referrer")
-
     referrer_id = c["referred_by"]
-    REFERRAL_BONUS = 100
 
-    if vendor_id:
+    # Anti-farm: the referred customer must have actually visited this truck —
+    # a free join alone no longer pays out (stopped fake-account farming).
+    mem = sb.table("customer_trucks").select("visit_count")\
+        .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
+    if not mem or (mem[0].get("visit_count") or 0) < 1:
+        return ok("referral pending — a visit is required")
+
+    # Honor the vendor's configured referral bonus + on/off toggle.
+    vend = sb.table("vendors").select("pts_referral, referral_bonus").eq("id", vendor_id).execute().data
+    if not vend or not vend[0].get("referral_bonus", True):
+        return ok("referral bonus not offered here")
+    try:
+        bonus = int(vend[0].get("pts_referral") or 100)
+    except (TypeError, ValueError):
+        bonus = 100
+    if bonus <= 0:
+        return ok("no bonus")
+
+    # Claim the reward atomically so two concurrent calls can't double-credit.
+    claimed = sb.table("customers").update({"referral_rewarded": True})\
+        .eq("id", customer_id).or_("referral_rewarded.is.null,referral_rewarded.eq.false")\
+        .execute().data
+    if not claimed:
+        return ok("already rewarded")
+
+    for cid in (referrer_id, customer_id):
         ct = sb.table("customer_trucks").select("points_balance, points_total")\
-            .eq("customer_id", referrer_id).eq("vendor_id", vendor_id).execute().data
+            .eq("customer_id", cid).eq("vendor_id", vendor_id).execute().data
         if ct:
             sb.table("customer_trucks").update({
-                "points_balance": ct[0]["points_balance"] + REFERRAL_BONUS,
-                "points_total":   ct[0]["points_total"]   + REFERRAL_BONUS,
-            }).eq("customer_id", referrer_id).eq("vendor_id", vendor_id).execute()
+                "points_balance": (ct[0]["points_balance"] or 0) + bonus,
+                "points_total":   (ct[0]["points_total"] or 0) + bonus,
+            }).eq("customer_id", cid).eq("vendor_id", vendor_id).execute()
 
-    if vendor_id:
-        ct2 = sb.table("customer_trucks").select("points_balance, points_total")\
-            .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
-        if ct2:
-            sb.table("customer_trucks").update({
-                "points_balance": ct2[0]["points_balance"] + REFERRAL_BONUS,
-                "points_total":   ct2[0]["points_total"]   + REFERRAL_BONUS,
-            }).eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute()
-
-    sb.table("customers").update({"referral_rewarded": True})\
-        .eq("id", customer_id).execute()
-
-    return ok({"bonus_pts": REFERRAL_BONUS})
+    return ok({"bonus_pts": bonus})
 
 
 # ══════════════════════════════════════════════════════
@@ -3954,6 +4067,10 @@ def discover():
         v["avg_rating"]       = round(sum(rlist)/len(rlist), 1) if rlist else None
         v["review_count"]     = len(rlist)
         v["member_count"]     = members_by.get(v["id"], 0)
+        # Don't leak internal billing/base fields to customers.
+        for k in ("plan_active", "trial_ends_at", "promo_expires_at",
+                  "payment_failed_at", "home_zip", "location_zip"):
+            v.pop(k, None)
         result.append(v)
 
     return ok(result)
