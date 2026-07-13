@@ -147,6 +147,7 @@
           <button data-f="inactive" onclick="setVFilter('inactive',this)">Inactive</button>
           <button data-f="blocked" onclick="setVFilter('blocked',this)">Blocked</button>
         </div>
+        <button class="btn btn-sm btn-gh" onclick="exportCSV('vendors')">⬇ Export CSV</button>
       </div>
       <div class="tbl-wrap"><div class="tbl-scroll"><table>
         <thead><tr><th>Truck</th><th>Contact</th><th>#</th><th>Status</th><th>Joined</th><th></th></tr></thead>
@@ -163,6 +164,7 @@
           <button data-f="active" onclick="setCFilter('active',this)">Active</button>
           <button data-f="blocked" onclick="setCFilter('blocked',this)">Blocked</button>
         </div>
+        <button class="btn btn-sm btn-gh" onclick="exportCSV('customers')">⬇ Export CSV</button>
       </div>
       <div class="tbl-wrap"><div class="tbl-scroll"><table>
         <thead><tr><th>Customer</th><th>Contact</th><th>Visits</th><th>Status</th><th>Joined</th><th></th></tr></thead>
@@ -227,6 +229,24 @@
     btn.disabled=false; btn.textContent='Sign In';
     return false;
   }
+  async function exportCSV(kind){
+    try{
+      toast('⬇ Preparing '+kind+' export…');
+      var res = await fetch(API + '/api/admin/export/' + kind + '.csv', {
+        headers: { 'Authorization':'Bearer '+TOKEN }
+      });
+      if(!res.ok){ toast('⚠️ Export failed'); return; }
+      var blob = await res.blob();
+      var url  = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var stamp = new Date().toISOString().slice(0,10);
+      a.href = url; a.download = 'foodtruckrewards-' + kind + '-' + stamp + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      toast('✅ '+kind+' exported');
+    }catch(ex){ toast('⚠️ '+ex.message); }
+  }
+
   function logout(){ TOKEN=''; localStorage.removeItem('ftr_admin_token');
     document.getElementById('dash').classList.add('hidden'); document.getElementById('login').classList.remove('hidden');
     document.getElementById('pw').value=''; }

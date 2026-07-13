@@ -20,7 +20,8 @@ from datetime import datetime, timedelta, date
 from functools import wraps
 from collections import defaultdict
 
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
+import csv, io
 from flask_cors import CORS
 from supabase import create_client, Client
 from jose import jwt, JWTError
@@ -1140,6 +1141,79 @@ def admin_get_customers():
     for c in customers:
         c["total_visits"] = visits_by.get(c["id"], 0)
     return ok(customers)
+
+
+def _csv_response(filename, header, rows):
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(header)
+    for r in rows:
+        w.writerow(r)
+    resp = Response(buf.getvalue(), mimetype="text/csv")
+    resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.route("/api/admin/export/vendors.csv", methods=["GET"])
+@admin_required
+def admin_export_vendors():
+    """All vendors as CSV (not capped) with member/visit counts."""
+    vendors = sb.table("vendors").select(
+        "id, vendor_number, truck_name, owner_name, email, phone, slug, "
+        "service_states, home_zip, plan_active, trial_ends_at, promo_expires_at, "
+        "payment_failed_at, is_blocked, created_at"
+    ).order("created_at", desc=True).execute().data or []
+    ids = [v["id"] for v in vendors]
+    members_by, visits_by = {}, {}
+    for chunk_start in range(0, len(ids), 200):
+        chunk = ids[chunk_start:chunk_start + 200]
+        for row in (sb.table("customer_trucks").select("vendor_id").in_("vendor_id", chunk).execute().data or []):
+            members_by[row["vendor_id"]] = members_by.get(row["vendor_id"], 0) + 1
+        for row in (sb.table("visits").select("vendor_id").in_("vendor_id", chunk).execute().data or []):
+            visits_by[row["vendor_id"]] = visits_by.get(row["vendor_id"], 0) + 1
+
+    header = ["Vendor #", "Truck Name", "Owner", "Email", "Phone", "Status",
+              "Blocked", "Members", "Total Visits", "States", "Home ZIP", "Joined"]
+    rows = []
+    for v in vendors:
+        rows.append([
+            v.get("vendor_number", ""), v.get("truck_name", ""), v.get("owner_name", ""),
+            v.get("email", ""), v.get("phone", ""), _vendor_status(v),
+            "yes" if v.get("is_blocked") else "no",
+            members_by.get(v["id"], 0), visits_by.get(v["id"], 0),
+            v.get("service_states", ""), v.get("home_zip", ""),
+            (v.get("created_at", "") or "")[:10],
+        ])
+    return _csv_response("vendors.csv", header, rows)
+
+
+@app.route("/api/admin/export/customers.csv", methods=["GET"])
+@admin_required
+def admin_export_customers():
+    """All customers as CSV (not capped) with visit counts."""
+    customers = sb.table("customers").select(
+        "id, name, email, phone, referral_code, is_blocked, email_verified, created_at"
+    ).order("created_at", desc=True).execute().data or []
+    ids = [c["id"] for c in customers]
+    visits_by = {}
+    for chunk_start in range(0, len(ids), 200):
+        chunk = ids[chunk_start:chunk_start + 200]
+        for row in (sb.table("visits").select("customer_id").in_("customer_id", chunk).execute().data or []):
+            visits_by[row["customer_id"]] = visits_by.get(row["customer_id"], 0) + 1
+
+    header = ["Name", "Email", "Phone", "Referral Code", "Email Verified",
+              "Blocked", "Total Visits", "Joined"]
+    rows = []
+    for c in customers:
+        rows.append([
+            c.get("name", ""), c.get("email", ""), c.get("phone", ""),
+            c.get("referral_code", ""), "yes" if c.get("email_verified") else "no",
+            "yes" if c.get("is_blocked") else "no", visits_by.get(c["id"], 0),
+            (c.get("created_at", "") or "")[:10],
+        ])
+    return _csv_response("customers.csv", header, rows)
+
 
 # ══════════════════════════════════════════════════════
 #  ADMIN — PROMO CODES
