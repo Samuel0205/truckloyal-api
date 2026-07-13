@@ -134,7 +134,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
+_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -552,6 +552,7 @@ def _create_vendor_account(*, email, password, truck_name, owner_name, service_s
         "slug":             slug,
         "vendor_number":    vendor_number,
         "service_states":   service_states,
+        "profile_picture_url": "/default-truck.png",  # placeholder until they upload
         "trial_ends_at":    trial_end,
         "promo_expires_at": promo_expires,
         "plan_active":      plan_active,
@@ -691,6 +692,14 @@ def serve_icon_512():
 @app.route("/logo.png")
 def serve_logo():
     resp = send_from_directory('.', 'logo.png')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/default-truck.png")
+def serve_default_truck():
+    # Placeholder profile picture given to new vendors until they upload one.
+    resp = send_from_directory('.', 'default-truck.png')
     resp.headers['Cache-Control'] = 'public, max-age=604800'
     return resp
 

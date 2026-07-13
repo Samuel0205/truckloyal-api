@@ -358,6 +358,30 @@
             <div class="sc"><div class="sv" style="color:var(--gd)" id="v-stat-rdm">0</div><div class="sl">Redeemed</div></div>
           </div>
         </div>
+
+        <!-- Today's Location — the vendor's #1 daily action, so it lives above the tools -->
+        <div style="padding:16px 20px 4px">
+          <div style="background:linear-gradient(135deg,#FFF8F2,#FFF3E8);border:1.5px solid rgba(255,87,34,.22);border-radius:18px;padding:16px;box-shadow:0 4px 16px rgba(255,87,34,.08)">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:11px">
+              <div style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--brand),#FF8A50);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 3px 10px rgba(255,87,34,.3)">📍</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-family:var(--fd);font-size:15px;font-weight:900;color:var(--tx);line-height:1.15">Today's Location</div>
+                <div style="font-size:11px;color:var(--mu);font-weight:600;margin-top:1px">Overrides your schedule today · resets at midnight</div>
+              </div>
+              <div id="v-loc-status" style="font-size:10px;font-weight:800;letter-spacing:.4px;padding:4px 10px;border-radius:99px;background:var(--s2);color:var(--mu);flex-shrink:0">NOT POSTED</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:9px">
+              <input type="text" id="v-location-input" placeholder="Street address — e.g. 1885 Rosewood Dr" oninput="debounceSaveLocation()" style="flex:1;min-width:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:14px;font-family:var(--fb);outline:none">
+              <input type="text" id="v-location-zip" placeholder="ZIP" maxlength="5" inputmode="numeric" oninput="debounceSaveLocation()" style="width:86px;flex-shrink:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:12px 10px;color:var(--tx);font-size:14px;font-family:var(--fb);outline:none;text-align:center">
+            </div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <button onclick="saveLocation()" style="flex:1;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer;box-shadow:0 4px 12px rgba(255,87,34,.3)">📍 Post Location</button>
+              <button onclick="clearLocation()" style="background:#fff;color:var(--mu);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;font-size:13px;font-weight:700;font-family:var(--fb);cursor:pointer;flex-shrink:0">Clear</button>
+            </div>
+            <div style="font-size:10.5px;color:var(--mu);margin-top:8px;text-align:center">💡 Full street addresses show up best on customer maps</div>
+          </div>
+        </div>
+
         <div class="qa-grid">
           <!-- PRIMARY ACTION: At the Window — award points + confirm rewards in one screen -->
           <div class="qa wide accent-gn" onclick="goV('s-v-award')">
@@ -374,24 +398,7 @@
           <div class="qa" onclick="goV('s-v-points')"><div class="qa-ico">⚙️</div><div class="qa-lbl">Points Rules</div><div class="qa-sub">Rates & bonuses</div></div>
           <div class="qa" onclick="goV('s-v-brand')"><div class="qa-ico">🎨</div><div class="qa-lbl">Brand</div><div class="qa-sub">Emoji, colors & name</div></div>
         </div>
-        <div style="padding:0 20px 20px">
-          <!-- Today's location — posted here, shows on customer dashboard -->
-          <div class="card">
-            <div class="card-title">📍 Today's Location</div>
-            <div style="font-size:12px;color:var(--mu);margin-bottom:8px;line-height:1.6">Post where you're parked <strong>right now</strong>. Customers see this on their truck page, and it <strong>overrides your Weekly Schedule for today</strong>. <strong>Resets automatically at midnight</strong> — or tap Clear to remove it early. 💡 Full street addresses show up best on Maps.</div>
-            <div class="field" style="margin-bottom:10px">
-              <input type="text" id="v-location-input" placeholder="e.g. 1885 Rosewood Dr, Mansfield" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
-            </div>
-            <div class="field" style="margin-bottom:10px">
-              <label style="font-size:11px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.5px">ZIP Code (helps customers find you)</label>
-              <input type="text" id="v-location-zip" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" oninput="debounceSaveLocation()" style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:15px;font-family:var(--fb);outline:none;width:100%">
-            </div>
-            <div style="display:flex;gap:8px">
-              <button class="btn btn-sm btn-p" style="flex:1" onclick="saveLocation()">📍 Post Location</button>
-              <button class="btn btn-sm btn-s" onclick="clearLocation()" style="flex:0 0 auto">✕ Clear</button>
-            </div>
-          </div>
-        </div>
+        <div style="padding:0 20px 24px"></div>
       </div><!-- end white card -->
     </div>
 
@@ -2281,6 +2288,7 @@ async function loadVendorHome(){
   if(el) el.value=S.vendor.location_today||'';
   const zipEl=document.getElementById('v-location-zip');
   if(zipEl) zipEl.value=S.vendor.location_zip||'';
+  updateLocStatusChip();
 
   // Update hero profile picture
   const heroPic = document.getElementById('v-hero-pic');
@@ -2306,6 +2314,19 @@ async function loadVendorHome(){
 
 function debounceSaveLocation(){clearTimeout(window._locTimer);window._locTimer=setTimeout(saveLocation,1000)}
 
+function updateLocStatusChip(){
+  const chip = document.getElementById('v-loc-status');
+  if(!chip) return;
+  const live = !!(document.getElementById('v-location-input')?.value.trim());
+  if(live){
+    chip.textContent = '🟢 LIVE';
+    chip.style.background = '#E8F5E9'; chip.style.color = '#2E7D32';
+  } else {
+    chip.textContent = 'NOT POSTED';
+    chip.style.background = 'var(--s2)'; chip.style.color = 'var(--mu)';
+  }
+}
+
 async function saveLocation(){
   const v   = document.getElementById('v-location-input')?.value.trim()||'';
   const zip = document.getElementById('v-location-zip')?.value.trim()||'';
@@ -2314,6 +2335,7 @@ async function saveLocation(){
     if(S.vendor){ S.vendor.location_today=v; S.vendor.location_zip=zip; }
     if(v) showToast('📍 Location posted — customers can see it!');
   }
+  updateLocStatusChip();
 }
 
 async function clearLocation(){
@@ -2326,6 +2348,7 @@ async function clearLocation(){
     if(S.vendor){ S.vendor.location_today=''; S.vendor.location_zip=''; }
     showToast('✅ Location cleared');
   }
+  updateLocStatusChip();
 }
 
 async function loadVRewards(){
