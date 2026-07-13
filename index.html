@@ -1730,6 +1730,11 @@ const API = location.origin;
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 const escAttr = esc;
 function escJs(s){ return String(s==null?'':s).replace(/[\\'"<>&\r\n]/g,function(c){return '\\u'+('000'+c.charCodeAt(0).toString(16)).slice(-4);}); }
+// Never let a corrupt localStorage value throw during script eval and brick the app.
+function safeParse(key, fallback){
+  try { const v = localStorage.getItem(key); return v==null ? fallback : JSON.parse(v); }
+  catch(e){ try{ localStorage.removeItem(key); }catch(_){} return fallback; }
+}
 
 /* ════════════════════════════════════
    STATE
@@ -1744,10 +1749,10 @@ const S = {
   // Customer
   customer: null, // Restored via login only
   // Active truck being viewed by customer
-  activeTruck: JSON.parse(localStorage.getItem('tl_active_truck') || 'null'),
-  activeTruckPoints: JSON.parse(localStorage.getItem('tl_active_truck_pts') || 'null'),
+  activeTruck: safeParse('tl_active_truck', null),
+  activeTruckPoints: safeParse('tl_active_truck_pts', null),
   // All trucks customer has joined
-  myTrucks: JSON.parse(localStorage.getItem('tl_my_trucks') || '[]'),
+  myTrucks: safeParse('tl_my_trucks', []),
   // Rewards and prizes for active truck
   rewards: [],
   prizes: [],
@@ -2849,7 +2854,7 @@ async function loadCustomers(){
     const last = m.last_visit ? fmtMemberDate(m.last_visit) : 'Never';
     const avatarInner = m.profile_picture_url
       ? `<img src="${escAttr(m.profile_picture_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`
-      : m.name.charAt(0).toUpperCase();
+      : (m.name||'?').charAt(0).toUpperCase();
     return `
     <div class="card" style="margin-bottom:10px">
       <div style="display:flex;align-items:center;gap:12px">
@@ -5186,15 +5191,17 @@ async function loadDiscover(){
     const stars = t.avg_rating ? '★'.repeat(Math.round(t.avg_rating)) : '';
     const displayLoc = t.display_location || '';
     const displayHrs = t.display_hours || '';
-    const locLine = displayLoc ? `📍 ${displayLoc}${displayHrs?' · 🕐 '+displayHrs:''}` : displayHrs ? `🕐 ${displayHrs}` : 'Location not posted today';
+    // Escape vendor free-text before it hits innerHTML (schedule location/hours
+    // and service states are attacker-controllable across every customer).
+    const locLine = displayLoc ? `📍 ${esc(displayLoc)}${displayHrs?' · 🕐 '+esc(displayHrs):''}` : displayHrs ? `🕐 ${esc(displayHrs)}` : 'Location not posted today';
     const hasLoc = !!(displayLoc || displayHrs);
     // Include the ZIP so Google geocodes the right town ("10 main st, 44906").
     const mapsAddr = (displayLoc || displayHrs) + (displayLoc && t.display_zip ? ', ' + t.display_zip : '');
-    const states = t.service_states ? `<span style="font-size:10px;background:rgba(255,87,34,.1);color:var(--brand);border-radius:8px;padding:2px 7px;font-weight:700">${t.service_states}</span>` : '';
+    const states = t.service_states ? `<span style="font-size:10px;background:rgba(255,87,34,.1);color:var(--brand);border-radius:8px;padding:2px 7px;font-weight:700">${esc(t.service_states)}</span>` : '';
     const alreadyJoined = joinedSlugs.has(t.slug);
     const actionBtn = alreadyJoined
-      ? `<button onclick="openTruckFromDiscover('${t.slug}')" style="background:rgba(255,87,34,.12);color:var(--brand);border:1.5px solid var(--brand);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">View</button>`
-      : `<button onclick="joinFromDiscover('${t.slug}')" style="background:var(--brand);color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">Join</button>`;
+      ? `<button onclick="openTruckFromDiscover('${escJs(t.slug)}')" style="background:rgba(255,87,34,.12);color:var(--brand);border:1.5px solid var(--brand);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">View</button>`
+      : `<button onclick="joinFromDiscover('${escJs(t.slug)}')" style="background:var(--brand);color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">Join</button>`;
 
     return `
     <div class="card" style="margin-bottom:12px">
@@ -5209,7 +5216,7 @@ async function loadDiscover(){
           <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap">
             ${stars ? `<span style="font-size:12px;color:var(--gd);font-weight:700">${stars} ${t.avg_rating}</span>` : ''}
             <span style="font-size:12px;color:var(--mu);font-weight:600">👥 ${t.member_count||0} members</span>
-            ${hasLoc ? `<button onclick="openInMaps('${mapsAddr.replace(/'/g,"\\'")}')" style="background:#E3F2FD;color:#1565C0;border:1.5px solid #90CAF9;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">🗺️ Maps</button>` : ''}
+            ${hasLoc ? `<button onclick="openInMaps('${escJs(mapsAddr)}')" style="background:#E3F2FD;color:#1565C0;border:1.5px solid #90CAF9;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">🗺️ Maps</button>` : ''}
           </div>
         </div>
         ${actionBtn}
@@ -5256,7 +5263,7 @@ async function loadLeaderboard(){
   el.innerHTML = board.map(m=>{
     const isMe = m.name === S.customer?.name;
     const pic = m.profile_picture_url;
-    const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : m.name[0].toUpperCase();
+    const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">` : (m.name||'?')[0].toUpperCase();
     return `
     <div class="card" style="margin-bottom:10px;${isMe?'border-color:var(--brand);background:rgba(255,87,34,.04)':''}">
       <div style="display:flex;align-items:center;gap:12px">
