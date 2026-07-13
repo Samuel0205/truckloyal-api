@@ -253,9 +253,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .my-qr-id{font-size:14px;color:var(--tx);font-weight:800;letter-spacing:2px;font-family:monospace}
 
 /* VENDOR AWARD POINTS */
-.award-tabs{display:flex;background:var(--s2);border:2px solid var(--b2);border-radius:14px;padding:4px;gap:4px;margin-bottom:16px}
-.award-tab{flex:1;padding:10px 8px;border:none;border-radius:11px;font-size:12px;font-weight:700;font-family:var(--fb);cursor:pointer;background:transparent;color:var(--mu);transition:all .2s;text-align:center}
-.award-tab.on{background:white;color:var(--tx);box-shadow:var(--sh1)}
+.award-tabs{display:flex;background:#fff;border:1.5px solid var(--b2);border-radius:14px;padding:4px;gap:4px;margin-bottom:16px;box-shadow:var(--sh1)}
+.award-tab{flex:1;padding:11px 8px;border:none;border-radius:11px;font-size:12.5px;font-weight:800;font-family:var(--fb);cursor:pointer;background:transparent;color:var(--mu);transition:all .2s;text-align:center}
+.award-tab.on{background:linear-gradient(135deg,#FF5722,#FF7040);color:#fff;box-shadow:0 3px 10px rgba(255,87,34,.32)}
 .award-method{display:none}
 .award-method.on{display:block}
 
