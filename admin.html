@@ -235,6 +235,7 @@
       var res = await fetch(API + '/api/admin/export/' + kind + '.csv', {
         headers: { 'Authorization':'Bearer '+TOKEN }
       });
+      if(res.status===401){ toast('⚠️ Session expired'); logout(); return; }
       if(!res.ok){ toast('⚠️ Export failed'); return; }
       var blob = await res.blob();
       var url  = URL.createObjectURL(blob);
@@ -306,7 +307,7 @@
   }
   function parseDate(s){ if(!s) return 0; var t=Date.parse(s.replace(' ','T')); return isNaN(t)?0:t; }
   function fmtDate(s){ var t=parseDate(s); if(!t) return '—'; var d=new Date(t); return (d.getMonth()+1)+'/'+d.getDate()+'/'+String(d.getFullYear()).slice(2); }
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 
   /* ── Vendors ── */
   function setVFilter(f,el){ S.vFilter=f; el.parentNode.querySelectorAll('button').forEach(function(b){b.classList.toggle('on',b===el);}); renderVendors(); }
