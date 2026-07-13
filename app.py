@@ -81,7 +81,7 @@ APP_URL            = os.environ.get("APP_URL", "https://foodtruckrewards.com/app
 SUPPORT_EMAIL      = os.environ.get("SUPPORT_EMAIL", "flavoronwheels26@gmail.com")
 # Version of the Terms/Privacy/Vendor Agreement in force — recorded when a user
 # accepts at signup. Bump this whenever the legal docs change materially.
-TOS_VERSION        = os.environ.get("TOS_VERSION", "2026-07-07")
+TOS_VERSION        = os.environ.get("TOS_VERSION", "2026-07-13")
 # No insecure default — if unset, admin login and the cron are disabled (fail closed).
 ADMIN_PASSWORD     = os.environ.get("ADMIN_PASSWORD", "")
 # Cron/automation secret; falls back to ADMIN_PASSWORD if a dedicated one isn't set.
