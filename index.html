@@ -3086,18 +3086,18 @@ function openInMaps(address){
   openExternalUrl('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q));
 }
 
-// Open an http(s) link OUTSIDE the app. Inside the native shell a plain
-// window.open loads the page in-place and traps the user (no back button), so
-// hand the URL to the shell to open in the system browser / maps app — the
-// same bridge the mailto links already use. Falls back to a new tab on web.
+// Open an http(s) link OUTSIDE the app. The native WebView blocks window.open,
+// which is why the Maps button did nothing. Try a new tab first (works in the
+// browser / installed PWA and keeps the app underneath); if that's blocked
+// (native WebView), navigate directly — the native shell normally intercepts an
+// external URL here and opens it in the system maps app / browser. Either way
+// the tap is never a dead no-op.
 function openExternalUrl(url){
   try {
-    if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'external', url: url }));
-      return;
-    }
+    const w = window.open(url, '_blank', 'noopener');
+    if (w) return;
   } catch(e){}
-  window.open(url, '_blank', 'noopener');
+  try { window.location.href = url; } catch(e){}
 }
 
 function refreshCurrentScreen(){
@@ -3553,24 +3553,33 @@ function attachAddressAutocomplete(input, onPick){
 }
 
 let _truckMap = null, _userMarker = null;
-// Ask for the customer's location and center the map on it. `silent` skips the
-// toasts (used on first load); the "Center on my location" button calls it
-// loudly so the browser reliably shows the permission prompt on a user tap.
+
+function _centerOnUser(lat, lng){
+  if(!_truckMap) return;
+  _truckMap.setView([lat, lng], 12);
+  if(_userMarker){ try { _truckMap.removeLayer(_userMarker); } catch(e){} }
+  _userMarker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1 })
+    .addTo(_truckMap).bindPopup('📍 You are here');
+}
+
+// Center the map on the customer. We ONLY request geolocation from a real tap
+// on "My location" — never silently on load, which iOS auto-denies without a
+// prompt and then blocks the button. Once granted, the position is cached for
+// the session so reopening the map re-centers without asking again.
 function locateOnMap(silent){
   if(!_truckMap) return;
-  if(!navigator.geolocation){ if(!silent) showToast('Location isn\'t available on this device'); return; }
-  if(!silent) showToast('📍 Finding your location…');
+  if(S._userLoc){ _centerOnUser(S._userLoc.lat, S._userLoc.lng); return; }
+  if(silent) return;  // no cached fix and not a user tap → don't prompt
+  if(!navigator.geolocation){ showToast('Location isn\'t available on this device'); return; }
+  showToast('📍 Finding your location…');
   navigator.geolocation.getCurrentPosition(
     p => {
-      const lat = p.coords.latitude, lng = p.coords.longitude;
-      _truckMap.setView([lat, lng], 12);
-      if(_userMarker){ try { _truckMap.removeLayer(_userMarker); } catch(e){} }
-      _userMarker = L.circleMarker([lat, lng], { radius: 8, color: '#fff', weight: 3, fillColor: '#3b82f6', fillOpacity: 1 })
-        .addTo(_truckMap).bindPopup('📍 You are here');
+      S._userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
+      _centerOnUser(S._userLoc.lat, S._userLoc.lng);
     },
     err => {
-      if(!silent) showToast(err && err.code === 1
-        ? 'Location permission denied — turn it on to center the map'
+      showToast(err && err.code === 1
+        ? 'Location is off for this app — enable it in your phone Settings to center the map'
         : 'Couldn\'t get your location — try again');
     },
     { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 }
@@ -3600,8 +3609,10 @@ async function openTruckMap(){
   }).addTo(_truckMap);
   setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
 
-  // Try to center on the customer (non-blocking — the map + pins load either way).
-  locateOnMap(true);
+  // Center on the customer only if they already shared location this session.
+  // We never request it silently here — that gets auto-denied with no prompt
+  // and then blocks the button. Tapping "My location" is what asks.
+  if(S._userLoc) locateOnMap(true);
 
   const r = await apiGet('/api/trucks/map');
   const trucks = (r.ok && r.data?.data) || [];
