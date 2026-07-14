@@ -3086,18 +3086,18 @@ function openInMaps(address){
   openExternalUrl('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q));
 }
 
-// Open an http(s) link OUTSIDE the app. Inside the native shell a plain
-// window.open loads the page in-place and traps the user (no back button), so
-// hand the URL to the shell to open in the system browser / maps app — the
-// same bridge the mailto links already use. Falls back to a new tab on web.
+// Open an http(s) link OUTSIDE the app. The native WebView blocks window.open,
+// which is why the Maps button did nothing. Try a new tab first (works in the
+// browser / installed PWA and keeps the app underneath); if that's blocked
+// (native WebView), navigate directly — the native shell normally intercepts an
+// external URL here and opens it in the system maps app / browser. Either way
+// the tap is never a dead no-op.
 function openExternalUrl(url){
   try {
-    if (window.ReactNativeWebView) {
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'external', url: url }));
-      return;
-    }
+    const w = window.open(url, '_blank', 'noopener');
+    if (w) return;
   } catch(e){}
-  window.open(url, '_blank', 'noopener');
+  try { window.location.href = url; } catch(e){}
 }
 
 function refreshCurrentScreen(){
