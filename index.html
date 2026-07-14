@@ -1544,15 +1544,15 @@
             <button onclick="closeLocModal()" style="width:100%;background:none;color:var(--mu);border:none;padding:8px;font-size:13px;font-weight:700;font-family:var(--fb);cursor:pointer">Not now</button>
           </div>
           <div id="loc-blocked" style="display:none">
-            <div style="text-align:center;font-family:var(--fd);font-size:19px;font-weight:900;color:var(--tx);margin-bottom:8px">Location is turned off</div>
-            <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:14px">To use it, turn Location on for this app:</div>
-            <div style="background:var(--s2);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--tx);font-weight:700;line-height:1.7;margin-bottom:16px">
+            <div style="text-align:center;font-family:var(--fd);font-size:19px;font-weight:900;color:var(--tx);margin-bottom:8px">Location is off</div>
+            <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:14px;text-align:center">To turn it on for this app:</div>
+            <div style="background:var(--s2);border-radius:12px;padding:13px 16px;font-size:13.5px;color:var(--tx);font-weight:700;line-height:1.9;margin-bottom:16px">
               1. Open your phone <strong>Settings</strong><br>
-              2. Find <strong>Food Truck Rewards</strong><br>
-              3. Tap <strong>Location</strong> → <strong>While Using</strong>
+              2. Find <strong>Food Truck Rewards</strong> (or <strong>Safari</strong>)<br>
+              3. Tap <strong>Location</strong> → <strong>While Using</strong><br>
+              4. Reopen the map
             </div>
-            <button onclick="openAppSettings()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:10px">⚙️ Open Settings</button>
-            <button onclick="closeLocModal();document.getElementById('map-search').focus()" style="width:100%;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:13px;padding:13px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:6px">🔎 Search an area instead</button>
+            <button onclick="closeLocModal();document.getElementById('map-search').focus()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:6px">🔎 Search an area instead</button>
             <button onclick="closeLocModal()" style="width:100%;background:none;color:var(--mu);border:none;padding:8px;font-size:13px;font-weight:700;font-family:var(--fb);cursor:pointer">Close</button>
           </div>
         </div>
@@ -3645,18 +3645,6 @@ function allowLocation(){
     },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
   );
-}
-
-// Jump to the OS location settings. Only the native shell can actually open
-// them (via the bridge); on the web the on-screen steps are the guide.
-function openAppSettings(){
-  try {
-    if(window.ReactNativeWebView){
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openSettings' }));
-      return;
-    }
-  } catch(e){}
-  showToast('Open your phone Settings → this app → Location → Allow');
 }
 
 // "My location" button: recenter if we already have a fix, else open the pop-up.
