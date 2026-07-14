@@ -1263,7 +1263,7 @@
         <!-- Public contact — only shows what the vendor opted to share -->
         <div id="ct-contact-bar" style="display:none;gap:8px;margin-bottom:12px">
           <a id="ct-call-btn" href="#" style="display:none;flex:1;align-items:center;justify-content:center;gap:7px;background:#E8F5E9;border:1.5px solid #A5D6A7;color:#2E7D32;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:800;text-decoration:none">📞 <span>Call</span></a>
-          <a id="ct-email-btn" href="#" style="display:none;flex:1;align-items:center;justify-content:center;gap:7px;background:#FFF3E0;border:1.5px solid #FFCC80;color:#E65100;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:800;text-decoration:none">✉️ <span>Email</span></a>
+          <a id="ct-email-btn" href="#" style="display:none;flex:1;min-width:0;align-items:center;justify-content:center;gap:7px;background:#FFF3E0;border:1.5px solid #FFCC80;color:#E65100;border-radius:10px;padding:9px 12px;font-size:12.5px;font-weight:800;text-decoration:none">✉️ <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Email</span></a>
         </div>
         <!-- Weekly schedule -->
         <div id="ct-schedule-bar" style="display:none;background:white;border:1.5px solid var(--b2);border-radius:12px;padding:10px 14px;margin-bottom:12px">
@@ -3682,7 +3682,7 @@ async function renderTruckDash(){
     const ph=t.public_phone||'', em=t.public_email||'';
     const callB=document.getElementById('ct-call-btn'), emB=document.getElementById('ct-email-btn');
     if(callB){ callB.style.display=ph?'flex':'none'; if(ph){ callB.href='tel:+1'+ph; const sp=callB.querySelector('span'); if(sp) sp.textContent=formatPhoneDisplay(ph); } }
-    if(emB){ emB.style.display=em?'flex':'none'; if(em) emB.href='mailto:'+em; }
+    if(emB){ emB.style.display=em?'flex':'none'; if(em){ emB.href='mailto:'+em; const es=emB.querySelector('span'); if(es) es.textContent=em; } }
     cbar.style.display=(ph||em)?'flex':'none';
   }
 
