@@ -219,6 +219,14 @@
               <div style="font-size:11px;color:var(--mu);margin-top:4px">Your primary area. Used to show your truck to nearby customers.</div>
             </div>
             <div class="field">
+              <label>Public Contact Info</label>
+              <div style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px">
+                <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--tx);margin-bottom:9px;cursor:pointer">📞 Show phone on my truck page<input type="checkbox" id="v-su-phone-public" style="width:19px;height:19px;accent-color:var(--brand);flex-shrink:0"></label>
+                <label style="display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:700;color:var(--tx);cursor:pointer">✉️ Show email on my truck page<input type="checkbox" id="v-su-email-public" style="width:19px;height:19px;accent-color:var(--brand);flex-shrink:0"></label>
+                <div style="font-size:11px;color:var(--mu);margin-top:9px;line-height:1.5">Private by default — customers only see what you turn on. Shown as Call / Email buttons on your truck page. Change anytime in Settings.</div>
+              </div>
+            </div>
+            <div class="field">
               <label style="display:flex;align-items:center;gap:6px">
                 Promo Code
                 <span style="font-size:11px;font-weight:500;color:var(--mu)">(optional)</span>
@@ -2098,8 +2106,11 @@ async function vendorSignup(){
     return;
   }
 
+  const phonePublic = !!document.getElementById('v-su-phone-public')?.checked;
+  const emailPublic = !!document.getElementById('v-su-email-public')?.checked;
+
   // Store signup info — account is NOT created until payment succeeds
-  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, phone:vphone, service_states:states, home_zip:zip, accepted_tos:true, ...(promo && {promo_code:promo})};
+  S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, phone:vphone, service_states:states, home_zip:zip, phone_public:phonePublic, email_public:emailPublic, accepted_tos:true, ...(promo && {promo_code:promo})};
 
   // Show trial end date
   const trialEnd = new Date();
@@ -2265,7 +2276,9 @@ async function submitCardSetup(){
       payment_method_id: setupIntent.payment_method,
       email: ps.email, password: ps.password, truck_name: ps.truck_name,
       owner_name: ps.owner_name, service_states: ps.service_states,
-      home_zip: ps.home_zip, phone: ps.phone, accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
+      home_zip: ps.home_zip, phone: ps.phone,
+      phone_public: ps.phone_public, email_public: ps.email_public,
+      accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
     });
     if(!doneRes.ok){
       throw { msg: doneRes.data?.error || 'Payment could not be completed. Please try again.' };

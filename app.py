@@ -552,7 +552,8 @@ def _purge_vendor(vendor_id: str):
 
 
 def _create_vendor_account(*, email, password, truck_name, owner_name, service_states,
-                           home_zip=None, phone=None, stripe_customer_id=None, stripe_sub_id=None,
+                           home_zip=None, phone=None, phone_public=False, email_public=False,
+                           stripe_customer_id=None, stripe_sub_id=None,
                            plan_active=False, promo_expires=None, trial_days=14):
     """Insert a vendor row (+ defaults, TOS record, verification email) and
     return it. Called only AFTER a subscription is confirmed (paying vendors)
@@ -609,10 +610,29 @@ def _create_vendor_account(*, email, password, truck_name, owner_name, service_s
         except Exception as e:
             print(f"[SIGNUP] home_zip not saved (add the column): {e}")
     if phone:
+        clean_phone = re.sub(r"\D", "", str(phone))[:15]
+        # Try phone + public-contact flags together; if the flag columns aren't
+        # in the DB yet, fall back to phone-only so the number still saves.
         try:
-            sb.table("vendors").update({"phone": re.sub(r"\D", "", str(phone))[:15]}).eq("id", vendor["id"]).execute()
+            sb.table("vendors").update({
+                "phone": clean_phone,
+                "phone_public": bool(phone_public),
+                "email_public": bool(email_public),
+            }).eq("id", vendor["id"]).execute()
         except Exception as e:
-            print(f"[SIGNUP] phone not saved: {e}")
+            print(f"[SIGNUP] contact flags not saved (add the columns), saving phone only: {e}")
+            try:
+                sb.table("vendors").update({"phone": clean_phone}).eq("id", vendor["id"]).execute()
+            except Exception as e2:
+                print(f"[SIGNUP] phone not saved: {e2}")
+    elif phone_public or email_public:
+        # No phone but they opted email public — still record the flags.
+        try:
+            sb.table("vendors").update({
+                "phone_public": bool(phone_public), "email_public": bool(email_public),
+            }).eq("id", vendor["id"]).execute()
+        except Exception as e:
+            print(f"[SIGNUP] contact flags not saved (add the columns): {e}")
 
     _record_tos_acceptance("vendors", vendor["id"])
     _send_verification("vendor", vendor["id"], email, owner_name or truck_name)
@@ -1339,6 +1359,8 @@ def vendor_signup():
     service_states = (body.get("service_states") or "").strip().upper()
     home_zip    = (body.get("home_zip") or "").strip()
     phone       = re.sub(r"\D", "", body.get("phone") or "")
+    phone_public = bool(body.get("phone_public"))
+    email_public = bool(body.get("email_public"))
 
     if not email or "@" not in email or not password:
         return err("Email and password are required")
@@ -1360,7 +1382,7 @@ def vendor_signup():
     vendor = _create_vendor_account(
         email=email, password=password, truck_name=truck_name,
         owner_name=owner_name, service_states=service_states, home_zip=home_zip,
-        phone=phone, plan_active=True,
+        phone=phone, phone_public=phone_public, email_public=email_public, plan_active=True,
     )
     token = make_vendor_token(vendor["id"])
     return ok({
@@ -1429,6 +1451,8 @@ def vendor_complete_signup():
     service_states = (body.get("service_states") or "").strip().upper()
     home_zip       = (body.get("home_zip") or "").strip()
     phone          = re.sub(r"\D", "", body.get("phone") or "")
+    phone_public   = bool(body.get("phone_public"))
+    email_public   = bool(body.get("email_public"))
     promo_code     = (body.get("promo_code") or "").strip().upper()
 
     if len(password) < 8:
@@ -1487,6 +1511,7 @@ def vendor_complete_signup():
         vendor = _create_vendor_account(
             email=email, password=password, truck_name=truck_name, owner_name=owner_name,
             service_states=service_states, home_zip=home_zip, phone=phone,
+            phone_public=phone_public, email_public=email_public,
             stripe_customer_id=stripe_customer_id,
             stripe_sub_id=subscription.id, plan_active=True, promo_expires=promo_expires,
         )
