@@ -3562,15 +3562,39 @@ function _centerOnUser(lat, lng){
     .addTo(_truckMap).bindPopup('📍 You are here');
 }
 
+// Approximate location from the IP address — needs NO permission and works
+// inside the app's WebView (where the GPS prompt often can't fire). City-level
+// accurate; used to open the map near the user instead of zoomed out to the
+// whole country. Cached for the session.
+async function ipLocate(){
+  if(S._ipLoc !== undefined) return S._ipLoc;
+  S._ipLoc = null;
+  try {
+    const r = await fetch('https://ipwho.is/');
+    const d = await r.json();
+    if(d && d.success && typeof d.latitude === 'number' && typeof d.longitude === 'number'){
+      S._ipLoc = { lat: d.latitude, lng: d.longitude };
+    }
+  } catch(e){}
+  return S._ipLoc;
+}
+
 // Center the map on the customer. We ONLY request geolocation from a real tap
 // on "My location" — never silently on load, which iOS auto-denies without a
 // prompt and then blocks the button. Once granted, the position is cached for
 // the session so reopening the map re-centers without asking again.
+function _ipCenter(msg){
+  ipLocate().then(ip => {
+    if(ip){ _truckMap.setView([ip.lat, ip.lng], 11); if(msg) showToast(msg); }
+    else showToast('Couldn\'t find your location — try again');
+  });
+}
+
 function locateOnMap(silent){
   if(!_truckMap) return;
   if(S._userLoc){ _centerOnUser(S._userLoc.lat, S._userLoc.lng); return; }
-  if(silent) return;  // no cached fix and not a user tap → don't prompt
-  if(!navigator.geolocation){ showToast('Location isn\'t available on this device'); return; }
+  if(silent) return;  // handled by openTruckMap's IP-based default centering
+  if(!navigator.geolocation){ _ipCenter('📍 Centered on your area'); return; }
   showToast('📍 Finding your location…');
   navigator.geolocation.getCurrentPosition(
     p => {
@@ -3578,9 +3602,10 @@ function locateOnMap(silent){
       _centerOnUser(S._userLoc.lat, S._userLoc.lng);
     },
     err => {
-      showToast(err && err.code === 1
-        ? 'Location is off for this app — enable it in your phone Settings to center the map'
-        : 'Couldn\'t get your location — try again');
+      // GPS is blocked — common inside the app's WebView, where the OS prompt
+      // can't appear. Fall back to an approximate (IP) location so the map
+      // still centers near them instead of showing the whole country.
+      _ipCenter('📍 Centered on your area · turn on Location for your exact spot');
     },
     { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 }
   );
@@ -3609,10 +3634,10 @@ async function openTruckMap(){
   }).addTo(_truckMap);
   setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
 
-  // Center on the customer only if they already shared location this session.
-  // We never request it silently here — that gets auto-denied with no prompt
-  // and then blocks the button. Tapping "My location" is what asks.
-  if(S._userLoc) locateOnMap(true);
+  // Kick off an approximate (IP) location in parallel so we can open the map
+  // near the user rather than zoomed out to the whole country. No permission,
+  // no prompt — works inside the app's WebView.
+  const ipPromise = S._userLoc ? null : ipLocate();
 
   const r = await apiGet('/api/trucks/map');
   const trucks = (r.ok && r.data?.data) || [];
@@ -3663,9 +3688,18 @@ async function openTruckMap(){
       ? 'Showing trucks operating today. Tap a pin or card for details.'
       : 'No trucks have posted a location for today yet.';
   }
-  // If we haven't centered on the user yet, frame all the trucks instead.
-  if(!_userMarker && pts.length){
-    try { _truckMap.fitBounds(pts, { padding: [40, 40], maxZoom: 12 }); } catch(e){}
+  // Center near the user: precise GPS if already granted this session, else the
+  // approximate IP location, else frame whatever trucks we have. This keeps the
+  // map zoomed to the user's area instead of the whole country.
+  if(S._userLoc){
+    _centerOnUser(S._userLoc.lat, S._userLoc.lng);
+  } else {
+    const ip = ipPromise ? await ipPromise : null;
+    if(ip){
+      _truckMap.setView([ip.lat, ip.lng], 11);
+    } else if(pts.length){
+      try { _truckMap.fitBounds(pts, { padding: [40, 40], maxZoom: 12 }); } catch(e){}
+    }
   }
 }
 
