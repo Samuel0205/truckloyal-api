@@ -1516,12 +1516,16 @@
     <div class="screen" id="s-c-map">
       <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-discover')">←</div><div><h1>📍 Truck Map</h1><p>Food trucks near you</p></div></div>
       <div class="bp">
-        <button onclick="locateOnMap()" style="width:100%;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb);margin-bottom:10px">📍 Center on my location</button>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <button onclick="locateOnMap()" style="flex:1;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">📍 My location</button>
+          <button onclick="openTruckMap()" style="background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px 15px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">↻ Refresh</button>
+        </div>
         <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--mu);margin-bottom:10px">
           <span>🟢 Here now</span><span>🟡 Scheduled today</span>
         </div>
-        <div id="truck-map" style="width:100%;height:62vh;min-height:360px;border-radius:16px;overflow:hidden;background:#e9eef2;border:1.5px solid var(--b2)"></div>
+        <div id="truck-map" style="width:100%;height:52vh;min-height:320px;border-radius:16px;overflow:hidden;background:#e9eef2;border:1.5px solid var(--b2)"></div>
         <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px"></div>
+        <div id="truck-map-cards" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
       </div>
     </div>
 
@@ -3079,7 +3083,21 @@ function openInMaps(address){
     .replace(/^\s*(live|scheduled|today)\s*:?\s*/i, '')
     .trim();
   if(!q || q === '–') return;
-  window.open('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q), '_blank');
+  openExternalUrl('https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q));
+}
+
+// Open an http(s) link OUTSIDE the app. Inside the native shell a plain
+// window.open loads the page in-place and traps the user (no back button), so
+// hand the URL to the shell to open in the system browser / maps app — the
+// same bridge the mailto links already use. Falls back to a new tab on web.
+function openExternalUrl(url){
+  try {
+    if (window.ReactNativeWebView) {
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'external', url: url }));
+      return;
+    }
+  } catch(e){}
+  window.open(url, '_blank', 'noopener');
 }
 
 function refreshCurrentScreen(){
@@ -3588,26 +3606,50 @@ async function openTruckMap(){
   const r = await apiGet('/api/trucks/map');
   const trucks = (r.ok && r.data?.data) || [];
   const pts = [];
+  const cards = [];
   for(const t of trucks){
-    const coords = await geocodeTruck(t);
-    if(!coords) continue;
     const color = t.status === 'live' ? '#22c55e' : '#f59e0b';
     const badge = t.status === 'live' ? '🟢 Here now' : '🟡 Scheduled today';
-    const html = `<div style="min-width:150px">
-      <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
-      <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
-      ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
-      ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
-      <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
-    </div>`;
-    L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
-      .addTo(_truckMap).bindPopup(html);
-    pts.push([coords.lat, coords.lng]);
+    const coords = await geocodeTruck(t);
+    if(coords){
+      const html = `<div style="min-width:150px">
+        <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
+        <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
+        ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
+        ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
+        <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
+      </div>`;
+      L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+        .addTo(_truckMap).bindPopup(html);
+      pts.push([coords.lat, coords.lng]);
+    }
+    // Card for every operating truck — reliable even if a pin can't geocode.
+    const dirAddr = (t.location || '') + (t.location && t.region ? ', ' + t.region : '');
+    cards.push(`<div style="background:#fff;border:1.5px solid var(--b2);border-radius:14px;padding:13px 15px;box-shadow:var(--sh1)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:24px;flex-shrink:0">${esc(t.emoji)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;font-size:15px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.truck_name)}</div>
+          <div style="font-size:12px;color:var(--mu);margin-top:1px">${badge}</div>
+        </div>
+      </div>
+      ${t.location ? `<div style="font-size:12.5px;color:var(--tx);margin-top:8px">📍 ${esc(t.location)}</div>` : ''}
+      ${t.hours ? `<div style="font-size:12px;color:var(--mu);margin-top:3px">🕒 ${esc(t.hours)}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:11px">
+        <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="flex:1;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:10px;padding:9px;font-size:13px;font-weight:800;font-family:var(--fb);cursor:pointer">View truck</button>
+        ${dirAddr ? `<button onclick="openInMaps('${escJs(dirAddr)}')" style="background:#E3F2FD;color:#1565C0;border:1.5px solid #90CAF9;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;font-family:var(--fb);cursor:pointer">🗺️ Directions</button>` : ''}
+      </div>
+    </div>`);
+  }
+
+  const cardsEl = document.getElementById('truck-map-cards');
+  if(cardsEl){
+    cardsEl.innerHTML = cards.length ? cards.join('') : '';
   }
 
   if(noteEl){
     noteEl.textContent = trucks.length
-      ? 'Showing trucks operating today. Tap a pin for details.'
+      ? 'Showing trucks operating today. Tap a pin or card for details.'
       : 'No trucks have posted a location for today yet.';
   }
   // If we haven't centered on the user yet, frame all the trucks instead.
