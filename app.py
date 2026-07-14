@@ -665,6 +665,17 @@ def landing():
     return resp
 
 
+@app.route("/get")
+@app.route("/download")
+@app.route("/customers")
+def customer_landing():
+    """Customer-only 'get the app' page — the QR-code / share destination.
+    Deliberately has NO links to the vendor side of the product."""
+    resp = send_from_directory('.', 'customers.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
 @app.route("/healthz")
 def health():
     return ok("Food Truck Rewards API v2 🚚")

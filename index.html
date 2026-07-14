@@ -4695,18 +4695,29 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
 (function init(){
   S.prizes=[...DEFAULT_PRIZES];
   S.rewards=[...DEFAULT_REWARDS];
-  // Restore vendor session
+  // Customers arriving from the "Get the App" page carry ?c=1 — they must land
+  // on the customer side, NEVER the vendor login.
+  const wantCustomer = (function(){
+    try { const p = new URLSearchParams(location.search);
+      return p.get('c')==='1' || p.get('mode')==='customer'; } catch(e){ return false; }
+  })();
+
   if(S.vendorToken&&S.vendor){
+    // Restore vendor session
+    S.mode='vendor';
     S.vScreen='s-v-home';show('s-v-home');renderNav(VNAV,'s-v-home');loadVendorHome();
-  } else {
-    show('s-v-login');renderNav([],'' );
-  }
-  // Determine customer start screen
-  if(S.customer){
-    S.cScreen='s-c-home';
-    if(S.activeTruck) S.cScreen='s-c-truck';
+  } else if(S.customer){
+    // Returning customer → their home, not the vendor login.
+    setMode('customer');
     requestPushPermission();
     updateNotifBell();
+  } else if(wantCustomer){
+    // New visitor from the customer landing page → customer sign-up.
+    S.cScreen='s-c-signup'; setMode('customer');
+  } else {
+    // Default (vendor) entry.
+    S.mode='vendor';
+    show('s-v-login');renderNav([],'' );
   }
   drawWheel(0);
   // Keep the bell badge fresh while the app stays open. updateNotifBell()
