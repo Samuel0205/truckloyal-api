@@ -733,6 +733,32 @@ def serve_manifest():
     return resp
 
 
+@app.route("/manifest-customer.json")
+def serve_customer_manifest():
+    """Manifest for the customer 'Get the App' page — installs an icon that
+    opens the CUSTOMER side (/app?c=1), never the vendor login."""
+    from flask import Response
+    import json
+    manifest = {
+        "id": "/app?c=1",
+        "name": "Food Truck Rewards",
+        "short_name": "Food Truck Rewards",
+        "description": "Earn points and free food at your favorite food trucks.",
+        "start_url": "/app?c=1",
+        "display": "standalone",
+        "background_color": "#FF5722",
+        "theme_color": "#FF5722",
+        "orientation": "portrait",
+        "icons": [
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ]
+    }
+    resp = Response(json.dumps(manifest), mimetype='application/manifest+json')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
 @app.route("/icon-192.png")
 def serve_icon_192():
     resp = send_from_directory('.', 'icon-192.png')

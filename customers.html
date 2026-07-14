@@ -21,7 +21,7 @@
 <meta name="twitter:title" content="Get rewarded at your favorite food trucks">
 <meta name="twitter:description" content="Earn points every visit, spin to win, and redeem free food. Free to install.">
 <meta name="twitter:image" content="https://foodtruckrewards.com/og-image.png">
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="/manifest-customer.json">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Food Truck Rewards">
@@ -95,7 +95,7 @@
   .plat-row .n { font-size: 22px; flex-shrink: 0; }
   .plat-row .t1 { font-weight: 800; font-size: 14.5px; }
   .plat-row .t2 { font-size: 12.5px; color: var(--muted); font-weight: 700; margin-top: 1px; }
-  #android-install-btn { display: none; }
+  #android-install-btn { display: inline-flex; }
 
   /* Features */
   .feat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; max-width: 720px; margin: 0 auto; }
@@ -129,7 +129,7 @@
 <header>
   <div class="nav-inner">
     <a class="logo" href="#hero"><img src="/logo.png" alt="Food Truck Rewards logo"> Food Truck Rewards</a>
-    <a class="btn btn-primary nav-cta" href="/app?c=1">Open App</a>
+    <a class="btn btn-primary nav-cta" href="#install" onclick="goInstall(event)">Get the App</a>
   </div>
 </header>
 
@@ -140,7 +140,7 @@
     <h1>Your favorite food trucks<br><span class="hl">now reward you</span></h1>
     <p class="hero-lead">Earn points every time you order, spin the wheel for bonuses, and redeem free food. One free app for every truck you love.</p>
     <div class="hero-ctas">
-      <a class="btn btn-primary btn-lg" href="/app?c=1">Get Started Free →</a>
+      <a class="btn btn-primary btn-lg" href="#install" onclick="goInstall(event)">Get Started Free →</a>
       <a class="btn btn-outline btn-lg" href="#install">How to install</a>
     </div>
     <div class="hero-note">Works on any phone — <b>add it to your home screen</b> and it opens like a real app.</div>
@@ -201,10 +201,7 @@
         <div class="plat-row"><div class="n">3️⃣</div><div><div class="t1">Open it and start earning</div><div class="t2">Sign up in seconds and scan your first truck.</div></div></div>
       </div>
 
-      <button class="btn btn-primary" id="android-install-btn" onclick="triggerInstall()" style="margin-bottom:14px">⬇️ Install App</button>
-      <div>
-        <a class="btn btn-primary btn-lg" href="/app?c=1">Open the App Now →</a>
-      </div>
+      <button class="btn btn-primary btn-lg" id="android-install-btn" onclick="goInstall(event)">⬇️ Add to Home Screen</button>
     </div>
   </div>
 </section>
@@ -232,14 +229,14 @@
   <div class="inner">
     <h2>Hungry for rewards?</h2>
     <p>Join free and start earning on your next food truck order.</p>
-    <a class="btn btn-primary btn-lg" href="/app?c=1">Get Started Free →</a>
+    <a class="btn btn-primary btn-lg" href="#install" onclick="goInstall(event)">Get Started Free →</a>
   </div>
 </section>
 
 <footer>
   <a class="logo" href="#hero"><img src="/logo.png" alt="" style="width:28px;height:28px;border-radius:8px"> Food Truck Rewards</a>
   <div class="fnav">
-    <a href="/app?c=1">Open App</a>
+    <a href="#install" onclick="goInstall(event)">Get the App</a>
     <a href="/terms" target="_blank" rel="noopener">Terms</a>
     <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
   </div>
@@ -261,27 +258,35 @@
     if (isAndroid) showPlat('android');
   })();
 
-  // Android: capture the native install prompt and expose the Install button.
+  // Capture the browser's native "install app" prompt (Android / Chrome) so our
+  // buttons can fire it on demand — same behaviour as the vendor site.
   var _installPrompt = null;
   window.addEventListener('beforeinstallprompt', function(e){
     e.preventDefault();
     _installPrompt = e;
-    var btn = document.getElementById('android-install-btn');
-    if (btn) btn.style.display = 'inline-flex';
     showPlat('android');
   });
-  function triggerInstall(){
+
+  // Primary CTA behaviour: fire the native "Add to Home Screen" pop-up if the
+  // browser supports it; otherwise (iPhone, desktop, or prompt not ready yet)
+  // reveal the step-by-step install instructions. It never navigates away.
+  function goInstall(e){
+    if (e) e.preventDefault();
     if (_installPrompt){
       _installPrompt.prompt();
       _installPrompt.userChoice.finally(function(){ _installPrompt = null; });
-    } else {
-      // Already installable via menu, or unsupported browser — send them in.
-      window.location.href = '/app';
+      return;
     }
+    var ua = navigator.userAgent || '';
+    showPlat(/android/i.test(ua) ? 'android' : 'ios');
+    var el = document.getElementById('install');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
   }
-  // If they arrive already installed (standalone), skip the pitch — go to the app.
+
+  // If they open this page from the already-installed app (standalone), skip the
+  // pitch and drop them into the customer side.
   if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone){
-    window.location.replace('/app');
+    window.location.replace('/app?c=1');
   }
 </script>
 
