@@ -1517,6 +1517,10 @@
       <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-discover')">←</div><div><h1>📍 Truck Map</h1><p>Food trucks near you</p></div></div>
       <div class="bp">
         <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="map-search" type="text" placeholder="Search a city, ZIP, or address" inputmode="search" enterkeyhint="search" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();mapSearch();}" style="flex:1;min-width:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:11px 14px;font-size:14px;font-family:var(--fb);color:var(--tx);outline:none">
+          <button onclick="mapSearch()" style="background:var(--brand);color:#fff;border:none;border-radius:12px;padding:11px 16px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">🔎</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
           <button onclick="locateOnMap()" style="flex:1;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">📍 My location</button>
           <button onclick="openTruckMap()" style="background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px 15px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">↻ Refresh</button>
         </div>
@@ -1526,6 +1530,32 @@
         <div id="truck-map" style="width:100%;height:52vh;min-height:320px;border-radius:16px;overflow:hidden;background:#e9eef2;border:1.5px solid var(--b2)"></div>
         <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px"></div>
         <div id="truck-map-cards" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
+      </div>
+
+      <!-- Location permission pop-up -->
+      <div id="loc-modal" style="display:none;position:fixed;inset:0;z-index:4000;background:rgba(20,12,6,.55);align-items:center;justify-content:center;padding:24px">
+        <div style="background:#fff;border-radius:22px;max-width:360px;width:100%;padding:24px 22px;box-shadow:0 24px 60px rgba(0,0,0,.3)">
+          <div style="text-align:center;font-size:40px;margin-bottom:6px">📍</div>
+          <div id="loc-ask">
+            <div style="text-align:center;font-family:var(--fd);font-size:20px;font-weight:900;color:var(--tx);margin-bottom:8px">See trucks near you</div>
+            <div style="text-align:center;font-size:14px;color:var(--mu);line-height:1.5;margin-bottom:20px">Allow location access so the map can center on you. You can also just search an area instead.</div>
+            <button id="loc-allow-btn" onclick="allowLocation()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:10px">📍 Allow Location</button>
+            <button onclick="closeLocModal();document.getElementById('map-search').focus()" style="width:100%;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:13px;padding:13px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:6px">🔎 Search an area instead</button>
+            <button onclick="closeLocModal()" style="width:100%;background:none;color:var(--mu);border:none;padding:8px;font-size:13px;font-weight:700;font-family:var(--fb);cursor:pointer">Not now</button>
+          </div>
+          <div id="loc-blocked" style="display:none">
+            <div style="text-align:center;font-family:var(--fd);font-size:19px;font-weight:900;color:var(--tx);margin-bottom:8px">Location is turned off</div>
+            <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:14px">To use it, turn Location on for this app:</div>
+            <div style="background:var(--s2);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--tx);font-weight:700;line-height:1.7;margin-bottom:16px">
+              1. Open your phone <strong>Settings</strong><br>
+              2. Find <strong>Food Truck Rewards</strong><br>
+              3. Tap <strong>Location</strong> → <strong>While Using</strong>
+            </div>
+            <button onclick="openAppSettings()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:10px">⚙️ Open Settings</button>
+            <button onclick="closeLocModal();document.getElementById('map-search').focus()" style="width:100%;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:13px;padding:13px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:6px">🔎 Search an area instead</button>
+            <button onclick="closeLocModal()" style="width:100%;background:none;color:var(--mu);border:none;padding:8px;font-size:13px;font-weight:700;font-family:var(--fb);cursor:pointer">Close</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -3562,53 +3592,77 @@ function _centerOnUser(lat, lng){
     .addTo(_truckMap).bindPopup('📍 You are here');
 }
 
-// Approximate location from the IP address — needs NO permission and works
-// inside the app's WebView (where the GPS prompt often can't fire). City-level
-// accurate; used to open the map near the user instead of zoomed out to the
-// whole country. Cached for the session.
-async function ipLocate(){
-  if(S._ipLoc !== undefined) return S._ipLoc;
-  S._ipLoc = null;
+// ── Look up any area (city / ZIP / address) and center the map there. This is
+// the reliable path when GPS permission isn't available inside the WebView. ──
+async function mapSearch(){
+  const el = document.getElementById('map-search');
+  const q = ((el && el.value) || '').trim();
+  if(q.length < 2){ showToast('Type a city, ZIP, or address'); return; }
+  showToast('🔎 Searching…');
   try {
-    const r = await fetch('https://ipwho.is/');
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&limit=1&q=' + encodeURIComponent(q),
+      { headers: { 'Accept': 'application/json' } });
     const d = await r.json();
-    if(d && d.success && typeof d.latitude === 'number' && typeof d.longitude === 'number'){
-      S._ipLoc = { lat: d.latitude, lng: d.longitude };
-    }
-  } catch(e){}
-  return S._ipLoc;
+    if(!d || !d.length){ showToast('Couldn\'t find that — try "city, state" or a ZIP'); return; }
+    const lat = parseFloat(d[0].lat), lng = parseFloat(d[0].lon);
+    if(isNaN(lat) || isNaN(lng)){ showToast('Couldn\'t find that area'); return; }
+    if(_truckMap) _truckMap.setView([lat, lng], 12);
+    if(el) el.blur();
+  } catch(e){ showToast('Search failed — check your connection'); }
 }
 
-// Center the map on the customer. We ONLY request geolocation from a real tap
-// on "My location" — never silently on load, which iOS auto-denies without a
-// prompt and then blocks the button. Once granted, the position is cached for
-// the session so reopening the map re-centers without asking again.
-function _ipCenter(msg){
-  ipLocate().then(ip => {
-    if(ip){ _truckMap.setView([ip.lat, ip.lng], 11); if(msg) showToast(msg); }
-    else showToast('Couldn\'t find your location — try again');
-  });
+// ── Location-permission pop-up (asks, with instructions + Open Settings) ──
+function showLocModal(){
+  const m = document.getElementById('loc-modal'); if(!m) return;
+  const ask = document.getElementById('loc-ask'), blk = document.getElementById('loc-blocked');
+  if(ask) ask.style.display = 'block';
+  if(blk) blk.style.display = 'none';
+  m.style.display = 'flex';
+}
+function closeLocModal(){ const m = document.getElementById('loc-modal'); if(m) m.style.display = 'none'; }
+function showLocBlocked(){
+  const ask = document.getElementById('loc-ask'), blk = document.getElementById('loc-blocked');
+  if(ask) ask.style.display = 'none';
+  if(blk) blk.style.display = 'block';
 }
 
-function locateOnMap(silent){
-  if(!_truckMap) return;
-  if(S._userLoc){ _centerOnUser(S._userLoc.lat, S._userLoc.lng); return; }
-  if(silent) return;  // handled by openTruckMap's IP-based default centering
-  if(!navigator.geolocation){ _ipCenter('📍 Centered on your area'); return; }
-  showToast('📍 Finding your location…');
+// Fire the real OS permission prompt. Caches the fix for the session on success;
+// on denial/unavailable (common in the app's WebView) shows how to turn it on.
+function allowLocation(){
+  if(!navigator.geolocation){ showLocBlocked(); return; }
+  const btn = document.getElementById('loc-allow-btn');
+  if(btn){ btn.disabled = true; btn.textContent = '📍 Getting your location…'; }
   navigator.geolocation.getCurrentPosition(
     p => {
       S._userLoc = { lat: p.coords.latitude, lng: p.coords.longitude };
-      _centerOnUser(S._userLoc.lat, S._userLoc.lng);
+      if(btn){ btn.disabled = false; btn.textContent = '📍 Allow Location'; }
+      closeLocModal();
+      if(_truckMap) _centerOnUser(S._userLoc.lat, S._userLoc.lng);
     },
     err => {
-      // GPS is blocked — common inside the app's WebView, where the OS prompt
-      // can't appear. Fall back to an approximate (IP) location so the map
-      // still centers near them instead of showing the whole country.
-      _ipCenter('📍 Centered on your area · turn on Location for your exact spot');
+      if(btn){ btn.disabled = false; btn.textContent = '📍 Allow Location'; }
+      showLocBlocked();
     },
-    { enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 }
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
   );
+}
+
+// Jump to the OS location settings. Only the native shell can actually open
+// them (via the bridge); on the web the on-screen steps are the guide.
+function openAppSettings(){
+  try {
+    if(window.ReactNativeWebView){
+      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openSettings' }));
+      return;
+    }
+  } catch(e){}
+  showToast('Open your phone Settings → this app → Location → Allow');
+}
+
+// "My location" button: recenter if we already have a fix, else open the pop-up.
+function locateOnMap(){
+  if(S._userLoc && _truckMap){ _centerOnUser(S._userLoc.lat, S._userLoc.lng); return; }
+  showLocModal();
 }
 
 async function openTruckMap(){
@@ -3633,11 +3687,6 @@ async function openTruckMap(){
     attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
   }).addTo(_truckMap);
   setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
-
-  // Kick off an approximate (IP) location in parallel so we can open the map
-  // near the user rather than zoomed out to the whole country. No permission,
-  // no prompt — works inside the app's WebView.
-  const ipPromise = S._userLoc ? null : ipLocate();
 
   const r = await apiGet('/api/trucks/map');
   const trucks = (r.ok && r.data?.data) || [];
@@ -3688,18 +3737,16 @@ async function openTruckMap(){
       ? 'Showing trucks operating today. Tap a pin or card for details.'
       : 'No trucks have posted a location for today yet.';
   }
-  // Center near the user: precise GPS if already granted this session, else the
-  // approximate IP location, else frame whatever trucks we have. This keeps the
-  // map zoomed to the user's area instead of the whole country.
+  // Center on the user if we already have a precise fix this session; otherwise
+  // frame the trucks and prompt for location (once per session). We no longer
+  // guess from IP — that was landing people in the wrong state.
   if(S._userLoc){
     _centerOnUser(S._userLoc.lat, S._userLoc.lng);
   } else {
-    const ip = ipPromise ? await ipPromise : null;
-    if(ip){
-      _truckMap.setView([ip.lat, ip.lng], 11);
-    } else if(pts.length){
+    if(pts.length){
       try { _truckMap.fitBounds(pts, { padding: [40, 40], maxZoom: 12 }); } catch(e){}
     }
+    if(!S._locPrompted){ S._locPrompted = true; setTimeout(showLocModal, 400); }
   }
 }
 
