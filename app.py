@@ -1784,11 +1784,26 @@ def update_brand():
     body    = request.json or {}
     allowed = ["truck_name", "tagline", "emoji", "color_primary",
                "color_secondary", "profile_picture_url", "location_today",
-               "location_zip", "home_zip", "service_states"]
+               "location_zip", "home_zip", "service_states",
+               "location_lat", "location_lng"]
     updates = {k: v for k, v in body.items() if k in allowed}
+
+    # Coordinates come from the address picker; keep only clean floats (or an
+    # explicit null to clear them) so junk can never reach the map.
+    for k in ("location_lat", "location_lng"):
+        if k in updates and updates[k] is not None:
+            try:
+                updates[k] = float(updates[k])
+            except (TypeError, ValueError):
+                updates.pop(k, None)
 
     if "location_today" in updates:
         updates["location_updated_date"] = _local_today().isoformat()
+        # A fresh manual location with no picked coords must not keep stale
+        # pins — clear coords unless this same request supplies new ones.
+        if "location_lat" not in body:
+            updates["location_lat"] = None
+            updates["location_lng"] = None
 
     if "truck_name" in updates:
         base = slugify(updates["truck_name"])
@@ -1804,8 +1819,8 @@ def update_brand():
     except Exception as e:
         # A newer optional column (location_zip / home_zip) may not exist yet —
         # drop those and retry so the rest of the update still lands.
-        print(f"[BRAND] update failed, retrying without optional zip columns: {e}")
-        for k in ("location_zip", "home_zip"):
+        print(f"[BRAND] update failed, retrying without optional columns: {e}")
+        for k in ("location_zip", "home_zip", "location_lat", "location_lng"):
             updates.pop(k, None)
         if not updates:
             row = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
@@ -3657,6 +3672,13 @@ def save_schedule():
             val = (str(d.get(k) or "")).strip()
             if val:
                 row[k] = val[:120]
+        # Exact coords from the address picker (optional columns).
+        for k in ("lat", "lng"):
+            if d.get(k) is not None:
+                try:
+                    row[k] = float(d[k])
+                except (TypeError, ValueError):
+                    pass
         days.append(row)
 
     # Snapshot the existing schedule so a failed insert can't wipe it
@@ -3668,10 +3690,12 @@ def save_schedule():
     try:
         sb.table("vendor_schedule").insert(days).execute()
     except Exception as e:
-        # Most likely the zip_code column hasn't been added yet — retry without
-        # it so the save still succeeds (locations/hours are never lost).
-        print(f"[SCHEDULE] insert failed, retrying without zip_code: {e}")
-        stripped = [{k: v for k, v in r.items() if k != "zip_code"} for r in days]
+        # Most likely an optional column (zip_code / lat / lng) hasn't been
+        # added yet — retry without them so the save still succeeds
+        # (locations/hours are never lost).
+        print(f"[SCHEDULE] insert failed, retrying without optional columns: {e}")
+        _optional = ("zip_code", "lat", "lng")
+        stripped = [{k: v for k, v in r.items() if k not in _optional} for r in days]
         try:
             sb.table("vendor_schedule").insert(stripped).execute()
         except Exception as e2:
@@ -4085,13 +4109,18 @@ def trucks_map():
     ZIP as a coarse fallback."""
     dow = _local_today().weekday()
     base_cols = ("id, truck_name, slug, emoji, color_primary, profile_picture_url, "
-                 "location_today, home_zip, plan_active, trial_ends_at, "
+                 "location_today, home_zip, service_states, plan_active, trial_ends_at, "
                  "promo_expires_at, payment_failed_at")
-    try:
-        vendors = sb.table("vendors").select(base_cols + ", location_zip").execute().data or []
-    except Exception:
-        # location_zip column not added yet — fall back to the base columns.
-        vendors = sb.table("vendors").select(base_cols).execute().data or []
+    # Try richest set first (coords + zip), degrade if newer columns are absent.
+    vendors = None
+    for extra in (", location_zip, location_lat, location_lng", ", location_zip", ""):
+        try:
+            vendors = sb.table("vendors").select(base_cols + extra).execute().data or []
+            break
+        except Exception:
+            continue
+    if vendors is None:
+        vendors = []
 
     active = [v for v in vendors if _vendor_is_active(v)]
     if not active:
@@ -4099,12 +4128,16 @@ def trucks_map():
     ids = [v["id"] for v in active]
 
     sched_by = {}
-    try:
-        sched_rows = sb.table("vendor_schedule").select("vendor_id, location, hours, zip_code")\
-            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
-    except Exception:
-        sched_rows = sb.table("vendor_schedule").select("vendor_id, location, hours")\
-            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
+    sched_rows = []
+    for cols in ("vendor_id, location, hours, zip_code, lat, lng",
+                 "vendor_id, location, hours, zip_code",
+                 "vendor_id, location, hours"):
+        try:
+            sched_rows = sb.table("vendor_schedule").select(cols)\
+                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
+            break
+        except Exception:
+            continue
     for row in sched_rows:
         sched_by.setdefault(row["vendor_id"], row)
 
@@ -4116,11 +4149,13 @@ def trucks_map():
             status = "live"
             loc    = v["location_today"]
             zip_code = v.get("location_zip") or v.get("home_zip")
+            lat, lng = v.get("location_lat"), v.get("location_lng")
             hours  = sched.get("hours") or ""
         elif sched.get("location"):
             status = "scheduled"
             loc    = sched["location"]
             zip_code = sched.get("zip_code") or v.get("home_zip")
+            lat, lng = sched.get("lat"), sched.get("lng")
             hours  = sched.get("hours") or ""
         else:
             continue  # not operating today → not on the map
@@ -4129,6 +4164,12 @@ def trucks_map():
         zip_code = str(zip_code or "").strip()[:5]
         if not loc and not zip_code:
             continue  # nothing to geocode
+        # First service state disambiguates a client-side geocode of a
+        # hand-typed address (e.g. "123 Main St" → the one in OH, not IN).
+        region = ""
+        _states = str(v.get("service_states") or "").strip()
+        if _states:
+            region = re.split(r"[,/;]", _states)[0].strip()
         out.append({
             "id":         v["id"],
             "truck_name": v.get("truck_name") or "Food Truck",
@@ -4137,6 +4178,9 @@ def trucks_map():
             "color":      v.get("color_primary") or "#FF5722",
             "address":    loc,       # client geocodes this precisely
             "zip":        zip_code,  # coarse fallback
+            "region":     region,    # geocode disambiguator
+            "lat":        lat,       # exact coords from the address picker
+            "lng":        lng,       #   (null → client geocodes the address)
             "status":     status,
             "location":   loc,
             "hours":      hours,

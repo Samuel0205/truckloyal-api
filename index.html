@@ -2330,6 +2330,12 @@ async function loadVendorHome(){
   if(el) el.value=S.vendor.location_today||'';
   const zipEl=document.getElementById('v-location-zip');
   if(zipEl) zipEl.value=S.vendor.location_zip||'';
+  // Real address field: pick a suggestion → full address + exact coords.
+  if(el) attachAddressAutocomplete(el, pick=>{
+    S._locPick = { lat: pick.lat, lng: pick.lng };
+    if(zipEl && pick.zip) zipEl.value = pick.zip;
+    saveLocation();
+  });
   updateLocStatusChip();
 
   // Update hero profile picture
@@ -2354,7 +2360,8 @@ async function loadVendorHome(){
   S.prizes=[...DEFAULT_PRIZES]; S.rewards=[...DEFAULT_REWARDS];
 }
 
-function debounceSaveLocation(){clearTimeout(window._locTimer);window._locTimer=setTimeout(saveLocation,1000)}
+// Manual typing invalidates any previously picked coords (they'd be stale).
+function debounceSaveLocation(){S._locPick=null;clearTimeout(window._locTimer);window._locTimer=setTimeout(saveLocation,1000)}
 
 function updateLocStatusChip(){
   const chip = document.getElementById('v-loc-status');
@@ -2372,7 +2379,12 @@ function updateLocStatusChip(){
 async function saveLocation(){
   const v   = document.getElementById('v-location-input')?.value.trim()||'';
   const zip = document.getElementById('v-location-zip')?.value.trim()||'';
-  const r   = await apiPatch('/api/vendor/brand',{location_today:v, location_zip:zip});
+  const body = {location_today:v, location_zip:zip};
+  // Include exact coords only when this text came from an address pick.
+  if(v && S._locPick && S._locPick.lat!=null && S._locPick.lng!=null){
+    body.location_lat = S._locPick.lat; body.location_lng = S._locPick.lng;
+  }
+  const r   = await apiPatch('/api/vendor/brand',body);
   if(r.ok){
     if(S.vendor){ S.vendor.location_today=v; S.vendor.location_zip=zip; }
     if(v) showToast('📍 Location posted — customers can see it!');
@@ -3425,9 +3437,88 @@ async function geocodeZip(zip){
   } catch(e){ return null; }
 }
 
-// Best coords for a truck: precise address first, ZIP centroid as fallback.
+// Best coords for a truck: exact picker coords → geocoded address (with the
+// truck's state appended so a bare street name lands in the right state) →
+// ZIP centroid.
 async function geocodeTruck(t){
-  return (await geocodeAddress(t.address)) || (await geocodeZip(t.zip));
+  const lat = parseFloat(t.lat), lng = parseFloat(t.lng);
+  if(!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+  let q = t.address || '';
+  if(q && t.region && !new RegExp('\\b'+t.region.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(q)){
+    q = q + ', ' + t.region;
+  }
+  return (await geocodeAddress(q)) || (await geocodeZip(t.zip));
+}
+
+/* ── Address autocomplete (free OSM Photon geocoder) ──────────────────
+   Turns a plain text box into a real address field: as the vendor types we
+   suggest complete US addresses and, on pick, hand back the FULL address plus
+   exact lat/lng. That kills the "typed 123 Main St, pin landed in another
+   state" problem — a complete address is unambiguous and the coords are exact. */
+function _fmtPhoton(p){
+  const line1 = [p.housenumber, p.street].filter(Boolean).join(' ') || p.name || '';
+  const city  = p.city || p.town || p.village || p.county || '';
+  const tail  = [city, [p.state, p.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+  return [line1, tail].filter(Boolean).join(', ');
+}
+function attachAddressAutocomplete(input, onPick){
+  if(!input || input._acWired) return;
+  input._acWired = true;
+  let box = null, seq = 0, timer = null;
+  const close = ()=>{ if(box){ box.remove(); box = null; } };
+  const place = ()=>{
+    if(!box) return;
+    const r = input.getBoundingClientRect();
+    box.style.left  = r.left + 'px';
+    box.style.top   = (r.bottom + 4) + 'px';
+    box.style.width = r.width + 'px';
+  };
+  const search = async (q)=>{
+    const mine = ++seq;
+    try {
+      // Bias toward the US center so US results rank first; text still dominates.
+      const r = await fetch('https://photon.komoot.io/api/?limit=5&lang=en&lat=39.5&lon=-98.35&q=' + encodeURIComponent(q));
+      if(!r.ok || mine !== seq) return;
+      const d = await r.json();
+      if(mine !== seq) return;
+      const feats = (d.features || []).filter(f => (f.properties||{}).countrycode === 'US');
+      if(!feats.length){ close(); return; }
+      close();
+      box = document.createElement('div');
+      box.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1.5px solid var(--b2);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.16);overflow:hidden;font-family:var(--fb)';
+      feats.forEach(f=>{
+        const p = f.properties || {};
+        const addr = _fmtPhoton(p);
+        if(!addr) return;
+        const co = (f.geometry||{}).coordinates || [];
+        const row = document.createElement('div');
+        row.textContent = addr;
+        row.style.cssText = 'padding:11px 14px;font-size:13.5px;color:var(--tx);cursor:pointer;border-bottom:1px solid var(--s2);line-height:1.4';
+        row.onmouseenter = ()=> row.style.background = 'var(--s2)';
+        row.onmouseleave = ()=> row.style.background = '#fff';
+        // mousedown (not click) so it fires before the input's blur closes us.
+        row.onmousedown = (e)=>{
+          e.preventDefault();
+          input.value = addr;
+          close();
+          onPick({ address: addr, lat: co[1], lng: co[0], zip: p.postcode || '' });
+        };
+        box.appendChild(row);
+      });
+      document.body.appendChild(box);
+      place();
+    } catch(e){ /* geocoder down → silent, vendor can still type freely */ }
+  };
+  input.addEventListener('input', ()=>{
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if(q.length < 4){ close(); return; }
+    timer = setTimeout(()=> search(q), 350);
+  });
+  input.addEventListener('blur', ()=> setTimeout(close, 150));
+  input.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') close(); });
+  window.addEventListener('scroll', place, true);
+  window.addEventListener('resize', place);
 }
 
 let _truckMap = null, _userMarker = null;
@@ -5040,26 +5131,46 @@ async function loadSchedule(){
   const data = r.ok ? (r.data.data||[]) : [];
   const el   = document.getElementById('schedule-days');
   if(!el) return;
+  S._schedPick = {};   // per-day exact coords from the address picker
   el.innerHTML = DAY_NAMES.map((day, i)=>{
     const existing = data.find(d=>d.day_of_week===i)||{};
+    // Keep coords already on file so a re-save without edits preserves the pin.
+    if(existing.lat!=null && existing.lng!=null) S._schedPick[i] = {lat:existing.lat, lng:existing.lng};
     return `
     <div class="card" style="margin-bottom:10px">
       <div style="font-weight:800;font-size:14px;margin-bottom:10px">${day}</div>
       <div class="two-col">
-        <div class="field"><label>Location</label><input type="text" id="sched-loc-${i}" placeholder="e.g. 123 Main St, Mansfield" autocomplete="street-address" value="${existing.location||''}"></div>
-        <div class="field"><label>Hours</label><input type="text" id="sched-hrs-${i}" placeholder="11am–3pm" value="${existing.hours||''}"></div>
+        <div class="field"><label>Location</label><input type="text" id="sched-loc-${i}" placeholder="e.g. 123 Main St, Mansfield" autocomplete="street-address" value="${escAttr(existing.location||'')}"></div>
+        <div class="field"><label>Hours</label><input type="text" id="sched-hrs-${i}" placeholder="11am–3pm" value="${escAttr(existing.hours||'')}"></div>
       </div>
-      <div class="field" style="margin-top:6px"><label>ZIP Code</label><input type="text" id="sched-zip-${i}" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" value="${existing.zip_code||''}" style="width:140px"></div>
+      <div class="field" style="margin-top:6px"><label>ZIP Code</label><input type="text" id="sched-zip-${i}" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" value="${escAttr(existing.zip_code||'')}" style="width:140px"></div>
     </div>`;
   }).join('');
+  // Wire each day's Location box as a real address field.
+  DAY_NAMES.forEach((_, i)=>{
+    const loc = document.getElementById(`sched-loc-${i}`);
+    const zip = document.getElementById(`sched-zip-${i}`);
+    if(!loc) return;
+    // Manual typing invalidates that day's picked coords.
+    loc.addEventListener('input', ()=>{ delete S._schedPick[i]; });
+    attachAddressAutocomplete(loc, pick=>{
+      S._schedPick[i] = { lat: pick.lat, lng: pick.lng };
+      if(zip && pick.zip) zip.value = pick.zip;
+    });
+  });
 }
 
 async function saveSchedule(){
+  const picks = S._schedPick || {};
   const days = DAY_NAMES.map((_,i)=>{
     const loc = document.getElementById(`sched-loc-${i}`)?.value.trim();
     const hrs = document.getElementById(`sched-hrs-${i}`)?.value.trim();
     const zip = document.getElementById(`sched-zip-${i}`)?.value.trim();
-    return {day_of_week: i, location: loc, hours: hrs, zip_code: zip};
+    const row = {day_of_week: i, location: loc, hours: hrs, zip_code: zip};
+    if(loc && picks[i] && picks[i].lat!=null && picks[i].lng!=null){
+      row.lat = picks[i].lat; row.lng = picks[i].lng;
+    }
+    return row;
   }).filter(d=>d.location || d.hours || d.zip_code);
   showLoad('Saving...');
   const r = await apiPost('/api/vendor/schedule', {days});
