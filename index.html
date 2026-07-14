@@ -5728,15 +5728,23 @@ async function saveVendorProfile(){
     email_public: !!document.getElementById('v-set-email-public')?.checked,
   });
   hideLoad();
-  if(r1.ok || r2.ok){
-    const fresh = await apiGet('/api/vendor/me');
-    if(fresh.ok){S.vendor=fresh.data.data;localStorage.setItem('tl_vendor',JSON.stringify(S.vendor));}
-    showToast('✅ Profile saved!');
-    renderVSettings();
-    loadVendorHome();
-  } else {
+  // The profile endpoint (r2) carries phone/email/contact — it must succeed for
+  // a truthful "saved". r1 is just the truck name.
+  if(!r2.ok){
     showToast('❌ '+(r2.data?.error||r1.data?.error||'Error saving'));
+    return;
   }
+  const fresh = await apiGet('/api/vendor/me');
+  if(fresh.ok){S.vendor=fresh.data.data;localStorage.setItem('tl_vendor',JSON.stringify(S.vendor));}
+  const unsaved = r2.data?.data?.unsaved_fields;
+  if(unsaved && unsaved.length){
+    // DB is missing the contact columns — don't pretend they saved.
+    showToast('⚠️ Saved, but phone/contact couldn\'t be stored yet');
+  } else {
+    showToast('✅ Profile saved!');
+  }
+  renderVSettings();
+  loadVendorHome();
 }
 
 async function changeVendorPassword(){

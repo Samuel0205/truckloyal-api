@@ -457,16 +457,22 @@ def _get_customer_trucks(customer_id: str) -> list:
     _vcols = ("id, truck_name, tagline, emoji, slug, "
               "color_primary, color_secondary, vendor_number, location_today, profile_picture_url, "
               "plan_active, trial_ends_at, promo_expires_at, payment_failed_at")
-    try:
-        ct_rows = sb.table("customer_trucks").select(
-            f"*, vendors({_vcols}, location_zip, home_zip, phone, email, phone_public, email_public)"
-        ).eq("customer_id", customer_id).execute().data
-    except Exception:
-        # zip columns not added yet — this is the critical trucks-list path, so
-        # fall back to the known-good column set rather than failing.
-        ct_rows = sb.table("customer_trucks").select(
-            f"*, vendors({_vcols})"
-        ).eq("customer_id", customer_id).execute().data
+    # Try richest first, then contact-without-zip, then bare base. A single
+    # missing column (zip OR the newer contact flags) must not silently strip
+    # the vendor's opt-in contact info from the whole trucks list.
+    ct_rows = None
+    for vcols in (f"{_vcols}, location_zip, home_zip, phone, email, phone_public, email_public",
+                  f"{_vcols}, phone, email, phone_public, email_public",
+                  _vcols):
+        try:
+            ct_rows = sb.table("customer_trucks").select(
+                f"*, vendors({vcols})"
+            ).eq("customer_id", customer_id).execute().data
+            break
+        except Exception:
+            continue
+    if ct_rows is None:
+        ct_rows = []
 
     result = []
     for ct in ct_rows:
@@ -1860,20 +1866,37 @@ def update_vendor_profile():
         if k in updates:
             updates[k] = bool(updates[k])
 
-    try:
-        vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
-    except Exception as e:
-        # phone_public / email_public columns may not exist yet — drop and retry.
-        print(f"[PROFILE] update failed, retrying without privacy flags: {e}")
-        for k in ("phone_public", "email_public"):
-            updates.pop(k, None)
-        if not updates:
-            row = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
-            if not row:
-                return err("Vendor not found", 404)
-            return ok(_safe_vendor(row[0]))
-        vendor = sb.table("vendors").update(updates).eq("id", request.vendor_id).execute().data[0]
-    return ok(_safe_vendor(vendor))
+    # Progressive retry: some of these are newer columns (phone_public,
+    # email_public, and even phone) that may not exist in an un-migrated DB.
+    # Drop the optional ones one tier at a time so the rest still saves — and
+    # tell the client which fields couldn't be stored instead of a misleading
+    # "saved" (or a 500 that loses everything).
+    dropped = []
+    vendor  = None
+    for drop in ([], ["phone_public", "email_public"], ["phone_public", "email_public", "phone"]):
+        attempt = {k: v for k, v in updates.items() if k not in drop}
+        if not attempt:
+            break
+        try:
+            rows = sb.table("vendors").update(attempt).eq("id", request.vendor_id).execute().data
+            vendor  = rows[0] if rows else None
+            dropped = [k for k in drop if k in updates]
+            break
+        except Exception as e:
+            print(f"[PROFILE] update failed (dropping {drop or 'nothing'}): {e}")
+            continue
+
+    if vendor is None:
+        row = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
+        if not row:
+            return err("Vendor not found", 404)
+        vendor = row[0]
+
+    out = _safe_vendor(vendor)
+    if dropped:
+        # e.g. the public-contact columns haven't been added to the DB yet.
+        out["unsaved_fields"] = dropped
+    return ok(out)
 
 
 @app.route("/api/vendor/points-config", methods=["PATCH"])
@@ -2391,11 +2414,20 @@ def get_truck_config(slug):
              "pts_per_visit, pts_per_dollar, pts_spin_bonus, pts_streak_mult, "
              "pts_referral, double_first_visit, streak_bonus, "
              "plan_active, trial_ends_at, promo_expires_at, location_today, location_updated_date")
-    try:
-        row = sb.table("vendors").select(_cols + ", location_zip, phone, email, phone_public, email_public").eq("slug", slug).execute().data
-    except Exception:
-        # location_zip column not added yet
-        row = sb.table("vendors").select(_cols).eq("slug", slug).execute().data
+    # Try richest first, then contact-without-zip, then bare base — so a single
+    # not-yet-added column (e.g. location_zip) can't wipe out the whole contact
+    # block the way one combined select would.
+    row = None
+    for extra in (", location_zip, phone, email, phone_public, email_public",
+                  ", phone, email, phone_public, email_public",
+                  ""):
+        try:
+            row = sb.table("vendors").select(_cols + extra).eq("slug", slug).execute().data
+            break
+        except Exception:
+            continue
+    if row is None:
+        row = []
 
     if not row: return err("Truck not found", 404)
     vendor = row[0]
