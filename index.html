@@ -411,6 +411,7 @@
           <div class="qa" onclick="goV('s-v-schedule')"><div class="qa-ico">📅</div><div class="qa-lbl">Schedule</div><div class="qa-sub">Weekly locations</div></div>
           <div class="qa" onclick="goV('s-v-feed')"><div class="qa-ico">📸</div><div class="qa-lbl">Feed Posts</div><div class="qa-sub">Share updates</div></div>
           <div class="qa" onclick="goV('s-v-reviews-screen')"><div class="qa-ico">⭐</div><div class="qa-lbl">Reviews</div><div class="qa-sub">What customers say</div></div>
+          <div class="qa" onclick="goV('s-v-marketing')"><div class="qa-ico">🚀</div><div class="qa-lbl">Marketing Tools</div><div class="qa-sub">Grow your customers</div></div>
           <div class="qa" onclick="goV('s-v-points')"><div class="qa-ico">⚙️</div><div class="qa-lbl">Points Rules</div><div class="qa-sub">Rates & bonuses</div></div>
           <div class="qa" onclick="goV('s-v-brand')"><div class="qa-ico">🎨</div><div class="qa-lbl">Brand</div><div class="qa-sub">Emoji, colors & name</div></div>
         </div>
@@ -591,6 +592,39 @@
         </div>
         <div id="v-prizes-list"></div>
         <button class="btn btn-s" onclick="openSheet('sh-add-prize')">+ Add Prize Slot</button>
+      </div>
+    </div>
+
+    <!-- VENDOR: MARKETING TOOLS HUB -->
+    <div class="screen" id="s-v-marketing">
+      <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>🚀 Marketing Tools</h1><p>Get more customers on your rewards</p></div></div>
+      <div class="bp">
+        <div class="callout co-bl" style="margin-bottom:16px">
+          <div class="co-icon">💡</div>
+          <div><div class="co-desc">Tools to help you bring in customers. More are on the way — this is where they'll live.</div></div>
+        </div>
+
+        <!-- Tool: QR Poster -->
+        <div style="background:#fff;border:1.5px solid var(--b2);border-radius:18px;padding:18px 16px;box-shadow:0 4px 16px rgba(180,100,40,.08);margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <div style="font-size:26px">🪧</div>
+            <div><div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx)">"Get the App" QR Poster</div>
+              <div style="font-size:12.5px;color:var(--mu);font-weight:600">Print it or post it — customers scan to download</div></div>
+          </div>
+          <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin:8px 0 14px">Stick this on your truck window or add it to your website. Scanning takes customers straight to the app download page, then they scan your rewards QR to join.</div>
+          <div style="text-align:center;background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">
+            <img src="/qr-poster.png" alt="Get the App QR poster" style="max-width:230px;width:100%;border-radius:10px;box-shadow:0 6px 18px rgba(45,27,14,.16)">
+          </div>
+          <a class="btn btn-p" href="/qr-poster.png" download="foodtruckrewards-poster.png" style="width:100%;margin-bottom:10px;text-decoration:none;display:block;text-align:center">⬇️ Download Poster</a>
+          <div class="two-col">
+            <button class="btn btn-s btn-sm" onclick="window.open('/qr-poster.png','_blank')">🖼️ Open full size</button>
+            <button class="btn btn-s btn-sm" onclick="copyGetLink(this)">🔗 Copy link</button>
+          </div>
+          <div style="font-size:11.5px;color:var(--mu);text-align:center;margin-top:10px;line-height:1.5">💡 On iPhone: tap "Open full size", then press and hold the image to save it.</div>
+        </div>
+
+        <!-- Future tools placeholder -->
+        <div style="text-align:center;color:var(--mu);font-size:13px;font-weight:700;padding:14px;border:1.5px dashed var(--b2);border-radius:14px">✨ More marketing tools coming soon</div>
       </div>
     </div>
 
@@ -3208,7 +3242,7 @@ function updateRefreshBtn(){
   if(!btn) return;
   const noRefresh = new Set([
     's-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup',
-    's-v-brand','s-v-points',
+    's-v-brand','s-v-points','s-v-marketing',
     's-c-login','s-c-signup','s-c-forgot','s-c-reset',
     's-c-scan','s-c-spin','s-c-qr','s-c-review','s-c-promo','s-c-map',
   ]);
@@ -4637,6 +4671,15 @@ function fallbackCopyCb(text, cb) {
     document.body.removeChild(ta);
     cb();
   } catch(e) {}
+}
+
+// Copy the customer "get the app" link (for vendors to post on their website).
+function copyGetLink(btn){
+  const url = location.origin + '/get';
+  const done = () => { const o = btn.textContent; btn.textContent = '✅ Copied'; setTimeout(()=>{ btn.textContent = o; }, 1600); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopyCb(url, done));
+  } else { fallbackCopyCb(url, done); }
 }
 
 function closeIOSSheet() {

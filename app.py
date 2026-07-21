@@ -135,7 +135,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
+_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/qr-poster.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/download', '/customers', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -819,8 +819,16 @@ def serve_shot():
     return resp
 
 
+@app.route("/qr-poster.png")
+def serve_qr_poster():
+    # Downloadable customer "get the app" poster (QR → /get) for vendors to
+    # print or post. Served from the vendor Marketing Tools hub.
+    resp = send_from_directory('.', 'qr-poster.png')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
 @app.route("/install")
-@app.route("/get")
 def serve_install():
     resp = send_from_directory('.', 'install.html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
