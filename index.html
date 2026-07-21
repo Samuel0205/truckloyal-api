@@ -1640,6 +1640,8 @@
       <div class="field"><label>Emoji</label><input type="text" id="nr-e" placeholder="🌮" maxlength="4" style="text-align:center;font-size:24px"></div>
       <div class="field"><label>Points Required</label><input type="number" id="nr-p" placeholder="350" min="1"></div>
     </div>
+    <div style="font-size:11px;color:var(--mu);font-weight:700;margin:2px 0 6px">Tap to pick an icon</div>
+    <div id="nr-emoji-palette" style="display:flex;flex-wrap:wrap;gap:6px;max-height:124px;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--s2);border-radius:12px"></div>
     <div class="field"><label>Item Name (from your menu)</label><input type="text" id="nr-n" placeholder="e.g. Free Drink"></div>
     <button class="btn btn-p" onclick="addReward()">Add Reward</button>
   </div>
@@ -1657,6 +1659,8 @@
       <div class="field"><label>Emoji</label><input type="text" id="np-e" placeholder="⚡" maxlength="4" style="text-align:center;font-size:24px"></div>
       <div class="field"><label>Probability Weight</label><input type="number" id="np-p" placeholder="30" min="1"></div>
     </div>
+    <div style="font-size:11px;color:var(--mu);font-weight:700;margin:2px 0 6px">Tap to pick an icon</div>
+    <div id="np-emoji-palette" style="display:flex;flex-wrap:wrap;gap:6px;max-height:124px;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--s2);border-radius:12px"></div>
     <div class="two-col">
       <div class="field"><label>Points Won</label><input type="number" id="np-pts" placeholder="50" min="1"></div>
       <div class="field"><label>Label</label><input type="text" id="np-n" placeholder="+50 Points"></div>
@@ -1834,6 +1838,39 @@ const DEFAULT_TIERS = [
   { icon:'👑', name:'Legend',  pts_threshold:1500},
 ];
 const EMOJIS = ['🚚','🌮','🍔','🍕','🥩','🍜','🫔','🥗','🍦','☕','🌯','🧆'];
+
+// Curated emoji palette for reward + spin-prize setup (tap to pick).
+const REWARD_EMOJIS = [
+  // Food
+  '🌮','🌯','🫔','🌭','🍔','🍟','🍕','🥪','🥙','🧆','🥗','🍜','🍲','🍝','🍛',
+  '🍣','🍱','🥟','🍤','🍗','🍖','🥩','🥓','🍳','🧇','🥞','🥐','🥖','🥨','🧀',
+  '🍿','🥘','🌰','🥯','🫓',
+  // Sweets
+  '🍦','🍨','🍧','🍩','🍪','🎂','🧁','🍰','🥧','🍫','🍬','🍭','🍮','🍡','🍯',
+  // Drinks
+  '☕','🍵','🧋','🥤','🧃','🧉','🍶','🍺','🍻','🍷','🍸','🍹','🍾','🥂','🥛','🧊',
+  // Fruit
+  '🍎','🍊','🍋','🍓','🍉','🍇','🍑','🍒','🥭','🍍','🥥','🍌','🥑','🍅','🌶️','🥕','🌽',
+  // Rewards / fun
+  '🎁','🎉','⭐','🌟','✨','🔥','⚡','💎','👑','🏆','🥇','🎯','🎰','🍀','💰','🎟️','❤️','💯','🆓','🙌'
+];
+
+function pickEmoji(inputId, paletteId, e){
+  const inp = document.getElementById(inputId);
+  if(inp) inp.value = e;
+  renderEmojiPalette(paletteId, inputId);
+}
+function renderEmojiPalette(paletteId, inputId){
+  const el = document.getElementById(paletteId), inp = document.getElementById(inputId);
+  if(!el || !inp) return;
+  const cur = (inp.value || '').trim();
+  el.innerHTML = REWARD_EMOJIS.map(e => {
+    const sel = e === cur;
+    return `<button type="button" onclick="pickEmoji('${inputId}','${paletteId}','${e}')" `
+      + `style="width:40px;height:40px;flex:0 0 auto;font-size:22px;line-height:1;padding:0;cursor:pointer;`
+      + `border:2px solid ${sel?'var(--brand)':'var(--b2)'};background:${sel?'rgba(255,90,31,.12)':'#fff'};border-radius:10px">${e}</button>`;
+  }).join('');
+}
 const PRESETS = [['#FF5A1F','#F5B800'],['#8B5CF6','#EC4899'],['#059669','#34D399'],['#0EA5E9','#38BDF8'],['#DC2626','#F97316'],['#1D4ED8','#FBBF24']];
 const VNAV = [
   {id:'s-v-home',icon:'🏠',label:'Home'},
@@ -1892,7 +1929,11 @@ const apiDel  = p => apiFetch(p,{method:'DELETE'});
 function showLoad(t='Loading...'){document.getElementById('load-over').classList.add('show');document.getElementById('load-txt').textContent=t}
 function hideLoad(){document.getElementById('load-over').classList.remove('show')}
 function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>t.classList.remove('show'),3000)}
-function openSheet(id){document.getElementById(id).classList.add('open')}
+function openSheet(id){
+  document.getElementById(id).classList.add('open');
+  if(id==='sh-add-reward') renderEmojiPalette('nr-emoji-palette','nr-e');
+  if(id==='sh-add-prize')  renderEmojiPalette('np-emoji-palette','np-e');
+}
 function closeSheet(id){document.getElementById(id).classList.remove('open')}
 
 /* ════════════════════════════════════
