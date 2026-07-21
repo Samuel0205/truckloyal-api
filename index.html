@@ -1544,15 +1544,15 @@
             <button onclick="closeLocModal()" style="width:100%;background:none;color:var(--mu);border:none;padding:8px;font-size:13px;font-weight:700;font-family:var(--fb);cursor:pointer">Not now</button>
           </div>
           <div id="loc-blocked" style="display:none">
-            <div style="text-align:center;font-family:var(--fd);font-size:19px;font-weight:900;color:var(--tx);margin-bottom:8px">Location is turned off</div>
-            <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:14px">To use it, turn Location on for this app:</div>
-            <div style="background:var(--s2);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--tx);font-weight:700;line-height:1.7;margin-bottom:16px">
+            <div style="text-align:center;font-family:var(--fd);font-size:19px;font-weight:900;color:var(--tx);margin-bottom:8px">Location is off</div>
+            <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:14px;text-align:center">To turn it on for this app:</div>
+            <div style="background:var(--s2);border-radius:12px;padding:13px 16px;font-size:13.5px;color:var(--tx);font-weight:700;line-height:1.9;margin-bottom:16px">
               1. Open your phone <strong>Settings</strong><br>
-              2. Find <strong>Food Truck Rewards</strong><br>
-              3. Tap <strong>Location</strong> → <strong>While Using</strong>
+              2. Find <strong>Food Truck Rewards</strong> (or <strong>Safari</strong>)<br>
+              3. Tap <strong>Location</strong> → <strong>While Using</strong><br>
+              4. Reopen the map
             </div>
-            <button onclick="openAppSettings()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:10px">⚙️ Open Settings</button>
-            <button onclick="closeLocModal();document.getElementById('map-search').focus()" style="width:100%;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:13px;padding:13px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:6px">🔎 Search an area instead</button>
+            <button onclick="closeLocModal();document.getElementById('map-search').focus()" style="width:100%;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:13px;padding:14px;font-size:15px;font-weight:800;font-family:var(--fb);cursor:pointer;margin-bottom:6px">🔎 Search an area instead</button>
             <button onclick="closeLocModal()" style="width:100%;background:none;color:var(--mu);border:none;padding:8px;font-size:13px;font-weight:700;font-family:var(--fb);cursor:pointer">Close</button>
           </div>
         </div>
@@ -1640,6 +1640,8 @@
       <div class="field"><label>Emoji</label><input type="text" id="nr-e" placeholder="🌮" maxlength="4" style="text-align:center;font-size:24px"></div>
       <div class="field"><label>Points Required</label><input type="number" id="nr-p" placeholder="350" min="1"></div>
     </div>
+    <div style="font-size:11px;color:var(--mu);font-weight:700;margin:2px 0 6px">Tap to pick an icon</div>
+    <div id="nr-emoji-palette" style="display:flex;flex-wrap:wrap;gap:6px;max-height:124px;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--s2);border-radius:12px"></div>
     <div class="field"><label>Item Name (from your menu)</label><input type="text" id="nr-n" placeholder="e.g. Free Drink"></div>
     <button class="btn btn-p" onclick="addReward()">Add Reward</button>
   </div>
@@ -1657,6 +1659,8 @@
       <div class="field"><label>Emoji</label><input type="text" id="np-e" placeholder="⚡" maxlength="4" style="text-align:center;font-size:24px"></div>
       <div class="field"><label>Probability Weight</label><input type="number" id="np-p" placeholder="30" min="1"></div>
     </div>
+    <div style="font-size:11px;color:var(--mu);font-weight:700;margin:2px 0 6px">Tap to pick an icon</div>
+    <div id="np-emoji-palette" style="display:flex;flex-wrap:wrap;gap:6px;max-height:124px;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--s2);border-radius:12px"></div>
     <div class="two-col">
       <div class="field"><label>Points Won</label><input type="number" id="np-pts" placeholder="50" min="1"></div>
       <div class="field"><label>Label</label><input type="text" id="np-n" placeholder="+50 Points"></div>
@@ -1834,6 +1838,39 @@ const DEFAULT_TIERS = [
   { icon:'👑', name:'Legend',  pts_threshold:1500},
 ];
 const EMOJIS = ['🚚','🌮','🍔','🍕','🥩','🍜','🫔','🥗','🍦','☕','🌯','🧆'];
+
+// Curated emoji palette for reward + spin-prize setup (tap to pick).
+const REWARD_EMOJIS = [
+  // Food
+  '🌮','🌯','🫔','🌭','🍔','🍟','🍕','🥪','🥙','🧆','🥗','🍜','🍲','🍝','🍛',
+  '🍣','🍱','🥟','🍤','🍗','🍖','🥩','🥓','🍳','🧇','🥞','🥐','🥖','🥨','🧀',
+  '🍿','🥘','🌰','🥯','🫓',
+  // Sweets
+  '🍦','🍨','🍧','🍩','🍪','🎂','🧁','🍰','🥧','🍫','🍬','🍭','🍮','🍡','🍯',
+  // Drinks
+  '☕','🍵','🧋','🥤','🧃','🧉','🍶','🍺','🍻','🍷','🍸','🍹','🍾','🥂','🥛','🧊',
+  // Fruit
+  '🍎','🍊','🍋','🍓','🍉','🍇','🍑','🍒','🥭','🍍','🥥','🍌','🥑','🍅','🌶️','🥕','🌽',
+  // Rewards / fun
+  '🎁','🎉','⭐','🌟','✨','🔥','⚡','💎','👑','🏆','🥇','🎯','🎰','🍀','💰','🎟️','❤️','💯','🆓','🙌'
+];
+
+function pickEmoji(inputId, paletteId, e){
+  const inp = document.getElementById(inputId);
+  if(inp) inp.value = e;
+  renderEmojiPalette(paletteId, inputId);
+}
+function renderEmojiPalette(paletteId, inputId){
+  const el = document.getElementById(paletteId), inp = document.getElementById(inputId);
+  if(!el || !inp) return;
+  const cur = (inp.value || '').trim();
+  el.innerHTML = REWARD_EMOJIS.map(e => {
+    const sel = e === cur;
+    return `<button type="button" onclick="pickEmoji('${inputId}','${paletteId}','${e}')" `
+      + `style="width:40px;height:40px;flex:0 0 auto;font-size:22px;line-height:1;padding:0;cursor:pointer;`
+      + `border:2px solid ${sel?'var(--brand)':'var(--b2)'};background:${sel?'rgba(255,90,31,.12)':'#fff'};border-radius:10px">${e}</button>`;
+  }).join('');
+}
 const PRESETS = [['#FF5A1F','#F5B800'],['#8B5CF6','#EC4899'],['#059669','#34D399'],['#0EA5E9','#38BDF8'],['#DC2626','#F97316'],['#1D4ED8','#FBBF24']];
 const VNAV = [
   {id:'s-v-home',icon:'🏠',label:'Home'},
@@ -1892,7 +1929,11 @@ const apiDel  = p => apiFetch(p,{method:'DELETE'});
 function showLoad(t='Loading...'){document.getElementById('load-over').classList.add('show');document.getElementById('load-txt').textContent=t}
 function hideLoad(){document.getElementById('load-over').classList.remove('show')}
 function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>t.classList.remove('show'),3000)}
-function openSheet(id){document.getElementById(id).classList.add('open')}
+function openSheet(id){
+  document.getElementById(id).classList.add('open');
+  if(id==='sh-add-reward') renderEmojiPalette('nr-emoji-palette','nr-e');
+  if(id==='sh-add-prize')  renderEmojiPalette('np-emoji-palette','np-e');
+}
 function closeSheet(id){document.getElementById(id).classList.remove('open')}
 
 /* ════════════════════════════════════
@@ -3645,18 +3686,6 @@ function allowLocation(){
     },
     { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 }
   );
-}
-
-// Jump to the OS location settings. Only the native shell can actually open
-// them (via the bridge); on the web the on-screen steps are the guide.
-function openAppSettings(){
-  try {
-    if(window.ReactNativeWebView){
-      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'openSettings' }));
-      return;
-    }
-  } catch(e){}
-  showToast('Open your phone Settings → this app → Location → Allow');
 }
 
 // "My location" button: recenter if we already have a fix, else open the pop-up.
