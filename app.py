@@ -135,7 +135,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
+_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/download', '/customers', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -143,7 +143,7 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"]          = "DENY"
     response.headers["X-XSS-Protection"]         = "1; mode=block"
     response.headers["Referrer-Policy"]           = "strict-origin-when-cross-origin"
-    if request.path not in _STATIC_PATHS:
+    if request.path not in _STATIC_PATHS and not request.path.startswith("/qr/"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -819,8 +819,31 @@ def serve_shot():
     return resp
 
 
+_QR_SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
+
+@app.route("/qr/<slug>.png")
+def serve_join_qr(slug):
+    """Per-vendor QR image. One scan opens the app AND joins this truck:
+    <SITE_URL>/app?c=1&truck=<slug>. Public — the slug is public info.
+    Used by the vendor Marketing Tools poster."""
+    slug = (slug or "").lower()
+    if not _QR_SLUG_RE.match(slug):
+        return err("Invalid code", 400)
+    try:
+        import segno
+    except Exception as e:
+        print(f"[QR] segno unavailable: {e}")
+        return err("QR generator not available", 503)
+    target = f"{SITE_URL}/app?c=1&truck={slug}"
+    buf = io.BytesIO()
+    segno.make(target, error='h').save(buf, kind='png', scale=12, border=2,
+                                       dark='#2D1B0E', light='#ffffff')
+    resp = Response(buf.getvalue(), mimetype='image/png')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
 @app.route("/install")
-@app.route("/get")
 def serve_install():
     resp = send_from_directory('.', 'install.html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'

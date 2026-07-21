@@ -411,6 +411,7 @@
           <div class="qa" onclick="goV('s-v-schedule')"><div class="qa-ico">📅</div><div class="qa-lbl">Schedule</div><div class="qa-sub">Weekly locations</div></div>
           <div class="qa" onclick="goV('s-v-feed')"><div class="qa-ico">📸</div><div class="qa-lbl">Feed Posts</div><div class="qa-sub">Share updates</div></div>
           <div class="qa" onclick="goV('s-v-reviews-screen')"><div class="qa-ico">⭐</div><div class="qa-lbl">Reviews</div><div class="qa-sub">What customers say</div></div>
+          <div class="qa" onclick="goV('s-v-marketing')"><div class="qa-ico">🚀</div><div class="qa-lbl">Marketing Tools</div><div class="qa-sub">Grow your customers</div></div>
           <div class="qa" onclick="goV('s-v-points')"><div class="qa-ico">⚙️</div><div class="qa-lbl">Points Rules</div><div class="qa-sub">Rates & bonuses</div></div>
           <div class="qa" onclick="goV('s-v-brand')"><div class="qa-ico">🎨</div><div class="qa-lbl">Brand</div><div class="qa-sub">Emoji, colors & name</div></div>
         </div>
@@ -591,6 +592,39 @@
         </div>
         <div id="v-prizes-list"></div>
         <button class="btn btn-s" onclick="openSheet('sh-add-prize')">+ Add Prize Slot</button>
+      </div>
+    </div>
+
+    <!-- VENDOR: MARKETING TOOLS HUB -->
+    <div class="screen" id="s-v-marketing">
+      <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>🚀 Marketing Tools</h1><p>Get more customers on your rewards</p></div></div>
+      <div class="bp">
+        <div class="callout co-bl" style="margin-bottom:16px">
+          <div class="co-icon">💡</div>
+          <div><div class="co-desc">Tools to help you bring in customers. More are on the way — this is where they'll live.</div></div>
+        </div>
+
+        <!-- Tool: Rewards QR Poster -->
+        <div style="background:#fff;border:1.5px solid var(--b2);border-radius:18px;padding:18px 16px;box-shadow:0 4px 16px rgba(180,100,40,.08);margin-bottom:16px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+            <div style="font-size:26px">🪧</div>
+            <div><div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx)">Your Rewards QR Poster</div>
+              <div style="font-size:12.5px;color:var(--mu);font-weight:600">One scan gets the app + joins your truck</div></div>
+          </div>
+          <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin:8px 0 14px">Print it for your truck window or post it on your website. When a customer scans it, they get the app <strong>and</strong> are joined to <strong>your</strong> rewards in a single scan — no codes to type.</div>
+          <div style="text-align:center;background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">
+            <canvas id="mkt-poster-canvas" width="1080" height="1440" style="max-width:250px;width:100%;height:auto;border-radius:10px;box-shadow:0 6px 18px rgba(45,27,14,.16)"></canvas>
+          </div>
+          <button class="btn btn-p" onclick="downloadJoinPoster()" style="width:100%;margin-bottom:10px">⬇️ Download Poster</button>
+          <div class="two-col">
+            <button class="btn btn-s btn-sm" onclick="downloadJoinPoster()">🖼️ Save image</button>
+            <button class="btn btn-s btn-sm" onclick="copyJoinLink(this)">🔗 Copy link</button>
+          </div>
+          <div style="font-size:11.5px;color:var(--mu);text-align:center;margin-top:10px;line-height:1.5">💡 On iPhone, if the download doesn't start, press and hold the poster above to save it.</div>
+        </div>
+
+        <!-- Future tools placeholder -->
+        <div style="text-align:center;color:var(--mu);font-size:13px;font-weight:700;padding:14px;border:1.5px dashed var(--b2);border-radius:14px">✨ More marketing tools coming soon</div>
       </div>
     </div>
 
@@ -2032,6 +2066,7 @@ function goV(id){
   if(id==='s-v-settings') renderVSettings();
   if(id==='s-v-brand')    populateBrandForm();
   if(id==='s-v-points')   populatePointsForm();
+  if(id==='s-v-marketing') loadJoinPoster();
   if(id==='s-v-award')    resetAwardForm();
   if(id==='s-v-confirm'){ goV('s-v-award'); return; }  // merged into At the Window
   if(id==='s-v-customers') loadCustomers();
@@ -3083,7 +3118,9 @@ async function customerSignup(){
   renderMyTrucks();
   requestPushPermission();
   updateNotifBell();
-  showToast('🎉 Account created! Scan a food truck QR to start earning.');
+  // Scanned a truck's poster QR? Auto-join it now; else the generic welcome.
+  if(S._pendingJoin){ maybeJoinPendingTruck(); }
+  else showToast('🎉 Account created! Scan a food truck QR to start earning.');
 }
 
 async function customerLogin(){
@@ -3122,7 +3159,8 @@ async function customerLogin(){
       renderMyTrucks();
     }
   });
-  showToast('👋 Welcome back, '+S.customer.name+'!');
+  if(S._pendingJoin){ maybeJoinPendingTruck(); }
+  else showToast('👋 Welcome back, '+S.customer.name+'!');
 }
 
 function customerLogout(){
@@ -3208,7 +3246,7 @@ function updateRefreshBtn(){
   if(!btn) return;
   const noRefresh = new Set([
     's-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup',
-    's-v-brand','s-v-points',
+    's-v-brand','s-v-points','s-v-marketing',
     's-c-login','s-c-signup','s-c-forgot','s-c-reset',
     's-c-scan','s-c-spin','s-c-qr','s-c-review','s-c-promo','s-c-map',
   ]);
@@ -3385,19 +3423,36 @@ async function joinTruckByCode(){
   if(!code){showToast('Enter a truck code or number');return}
   if(!S.customer){showToast('Please sign in first');return}
 
-  showLoad('Finding truck...');
-
-  // If it's a 4-digit number, search by vendor_number first
+  // If it's a 4-digit number, resolve to the slug via vendor_number first
   const isNumber = /^\d{3,5}$/.test(code.replace('#',''));
   if(isNumber){
+    showLoad('Finding truck...');
     const num = code.replace('#','');
     const searchRes = await apiGet('/api/trucks/search?q=' + encodeURIComponent('#'+num));
+    hideLoad();
     if(searchRes.ok && searchRes.data.data?.length){
       code = searchRes.data.data[0].slug;
     }
   }
+  await joinTruckBySlug(code.toLowerCase());
+}
 
-  const r = await apiPost('/api/customer/join-truck',{slug:code.toLowerCase(),customer_id:S.customer?.id});
+// A customer who scanned a truck's poster QR arrives with ?truck=<slug>; once
+// signed in we join them automatically. Idempotent (rejoin is harmless).
+function maybeJoinPendingTruck(){
+  if(!S.customer || !S._pendingJoin) return;
+  const slug = S._pendingJoin;
+  S._pendingJoin = null;
+  // Clean the slug out of the URL so a reload doesn't re-trigger the join.
+  try { history.replaceState({}, '', location.pathname); } catch(e){}
+  joinTruckBySlug(slug);
+}
+
+async function joinTruckBySlug(slug){
+  if(!slug){return}
+  if(!S.customer){ S._pendingJoin = slug.toLowerCase(); return; }
+  showLoad('Joining truck...');
+  const r = await apiPost('/api/customer/join-truck',{slug:slug.toLowerCase(),customer_id:S.customer?.id});
   hideLoad();
   if(!r.ok){showToast('❌ '+(r.data?.error||'Truck not found — check the code'));return}
   const truck=r.data.data.truck;
@@ -4639,6 +4694,75 @@ function fallbackCopyCb(text, cb) {
   } catch(e) {}
 }
 
+// Copy the customer "get the app" link (for vendors to post on their website).
+function copyGetLink(btn){
+  const url = location.origin + '/get';
+  const done = () => { const o = btn.textContent; btn.textContent = '✅ Copied'; setTimeout(()=>{ btn.textContent = o; }, 1600); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopyCb(url, done));
+  } else { fallbackCopyCb(url, done); }
+}
+
+/* ── Marketing: personalized "join my truck" QR poster (drawn on canvas so it
+   downloads as one image) ── */
+function copyJoinLink(btn){
+  const url = location.origin + '/app?c=1&truck=' + (S.vendor?.slug || '');
+  const done = () => { const o = btn.textContent; btn.textContent = '✅ Copied'; setTimeout(()=>{ btn.textContent = o; }, 1600); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => fallbackCopyCb(url, done));
+  } else { fallbackCopyCb(url, done); }
+}
+function loadJoinPoster(){
+  const v = S.vendor; const c = document.getElementById('mkt-poster-canvas');
+  if(!v || !v.slug || !c) return;
+  const qr = new Image();
+  qr.onload = function(){ drawJoinPoster(c, qr, v); };
+  qr.onerror = function(){
+    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0,0,c.width,c.height);
+    x.fillStyle = '#8C7B6C'; x.textAlign = 'center'; x.font = '600 40px system-ui,Arial';
+    x.fillText('Poster will appear once', c.width/2, c.height/2 - 24);
+    x.fillText('the app updates', c.width/2, c.height/2 + 30);
+  };
+  qr.src = '/qr/' + encodeURIComponent(v.slug) + '.png';
+}
+function _rr(x,px,py,w,h,r){ x.beginPath(); x.moveTo(px+r,py); x.arcTo(px+w,py,px+w,py+h,r); x.arcTo(px+w,py+h,px,py+h,r); x.arcTo(px,py+h,px,py,r); x.arcTo(px,py,px+w,py,r); x.closePath(); }
+function _wrap(x,text,cx,y,maxW,lh){
+  const words = String(text||'').split(' '); let line=''; const lines=[];
+  for(const w of words){ const t = line ? line+' '+w : w; if(x.measureText(t).width>maxW && line){ lines.push(line); line=w; } else line=t; }
+  if(line) lines.push(line);
+  const startY = y - (lines.length-1)*lh/2;
+  lines.forEach((l,i)=> x.fillText(l, cx, startY + i*lh));
+}
+function drawJoinPoster(c, qrImg, v){
+  const W=1080, H=1440, x=c.getContext('2d');
+  const brand = (v.color_primary && /^#?[0-9a-fA-F]{6}$/.test(v.color_primary.replace('#',''))) ? (v.color_primary[0]==='#'?v.color_primary:'#'+v.color_primary) : '#FF5722';
+  const font = (w,s)=> w+' '+s+'px system-ui,-apple-system,"Segoe UI",Arial,sans-serif';
+  x.fillStyle='#FFF8F0'; x.fillRect(0,0,W,H);
+  x.fillStyle=brand; x.fillRect(0,0,W,150);
+  x.textAlign='center';
+  x.fillStyle='#fff'; x.font=font('900',42); x.fillText('FOOD TRUCK REWARDS', W/2, 95);
+  x.fillStyle='#241611'; x.font=font('900',72); _wrap(x, v.truck_name||'Our Rewards', W/2, 290, W-150, 78);
+  x.fillStyle='#7a6a5c'; x.font=font('700',34); x.fillText('Scan to join our rewards', W/2, 410);
+  x.fillStyle=brand;     x.font=font('900',42); x.fillText('& earn FREE food', W/2, 464);
+  const qs=560, qx=(W-qs)/2, qy=536;
+  x.save(); _rr(x, qx-28, qy-28, qs+56, qs+56, 40); x.fillStyle='#fff';
+  x.shadowColor='rgba(45,27,14,.18)'; x.shadowBlur=30; x.shadowOffsetY=12; x.fill(); x.restore();
+  x.drawImage(qrImg, qx, qy, qs, qs);
+  x.fillStyle='#241611'; x.font=font('900',40); x.fillText('Point your camera here', W/2, qy+qs+104);
+  x.fillStyle='#241611'; _rr(x, W/2-265, qy+qs+142, 530, 76, 38); x.fill();
+  x.fillStyle='#fff'; x.font=font('900',34); x.fillText('foodtruckrewards.com', W/2, qy+qs+192);
+  x.fillStyle='#8C7B6C'; x.font=font('700',27); x.fillText('Free  ·  No app store  ·  Points every visit', W/2, H-64);
+}
+function downloadJoinPoster(){
+  const c = document.getElementById('mkt-poster-canvas'); if(!c) return;
+  try {
+    const a = document.createElement('a');
+    a.href = c.toDataURL('image/png');
+    a.download = (S.vendor?.slug || 'truck') + '-rewards-poster.png';
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch(e){ showToast('Press and hold the poster above to save it'); }
+}
+
 function closeIOSSheet() {
   const sheet = document.getElementById('ios-install-sheet');
   if (sheet) sheet.style.display = 'none';
@@ -4806,11 +4930,15 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
   S.prizes=[...DEFAULT_PRIZES];
   S.rewards=[...DEFAULT_REWARDS];
   // Customers arriving from the "Get the App" page carry ?c=1 — they must land
-  // on the customer side, NEVER the vendor login.
-  const wantCustomer = (function(){
-    try { const p = new URLSearchParams(location.search);
-      return p.get('c')==='1' || p.get('mode')==='customer'; } catch(e){ return false; }
-  })();
+  // on the customer side, NEVER the vendor login. A truck's poster QR also
+  // carries ?truck=<slug>, which auto-joins that truck once they're signed in.
+  let wantCustomer = false;
+  try {
+    const p = new URLSearchParams(location.search);
+    const tp = p.get('truck');
+    if(tp) S._pendingJoin = tp.toLowerCase();
+    wantCustomer = p.get('c')==='1' || p.get('mode')==='customer' || !!tp;
+  } catch(e){}
 
   if(S.vendorToken&&S.vendor){
     // Restore vendor session
@@ -4821,6 +4949,7 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
     setMode('customer');
     requestPushPermission();
     updateNotifBell();
+    if(S._pendingJoin) maybeJoinPendingTruck();
   } else if(wantCustomer){
     // New visitor from the customer landing page → customer sign-up.
     S.cScreen='s-c-signup'; setMode('customer');
