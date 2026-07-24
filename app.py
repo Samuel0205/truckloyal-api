@@ -554,7 +554,7 @@ def _purge_vendor(vendor_id: str):
 def _create_vendor_account(*, email, password, truck_name, owner_name, service_states,
                            home_zip=None, phone=None, phone_public=False, email_public=False,
                            stripe_customer_id=None, stripe_sub_id=None,
-                           plan_active=False, promo_expires=None, trial_days=14):
+                           plan_active=False, promo_expires=None, trial_days=30):
     """Insert a vendor row (+ defaults, TOS record, verification email) and
     return it. Called only AFTER a subscription is confirmed (paying vendors)
     or from the gated tester path — never on a failed/abandoned payment."""
@@ -1575,7 +1575,7 @@ def vendor_complete_signup():
         subscription = stripe.Subscription.create(
             customer=stripe_customer_id,
             items=[{"price": STRIPE_PRICE_ID}],
-            trial_period_days=14,
+            trial_period_days=30,
             default_payment_method=payment_method,
             expand=["latest_invoice.payment_intent"],
             collection_method="charge_automatically",
@@ -1739,7 +1739,7 @@ def create_subscription():
             invoice_settings={"default_payment_method": payment_method}
         )
 
-        # Only grant the 14-day Stripe trial the first time. Otherwise a vendor
+        # Only grant the 30-day Stripe trial the first time. Otherwise a vendor
         # could cancel and re-subscribe repeatedly to farm free trials.
         sub_args = dict(
             customer=customer_id,
@@ -1749,7 +1749,7 @@ def create_subscription():
             collection_method="charge_automatically",
         )
         if not vendor.get("stripe_trial_used"):
-            sub_args["trial_period_days"] = 14
+            sub_args["trial_period_days"] = 30
 
         subscription = stripe.Subscription.create(**sub_args)
 
