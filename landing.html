@@ -148,12 +148,17 @@
   .track-label { display: inline-block; font-weight: 900; font-size: 15px; padding: 6px 16px; border-radius: 999px; margin-bottom: 22px; }
   .track-label.vendor { background: var(--orange); color: #fff; }
   .track-label.customer { background: var(--gold); color: var(--dark); }
-  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 50px; }
-  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px 22px; }
-  .step .n { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 16px; color: #fff; background: var(--orange); margin-bottom: 14px; }
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 50px; position: relative; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 26px 22px; position: relative; }
+  .step .emoji { font-size: 30px; line-height: 1; margin-bottom: 12px; display: block; }
+  .step .n { width: 30px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-weight: 900; font-size: 14px; color: #fff; background: var(--orange); margin-bottom: 12px; }
   .step.cust .n { background: var(--gold); color: var(--dark); }
   .step h3 { font-size: 18px; margin-bottom: 6px; }
   .step p { color: var(--muted); font-size: 14px; font-weight: 700; }
+  @media (min-width: 721px) {
+    .step:not(:last-child)::after { content: "→"; position: absolute; top: 50%; right: -15px; transform: translateY(-50%); font-size: 22px; font-weight: 900; color: var(--orange); z-index: 2; }
+    .step.cust:not(:last-child)::after { color: var(--gold); }
+  }
   #features { background: #fff; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
   .feat { background: var(--cream); border: 1px solid var(--line); border-radius: 18px; padding: 26px 22px; transition: transform .2s ease, box-shadow .2s ease; }
@@ -338,21 +343,21 @@
     <div class="head">
       <div class="kicker">How it works</div>
       <h2>Simple for you. Simple for your customers.</h2>
-      <p>Set it up once, then run it from your phone at the window.</p>
+      <p>Download in one tap, set it up once, then run it from your phone at the window.</p>
     </div>
 
-    <span class="track-label vendor">🚚 For vendors</span>
+    <span class="track-label vendor">🚚 For you, the vendor</span>
     <div class="steps">
-      <div class="step"><div class="n">1</div><h3>Sign up</h3><p>Start your 14-day free trial and add your truck. No credit card needed to begin.</p></div>
-      <div class="step"><div class="n">2</div><h3>Customize</h3><p>Set your points, rewards, and spin wheel prizes to match your menu and margins.</p></div>
-      <div class="step"><div class="n">3</div><h3>Use it at the window</h3><p>Scan or search a customer and award points in seconds — even during a rush.</p></div>
+      <div class="step"><span class="emoji">📲</span><div class="n">1</div><h3>Download &amp; sign up</h3><p>One tap to install — no app store. Start your 14-day free trial and add your truck.</p></div>
+      <div class="step"><span class="emoji">🎁</span><div class="n">2</div><h3>Set your rewards</h3><p>Pick your points, rewards, and spin-wheel prizes to match your menu and margins.</p></div>
+      <div class="step"><span class="emoji">🪟</span><div class="n">3</div><h3>Use it at the window</h3><p>Scan or search a customer and award points in seconds — even during a rush.</p></div>
     </div>
 
-    <span class="track-label customer">🌮 For customers</span>
+    <span class="track-label customer">🌮 For your customers</span>
     <div class="steps">
-      <div class="step cust"><div class="n">1</div><h3>Get the app</h3><p>Open the link and add it to your home screen — free, no app store needed.</p></div>
-      <div class="step cust"><div class="n">2</div><h3>Visit trucks</h3><p>Show your rewards QR code at the window each time you order.</p></div>
-      <div class="step cust"><div class="n">3</div><h3>Earn rewards</h3><p>Rack up points, keep your streak alive, and redeem for free food.</p></div>
+      <div class="step cust"><span class="emoji">⬇️</span><div class="n">1</div><h3>Download the app</h3><p>One tap from your poster or link — free, on the home screen, no app store.</p></div>
+      <div class="step cust"><span class="emoji">📷</span><div class="n">2</div><h3>Scan at the truck</h3><p>Show their rewards QR at the window each time they order to earn points.</p></div>
+      <div class="step cust"><span class="emoji">🎉</span><div class="n">3</div><h3>Earn &amp; redeem</h3><p>Rack up points, keep a streak alive, and cash in for free food — they keep coming back.</p></div>
     </div>
   </div>
 </section>
@@ -379,22 +384,22 @@
 <section id="get-app">
   <div class="inner">
     <div class="head">
-      <div class="kicker">Get the app</div>
-      <h2>Add it to your home screen</h2>
-      <p>Free — no app store needed. Installs in seconds on Android and iPhone.</p>
+      <div class="kicker">Get started</div>
+      <h2>Download now &amp; get started</h2>
+      <p>One tap and it's on your phone — free, in seconds, no app store. Your 14-day free trial starts the moment you open it.</p>
     </div>
     <div class="getapp-cta" id="install-cta"></div>
     <div class="install-grid">
       <div class="install-card">
-        <h3>🤖 Android</h3>
+        <h3>🤖 On Android</h3>
         <ol>
-          <li>Tap “Install App” above</li>
+          <li>Tap “Download Now” above</li>
           <li>Confirm “Install” in the pop-up</li>
-          <li>Open Food Truck Rewards from your home screen</li>
+          <li>Open Food Truck Rewards &amp; start your trial</li>
         </ol>
       </div>
       <div class="install-card ios">
-        <h3>🍏 iPhone</h3>
+        <h3>🍏 On iPhone</h3>
         <ol>
           <li>Open this page in Safari</li>
           <li>Tap the Share button ⬆️</li>
@@ -449,7 +454,7 @@
   var cta = document.getElementById('install-cta');
 
   function renderInstalled(){ cta.innerHTML = '<div class="warn" style="background:#F1F8E9;border-color:#C5E1A5;color:#2E7D32">✓ App installed! Open Food Truck Rewards from your home screen.</div>'; }
-  function renderAndroid(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" id="android-install-btn" onclick="androidInstall()">⬇️ Install App</button><div class="sub">Free · installs in seconds · no app store</div>'; }
+  function renderAndroid(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" id="android-install-btn" onclick="androidInstall()">⬇️ Download Now</button><div class="sub">Free · installs in seconds · no app store</div>'; }
   window.androidInstall = function(){
     if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(r){ if(r&&r.outcome==='accepted') renderInstalled(); deferredPrompt=null; }); }
     else { cta.innerHTML = '<div class="warn">Tap the ⋮ menu (top-right) then “Install app” or “Add to Home screen”.</div>'; }
