@@ -360,6 +360,17 @@
       </div>
       <!-- White card: stats + quick actions + location -->
       <div style="background:white;border-radius:24px 24px 0 0;margin:-16px 0 0;box-shadow:0 -2px 16px rgba(180,100,40,0.08)">
+        <!-- Welcome / get-started banner (new vendors; dismissible) -->
+        <div id="v-welcome-wrap" style="display:none;padding:22px 20px 0">
+          <div style="background:linear-gradient(135deg,var(--brand),#FF8A50);border-radius:18px;padding:18px;color:#fff;box-shadow:0 8px 22px rgba(255,87,34,.28)">
+            <div style="font-family:var(--fd);font-size:19px;font-weight:900;line-height:1.15">👋 Welcome to Food Truck Rewards!</div>
+            <div style="font-size:13px;opacity:.95;margin-top:7px;line-height:1.55">You're set up and live. Here's the simple way to get your rewards going and bring customers in — about 5 minutes, start to finish.</div>
+            <div style="display:flex;gap:10px;margin-top:15px">
+              <button onclick="goV('s-v-getstarted')" style="flex:1;background:#fff;color:var(--brand);border:none;border-radius:12px;padding:12px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer">🚀 Show me how to start →</button>
+              <button onclick="dismissWelcome()" style="background:rgba(255,255,255,.2);color:#fff;border:none;border-radius:12px;padding:12px 16px;font-size:13px;font-weight:800;font-family:var(--fb);cursor:pointer">Later</button>
+            </div>
+          </div>
+        </div>
         <div style="padding:26px 20px 0">
           <div class="stats g3">
             <div class="sc"><div class="sv" style="color:var(--brand)" id="v-stat-visits">0</div><div class="sl">Visits Today</div></div>
@@ -595,6 +606,71 @@
       </div>
     </div>
 
+    <!-- VENDOR: GETTING STARTED GUIDE -->
+    <div class="screen" id="s-v-getstarted">
+      <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>🚀 Getting Started</h1><p>From setup to your first rewarded customer</p></div></div>
+      <div class="bp">
+        <div class="callout co-bl" style="margin-bottom:18px">
+          <div class="co-icon">💡</div>
+          <div><div class="co-desc">Your loyalty program is already live. Do these 3 things once and you're running — most trucks are set up in about 5 minutes.</div></div>
+        </div>
+
+        <!-- STEP 1 -->
+        <div style="background:#fff;border:1.5px solid var(--b2);border-radius:18px;padding:18px 16px;box-shadow:0 4px 16px rgba(180,100,40,.08);margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:900;font-size:17px;flex-shrink:0">1</div>
+            <div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx)">🎁 Set up what customers earn</div>
+          </div>
+          <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:13px">Pick the rewards they can redeem (like a free drink), your points rate, and any spin-wheel prizes. This is what makes coming back worth it.</div>
+          <div class="two-col" style="gap:8px">
+            <button class="btn btn-s btn-sm" onclick="goV('s-v-rewards')">🎁 Rewards</button>
+            <button class="btn btn-s btn-sm" onclick="goV('s-v-points')">⚙️ Points rate</button>
+          </div>
+          <button class="btn btn-s btn-sm" style="width:100%;margin-top:8px" onclick="goV('s-v-spin')">🎰 Spin prizes (optional)</button>
+        </div>
+
+        <!-- STEP 2 -->
+        <div style="background:#fff;border:1.5px solid var(--b2);border-radius:18px;padding:18px 16px;box-shadow:0 4px 16px rgba(180,100,40,.08);margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:900;font-size:17px;flex-shrink:0">2</div>
+            <div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx)">📲 Get customers on the app</div>
+          </div>
+          <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:13px">Print your <strong>QR poster</strong> and stick it on your truck window. When a customer scans it, they get the app <strong>and</strong> join your rewards in one scan — no codes to type. Point to it and say "scan here for free food."</div>
+          <button class="btn btn-p" style="width:100%" onclick="goV('s-v-marketing')">🪧 Get my QR poster →</button>
+        </div>
+
+        <!-- STEP 3 -->
+        <div style="background:#fff;border:1.5px solid var(--b2);border-radius:18px;padding:18px 16px;box-shadow:0 4px 16px rgba(180,100,40,.08);margin-bottom:18px">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:900;font-size:17px;flex-shrink:0">3</div>
+            <div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx)">🪟 Reward them at the window</div>
+          </div>
+          <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:13px">When they order, ask if they're on your rewards. Scan their code (or look them up by phone), enter the order total, and award points. If they've earned a reward, they'll show a code — enter it to confirm.</div>
+          <button class="btn btn-p" style="width:100%" onclick="goV('s-v-award')">🪟 Open At the Window →</button>
+        </div>
+
+        <!-- HOW CUSTOMERS EARN -->
+        <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx);margin:4px 0 10px">⭐ The ways customers earn</div>
+        <div style="background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:6px 16px;box-shadow:0 4px 16px rgba(180,100,40,.06);margin-bottom:18px">
+          <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--s2)"><div style="font-size:22px">🪟</div><div><div style="font-weight:800;font-size:14px;color:var(--tx)">Every visit</div><div style="font-size:12.5px;color:var(--mu)">A set number of points each time they check in.</div></div></div>
+          <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--s2)"><div style="font-size:22px">💵</div><div><div style="font-weight:800;font-size:14px;color:var(--tx)">What they spend</div><div style="font-size:12.5px;color:var(--mu)">Extra points per dollar on their order.</div></div></div>
+          <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--s2)"><div style="font-size:22px">🎰</div><div><div style="font-weight:800;font-size:14px;color:var(--tx)">Spin the wheel</div><div style="font-size:12.5px;color:var(--mu)">A fun bonus spin for extra points.</div></div></div>
+          <div style="display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--s2)"><div style="font-size:22px">🔥</div><div><div style="font-weight:800;font-size:14px;color:var(--tx)">Visit streaks</div><div style="font-size:12.5px;color:var(--mu)">Rewards for coming back regularly.</div></div></div>
+          <div style="display:flex;gap:12px;padding:12px 0"><div style="font-size:22px">👥</div><div><div style="font-weight:800;font-size:14px;color:var(--tx)">Referrals</div><div style="font-size:12.5px;color:var(--mu)">Points when they bring a friend on board.</div></div></div>
+        </div>
+
+        <!-- WHAT TO SAY -->
+        <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx);margin:4px 0 10px">💬 What to say at the window</div>
+        <div style="background:linear-gradient(135deg,#FFF8F2,#FFF3E8);border:1.5px solid rgba(255,87,34,.22);border-radius:16px;padding:16px;margin-bottom:22px">
+          <div style="margin-bottom:12px"><div style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--brand);text-transform:uppercase;margin-bottom:3px">When they order</div><div style="font-size:14px;color:var(--tx);font-weight:600;line-height:1.5">"Are you on our rewards? <strong>Scan this and you'll get free food</strong> — takes 10 seconds." <span style="color:var(--mu)">(point to your QR poster)</span></div></div>
+          <div style="margin-bottom:12px"><div style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--brand);text-transform:uppercase;margin-bottom:3px">When they pay</div><div style="font-size:14px;color:var(--tx);font-weight:600;line-height:1.5">"Do you have your rewards? Let me add your points." <span style="color:var(--mu)">(scan their code or enter their phone in At the Window)</span></div></div>
+          <div><div style="font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--brand);text-transform:uppercase;margin-bottom:3px">If they've earned a reward</div><div style="font-size:14px;color:var(--tx);font-weight:600;line-height:1.5">They'll show a reward code from their app — enter it to confirm and hand over the free item. 🎉</div></div>
+        </div>
+
+        <div style="text-align:center;color:var(--mu);font-size:13px;font-weight:700;padding-bottom:8px">That's the whole thing. Post your location each day, reward folks at the window, and watch your regulars grow. 🚚</div>
+      </div>
+    </div>
+
     <!-- VENDOR: MARKETING TOOLS HUB -->
     <div class="screen" id="s-v-marketing">
       <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>🚀 Marketing Tools</h1><p>Get more customers on your rewards</p></div></div>
@@ -602,6 +678,11 @@
         <div class="callout co-bl" style="margin-bottom:16px">
           <div class="co-icon">💡</div>
           <div><div class="co-desc">Tools to help you bring in customers. More are on the way — this is where they'll live.</div></div>
+        </div>
+        <div onclick="goV('s-v-getstarted')" style="display:flex;align-items:center;gap:12px;background:linear-gradient(135deg,var(--brand),#FF8A50);border-radius:16px;padding:14px 16px;margin-bottom:16px;cursor:pointer;box-shadow:0 6px 18px rgba(255,87,34,.28)">
+          <div style="font-size:22px;flex-shrink:0">🚀</div>
+          <div style="flex:1;min-width:0;color:#fff"><div style="font-family:var(--fd);font-size:15px;font-weight:900">New here? Start with the guide</div><div style="font-size:12px;opacity:.92;font-weight:600;margin-top:1px">Setup → get customers → reward them</div></div>
+          <div style="color:#fff;font-size:22px;flex-shrink:0">›</div>
         </div>
 
         <!-- Tool: Rewards QR Poster -->
@@ -2437,9 +2518,17 @@ function vendorLogout(){
 /* ════════════════════════════════════
    VENDOR HOME
 ════════════════════════════════════ */
+function dismissWelcome(){
+  try{ localStorage.setItem('tl_v_welcome_dismissed','1'); }catch(e){}
+  const w=document.getElementById('v-welcome-wrap'); if(w) w.style.display='none';
+}
+
 async function loadVendorHome(){
   if(!S.vendor) return;
   setText('v-hero-name',S.vendor.truck_name+' '+(S.vendor.emoji||'🚚'));
+  // Welcome / get-started banner until the vendor dismisses it.
+  const wc=document.getElementById('v-welcome-wrap');
+  if(wc) wc.style.display = localStorage.getItem('tl_v_welcome_dismissed') ? 'none' : 'block';
 
   // Always refresh vendor from API to pick up vendor_number + any new fields
   const me=await apiGet('/api/vendor/me');
@@ -3246,7 +3335,7 @@ function updateRefreshBtn(){
   if(!btn) return;
   const noRefresh = new Set([
     's-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup',
-    's-v-brand','s-v-points','s-v-marketing',
+    's-v-brand','s-v-points','s-v-marketing','s-v-getstarted',
     's-c-login','s-c-signup','s-c-forgot','s-c-reset',
     's-c-scan','s-c-spin','s-c-qr','s-c-review','s-c-promo','s-c-map',
   ]);
