@@ -188,6 +188,7 @@
   /* Get the App section */
   #get-app { background: var(--cream); }
   .getapp-cta { text-align: center; margin-bottom: 44px; }
+  .cta-row { display: flex; gap: 12px; justify-content: center; align-items: center; flex-wrap: wrap; }
   .getapp-btn { font-size: 18px; padding: 18px 46px; }
   .getapp-cta .sub { font-size: 13px; color: var(--muted); font-weight: 800; margin-top: 12px; }
   .getapp-cta .warn { max-width: 460px; margin: 0 auto; background: #FFF3E0; border: 1px solid #FFCC80; border-radius: 14px; padding: 14px; color: #E65100; font-weight: 800; font-size: 14px; }
@@ -471,7 +472,7 @@
   };
   function renderIOSSafari(){ cta.innerHTML = '<div class="warn">Tap <strong>Share</strong> ⬆️ then <strong>Add to Home Screen</strong> to install — see the iPhone steps below.</div>'; }
   function renderIOSOther(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" onclick="copyLink(this)"><span id="copy-lbl">🔗 Copy link for Safari</span></button><div class="sub">On iPhone, apps install from Safari only</div>'; }
-  function renderDesktop(){ cta.innerHTML = '<a class="btn btn-primary getapp-btn" href="/app">Open the Web App →</a><div class="sub">📱 On your phone, this shows a one-tap Install button</div>'; }
+  function renderDesktop(){ cta.innerHTML = '<div class="cta-row"><a class="btn btn-primary getapp-btn" href="#get-app" onclick="return goInstall(event)">⬇️ Download App Now</a><a class="btn btn-outline getapp-btn" href="/app">Open the Web App →</a></div><div class="sub">📱 On your phone, tap <b>Download App Now</b> for a one-tap install</div>'; }
   window.copyLink = function(btn){ var u=location.origin+'/'; var l=document.getElementById('copy-lbl'); var d=function(){ if(l) l.textContent='✅ Copied! Open Safari'; }; if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(d).catch(function(){fb(u,d);}); else fb(u,d); };
   function fb(t,cb){ try{ var a=document.createElement('textarea'); a.value=t; a.style.position='fixed'; a.style.opacity='0'; document.body.appendChild(a); a.select(); document.execCommand('copy'); document.body.removeChild(a); cb(); }catch(e){} }
 
