@@ -694,14 +694,11 @@
           </div>
           <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin:8px 0 14px">Print it for your truck window or post it on your website. When a customer scans it, they get the app <strong>and</strong> are joined to <strong>your</strong> rewards in a single scan — no codes to type.</div>
           <div style="text-align:center;background:var(--s2);border-radius:14px;padding:14px;margin-bottom:14px">
-            <canvas id="mkt-poster-canvas" width="1080" height="1440" style="max-width:250px;width:100%;height:auto;border-radius:10px;box-shadow:0 6px 18px rgba(45,27,14,.16)"></canvas>
+            <img id="mkt-poster-img" alt="Your rewards QR poster" style="max-width:250px;width:100%;height:auto;border-radius:10px;box-shadow:0 6px 18px rgba(45,27,14,.16);background:#fff;display:inline-block">
           </div>
-          <button class="btn btn-p" onclick="downloadJoinPoster()" style="width:100%;margin-bottom:10px">⬇️ Download Poster</button>
-          <div class="two-col">
-            <button class="btn btn-s btn-sm" onclick="downloadJoinPoster()">🖼️ Save image</button>
-            <button class="btn btn-s btn-sm" onclick="copyJoinLink(this)">🔗 Copy link</button>
-          </div>
-          <div style="font-size:11.5px;color:var(--mu);text-align:center;margin-top:10px;line-height:1.5">💡 On iPhone, if the download doesn't start, press and hold the poster above to save it.</div>
+          <button class="btn btn-p" onclick="downloadJoinPoster()" style="width:100%;margin-bottom:10px">⬇️ Save / Share Poster</button>
+          <button class="btn btn-s btn-sm" onclick="copyJoinLink(this)" style="width:100%">🔗 Copy link</button>
+          <div style="font-size:11.5px;color:var(--mu);text-align:center;margin-top:10px;line-height:1.5">💡 On iPhone, tap <strong>Save / Share Poster</strong> to save it to Photos — or just press &amp; hold the poster above.</div>
         </div>
 
         <!-- Future tools placeholder -->
@@ -4802,16 +4799,20 @@ function copyJoinLink(btn){
   } else { fallbackCopyCb(url, done); }
 }
 function loadJoinPoster(){
-  const v = S.vendor; const c = document.getElementById('mkt-poster-canvas');
-  if(!v || !v.slug || !c) return;
+  const v = S.vendor; const img = document.getElementById('mkt-poster-img');
+  if(!v || !v.slug || !img) return;
+  S._posterDataUrl = null;
   const qr = new Image();
-  qr.onload = function(){ drawJoinPoster(c, qr, v); };
-  qr.onerror = function(){
-    const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0,0,c.width,c.height);
-    x.fillStyle = '#8C7B6C'; x.textAlign = 'center'; x.font = '600 40px system-ui,Arial';
-    x.fillText('Poster will appear once', c.width/2, c.height/2 - 24);
-    x.fillText('the app updates', c.width/2, c.height/2 + 30);
+  qr.onload = function(){
+    // Draw on an offscreen canvas, then show it as an <img> — an <img> can be
+    // long-pressed to save on iPhone (a <canvas> can't), and its data URL feeds
+    // the Save/Share button.
+    const c = document.createElement('canvas'); c.width = 1080; c.height = 1440;
+    drawJoinPoster(c, qr, v);
+    try { S._posterDataUrl = c.toDataURL('image/png'); img.src = S._posterDataUrl; }
+    catch(e){ img.alt = 'Poster unavailable — try again'; }
   };
+  qr.onerror = function(){ img.removeAttribute('src'); img.alt = 'Poster will appear once the app updates'; };
   qr.src = '/qr/' + encodeURIComponent(v.slug) + '.png';
 }
 function _rr(x,px,py,w,h,r){ x.beginPath(); x.moveTo(px+r,py); x.arcTo(px+w,py,px+w,py+h,r); x.arcTo(px+w,py+h,px,py+h,r); x.arcTo(px,py+h,px,py,r); x.arcTo(px,py,px+w,py,r); x.closePath(); }
@@ -4842,14 +4843,33 @@ function drawJoinPoster(c, qrImg, v){
   x.fillStyle='#fff'; x.font=font('900',34); x.fillText('foodtruckrewards.com', W/2, qy+qs+192);
   x.fillStyle='#8C7B6C'; x.font=font('700',27); x.fillText('Free  ·  No app store  ·  Points every visit', W/2, H-64);
 }
+function _dataUrlToFile(dataurl, filename){
+  const parts = dataurl.split(','); const mime = (parts[0].match(/:(.*?);/) || [])[1] || 'image/png';
+  const bstr = atob(parts[1]); let n = bstr.length; const u8 = new Uint8Array(n);
+  while(n--){ u8[n] = bstr.charCodeAt(n); }
+  return new File([u8], filename, { type: mime });
+}
 function downloadJoinPoster(){
-  const c = document.getElementById('mkt-poster-canvas'); if(!c) return;
+  const url = S._posterDataUrl;
+  if(!url){ showToast('Poster still loading — try again in a moment'); return; }
+  const filename = (S.vendor?.slug || 'truck') + '-rewards-poster.png';
+  // iPhone: the native share sheet offers "Save Image" / "Add to Photos".
+  // (Called synchronously in the tap so the share gesture stays valid.)
+  try {
+    const file = _dataUrlToFile(url, filename);
+    if(file && navigator.canShare && navigator.canShare({ files: [file] })){
+      navigator.share({ files: [file], title: 'Rewards poster' }).catch(function(){});
+      return;
+    }
+  } catch(e){}
+  // Android / desktop: a real file download.
   try {
     const a = document.createElement('a');
-    a.href = c.toDataURL('image/png');
-    a.download = (S.vendor?.slug || 'truck') + '-rewards-poster.png';
+    a.href = url; a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
-  } catch(e){ showToast('Press and hold the poster above to save it'); }
+    return;
+  } catch(e){}
+  showToast('Press and hold the poster above to save it');
 }
 
 function closeIOSSheet() {
