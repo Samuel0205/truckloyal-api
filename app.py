@@ -958,9 +958,15 @@ def admin_login():
 @app.route("/api/admin/stats", methods=["GET"])
 @admin_required
 def admin_stats():
-    vendors     = sb.table("vendors").select("id, plan_active, trial_ends_at, "
-                  "payment_failed_at, promo_expires_at, created_at, "
-                  "truck_name, email, vendor_number, slug, owner_name, is_blocked").execute().data
+  try:
+    # Tolerate an un-migrated DB: drop newer optional columns rather than 500
+    # the whole dashboard (one missing column = a blank admin page).
+    _vcols = ("id, plan_active, trial_ends_at, payment_failed_at, promo_expires_at, "
+              "created_at, truck_name, email, vendor_number, slug, owner_name")
+    try:
+        vendors = sb.table("vendors").select(_vcols + ", is_blocked").execute().data
+    except Exception:
+        vendors = sb.table("vendors").select(_vcols).execute().data
     customers   = sb.table("customers").select("id", count="exact").execute()
     visits      = sb.table("visits").select("id", count="exact").execute()
     redemptions = sb.table("redemptions").select("id", count="exact").execute()
@@ -1010,6 +1016,11 @@ def admin_stats():
         "mrr":             round(mrr, 2),
         "promo_codes":     promos,
     })
+  except Exception as e:
+    # Admin-only endpoint — surface the real reason so the dashboard shows an
+    # error instead of silently rendering blank.
+    print(f"[ADMIN STATS] failed: {e}")
+    return err(f"Stats failed: {e}", 500)
 
 
 @app.route("/api/admin/vendor/<vendor_id>", methods=["GET"])
@@ -1224,9 +1235,15 @@ def admin_delete_customer(customer_id):
 @admin_required
 def admin_get_customers():
     """Get all customers for admin view."""
-    customers = sb.table("customers").select(
-        "id, name, email, phone, created_at, is_blocked, referral_code"
-    ).order("created_at", desc=True).limit(200).execute().data or []
+    # Tolerate an un-migrated DB (drop is_blocked if the column is absent).
+    try:
+        customers = sb.table("customers").select(
+            "id, name, email, phone, created_at, is_blocked, referral_code"
+        ).order("created_at", desc=True).limit(200).execute().data or []
+    except Exception:
+        customers = sb.table("customers").select(
+            "id, name, email, phone, created_at, referral_code"
+        ).order("created_at", desc=True).limit(200).execute().data or []
 
     # Tally visit counts in one query rather than one per customer (was N+1).
     ids = [c["id"] for c in customers]

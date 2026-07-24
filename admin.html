@@ -265,7 +265,13 @@
       var st = await api('GET','/api/admin/stats');
       S.vendors = st.vendors||[]; S.promos = st.promo_codes||[];
       renderStats(st); renderVendors(); renderPromos();
-    }catch(ex){ if(ex.message!=='Session expired') toast('⚠️ Stats: '+ex.message); }
+    }catch(ex){
+      if(ex.message!=='Session expired'){
+        var el=document.getElementById('ov-stats');
+        if(el) el.innerHTML='<div style="grid-column:1/-1;background:#FDECEA;border:1px solid #F5C6CB;color:#B02A37;border-radius:12px;padding:16px 18px;font-weight:700;line-height:1.5">⚠️ Couldn\'t load stats — '+esc(ex.message)+'<div style="font-weight:600;font-size:13px;margin-top:6px;color:#8a4b50">Tap Refresh to retry.</div></div>';
+        toast('⚠️ Stats: '+ex.message);
+      }
+    }
     try{
       S.customers = await api('GET','/api/admin/customers') || [];
       renderCustomers();
