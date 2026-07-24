@@ -130,7 +130,7 @@
 <header>
   <div class="nav-inner">
     <a class="logo" href="#hero"><img src="/logo.png" alt="Food Truck Rewards logo"> Food Truck Rewards</a>
-    <a class="btn btn-primary nav-cta" href="#install" onclick="goInstall(event)">Get the App</a>
+    <a class="btn btn-primary nav-cta" href="#install" onclick="goInstall(event)">Download App Now</a>
   </div>
 </header>
 
@@ -159,20 +159,20 @@
       <div class="step">
         <div class="num">1</div>
         <div class="emoji">⬇️</div>
-        <h3>Download the app</h3>
-        <p>One tap and it's on your home screen — free, no App Store, nothing to sign up for to look around.</p>
+        <h3>Download</h3>
+        <p>One tap and it's on your home screen — free, no app store.</p>
       </div>
       <div class="step">
         <div class="num">2</div>
-        <div class="emoji">📷</div>
-        <h3>Scan at the truck</h3>
-        <p>Scan the truck's QR at the window — or find trucks near you on the map inside the app.</p>
+        <div class="emoji">📍</div>
+        <h3>Find a food truck near you</h3>
+        <p>See trucks on the map, or scan the QR at the window.</p>
       </div>
       <div class="step">
         <div class="num">3</div>
-        <div class="emoji">🎁</div>
-        <h3>Earn &amp; redeem</h3>
-        <p>Rack up points every visit, keep your streak alive, and cash in for free food.</p>
+        <div class="emoji">🎉</div>
+        <h3>Start earning rewards</h3>
+        <p>Earn points every visit and redeem for free food.</p>
       </div>
     </div>
   </div>
@@ -186,17 +186,17 @@
       <div class="install-sub">Free forever. One tap and it's on your home screen — no App Store, no account required to look around.</div>
 
       <div class="plat-tabs" role="tablist">
-        <button class="plat-tab on" id="tab-ios" onclick="showPlat('ios')">iPhone</button>
-        <button class="plat-tab" id="tab-android" onclick="showPlat('android')">Android</button>
+        <button class="plat-tab on" id="tab-android" onclick="showPlat('android')">Android</button>
+        <button class="plat-tab" id="tab-ios" onclick="showPlat('ios')">iPhone</button>
       </div>
 
-      <div class="plat-steps" id="steps-ios">
+      <div class="plat-steps hidden" id="steps-ios">
         <div class="plat-row"><div class="n">1️⃣</div><div><div class="t1">Open this page in Safari</div><div class="t2">Home-screen install only works from Safari on iPhone.</div></div></div>
         <div class="plat-row"><div class="n">2️⃣</div><div><div class="t1">Tap the Share button</div><div class="t2">The box with an arrow ⬆️ at the bottom of the screen.</div></div></div>
         <div class="plat-row"><div class="n">3️⃣</div><div><div class="t1">Tap “Add to Home Screen”</div><div class="t2">Then tap Add — the app icon lands on your home screen.</div></div></div>
       </div>
 
-      <div class="plat-steps hidden" id="steps-android">
+      <div class="plat-steps" id="steps-android">
         <div class="plat-row"><div class="n">1️⃣</div><div><div class="t1">Tap “Download Now” below</div><div class="t2">Or open your browser menu (⋮) and tap “Install app”.</div></div></div>
         <div class="plat-row"><div class="n">2️⃣</div><div><div class="t1">Confirm “Install”</div><div class="t2">The app icon is added to your home screen.</div></div></div>
         <div class="plat-row"><div class="n">3️⃣</div><div><div class="t1">Open it and start earning</div><div class="t2">Sign up in seconds and scan your first truck.</div></div></div>
@@ -237,7 +237,7 @@
 <footer>
   <a class="logo" href="#hero"><img src="/logo.png" alt="" style="width:28px;height:28px;border-radius:8px"> Food Truck Rewards</a>
   <div class="fnav">
-    <a href="#install" onclick="goInstall(event)">Get the App</a>
+    <a href="#install" onclick="goInstall(event)">Download App Now</a>
     <a href="/terms" target="_blank" rel="noopener">Terms</a>
     <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
   </div>
@@ -253,11 +253,12 @@
     document.getElementById('tab-ios').classList.toggle('on', ios);
     document.getElementById('tab-android').classList.toggle('on', !ios);
   }
-  (function(){
+  function _isIOS(){
     var ua = navigator.userAgent || '';
-    var isAndroid = /android/i.test(ua);
-    if (isAndroid) showPlat('android');
-  })();
+    return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+  }
+  // Start on Android by default; only iPhones open on the iPhone steps.
+  (function(){ showPlat(_isIOS() ? 'ios' : 'android'); })();
 
   // Capture the browser's native "install app" prompt (Android / Chrome) so our
   // buttons can fire it on demand — same behaviour as the vendor site.
@@ -278,10 +279,16 @@
       _installPrompt.userChoice.finally(function(){ _installPrompt = null; });
       return;
     }
-    var ua = navigator.userAgent || '';
-    showPlat(/android/i.test(ua) ? 'android' : 'ios');
+    showPlat(_isIOS() ? 'ios' : 'android');
     var el = document.getElementById('install');
     if (el) el.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // Register the service worker — REQUIRED for the browser to offer the native
+  // install prompt (manifest + service worker = installable). Without this the
+  // "Download Now" button can never pull up the Install pop-up on Android.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
   }
 
   // If they open this page from the already-installed app (standalone), skip the
