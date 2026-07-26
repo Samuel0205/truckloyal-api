@@ -2706,20 +2706,26 @@ function money(n){ return '$' + (Number(n)||0).toFixed(2); }
 async function loadTruckMenu(slug){
   const bar = document.getElementById('ct-menu-bar');
   const list = document.getElementById('ct-menu-list');
-  if(!bar || !list || !slug) return;
-  bar.style.display = 'none';
+  // These screens are reused for every truck, so clear anything the last truck
+  // left behind BEFORE any early return — otherwise its order card lingers.
+  const box = document.getElementById('ct-myorder');
+  if(box){ box.style.display = 'none'; box.innerHTML = ''; }
+  if(bar) bar.style.display = 'none';
   S.cart = [];                                   // fresh cart per truck view
+  if(!bar || !list || !slug) return;
+  const vid = S.activeTruck?.id;                 // pin the truck this run is for
+  loadMyOrder(vid);                              // always — even with no menu
   const [r, ord] = await Promise.all([
     apiGet('/api/truck/'+slug+'/menu'),
     apiGet('/api/truck/'+slug+'/ordering'),
   ]);
+  if(S.activeTruck?.id !== vid) return;           // user switched trucks mid-load
   const items = (r.ok && r.data.data) || [];
   S.truckMenu = items;
   S.truckAccepting = !!(ord.ok && ord.data.data?.accepting_orders);
   if(!items.length) return;                      // no menu yet → keep it hidden
   renderTruckMenu();
   bar.style.display = 'block';
-  loadMyOrder();
 }
 
 function renderTruckMenu(){
@@ -2821,14 +2827,18 @@ async function placeOrder(){
 }
 
 /* Live status of the customer's open order at this truck. */
-async function loadMyOrder(){
+async function loadMyOrder(vendorId){
   const box = document.getElementById('ct-myorder');
   if(!box) return;
   box.style.display='none';
-  if(!S.customer || !S.activeTruck?.id) return;
+  box.innerHTML='';                       // never leave another truck's card behind
+  const vid = vendorId || S.activeTruck?.id;
+  if(!S.customer || !vid) return;
   const r = await apiGet('/api/customer/orders');
+  // If they navigated to a different truck while this was in flight, drop it.
+  if(S.activeTruck?.id !== vid) return;
   const open = ((r.ok && r.data.data) || []).find(o =>
-    o.vendor_id === S.activeTruck.id && ['pending','accepted','ready'].includes(o.status));
+    o.vendor_id === vid && ['pending','accepted','ready'].includes(o.status));
   if(!open) return;
   const label = {pending:'⏳ Waiting for the truck to accept',
                  accepted:'👨‍🍳 They\'re making it',
