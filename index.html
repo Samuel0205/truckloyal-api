@@ -415,6 +415,7 @@
         </div>
 
         <div class="qa-grid">
+          <div class="qa" onclick="goV('s-v-menu')"><div class="qa-ico">🍽️</div><div class="qa-lbl">Menu</div><div class="qa-sub">What you sell</div></div>
           <div class="qa" onclick="goV('s-v-rewards')"><div class="qa-ico">🎁</div><div class="qa-lbl">Rewards</div><div class="qa-sub">What customers earn</div></div>
           <div class="qa" onclick="goV('s-v-spin')"><div class="qa-ico">🎰</div><div class="qa-lbl">Spin Prizes</div><div class="qa-sub">Bonus points on wheel</div></div>
           <div class="qa" onclick="goV('s-v-notify')"><div class="qa-ico">📣</div><div class="qa-lbl">Notify</div><div class="qa-sub">Message your members</div></div>
@@ -603,6 +604,19 @@
         </div>
         <div id="v-prizes-list"></div>
         <button class="btn btn-s" onclick="openSheet('sh-add-prize')">+ Add Prize Slot</button>
+      </div>
+    </div>
+
+    <!-- VENDOR: MENU -->
+    <div class="screen" id="s-v-menu">
+      <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>🍽️ Menu</h1><p>What you sell</p></div></div>
+      <div class="bp">
+        <div class="callout co-bl" style="margin-bottom:14px">
+          <div class="co-icon">💡</div>
+          <div><div class="co-desc">Add what's on your truck. Customers see this on your page — and tap <strong>Sold out</strong> anytime to hide an item without deleting it.</div></div>
+        </div>
+        <button class="btn btn-s" style="width:100%;margin-bottom:14px" onclick="openSheet('sh-add-menu')">+ Add Menu Item</button>
+        <div id="v-menu-list"></div>
       </div>
     </div>
 
@@ -1382,6 +1396,11 @@
           <div style="font-size:11px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📅 Weekly Schedule</div>
           <div id="ct-schedule-list" style="display:flex;flex-direction:column;gap:4px"></div>
         </div>
+        <!-- Menu -->
+        <div id="ct-menu-bar" style="display:none;background:white;border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;margin-bottom:12px">
+          <div style="font-size:11px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px">🍽️ Menu</div>
+          <div id="ct-menu-list" style="display:flex;flex-direction:column;gap:9px"></div>
+        </div>
         <!-- Points hero card -->
         <div style="background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;display:flex;align-items:center;gap:0;box-shadow:var(--sh1)">
           <div style="flex:1;text-align:center;border-right:1.5px solid var(--b1)">
@@ -1759,6 +1778,23 @@
   </div>
 </div>
 
+<div class="overlay" id="sh-add-menu" onclick="closeSheet('sh-add-menu')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Add Menu Item</div>
+    <div class="two-col">
+      <div class="field"><label>Emoji</label><input type="text" id="nm-e" placeholder="🌮" maxlength="4" style="text-align:center;font-size:24px"></div>
+      <div class="field"><label>Price ($)</label><input type="number" id="nm-p" placeholder="8.50" min="0" step="0.01" inputmode="decimal"></div>
+    </div>
+    <div style="font-size:11px;color:var(--mu);font-weight:700;margin:2px 0 6px">Tap to pick an icon</div>
+    <div id="nm-emoji-palette" style="display:flex;flex-wrap:wrap;gap:6px;max-height:124px;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--s2);border-radius:12px"></div>
+    <div class="field"><label>Item Name</label><input type="text" id="nm-n" placeholder="e.g. Carne Asada Taco"></div>
+    <div class="field"><label>Description <span style="color:var(--mu);font-weight:600">(optional)</span></label><input type="text" id="nm-d" placeholder="e.g. Grilled steak, onion, cilantro"></div>
+    <div class="field"><label>Category <span style="color:var(--mu);font-weight:600">(optional)</span></label><input type="text" id="nm-c" placeholder="e.g. Tacos, Drinks, Sides"></div>
+    <button class="btn btn-p" onclick="addMenuItem()">Add Item</button>
+  </div>
+</div>
+
 <div class="overlay" id="sh-add-prize" onclick="closeSheet('sh-add-prize')">
   <div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
@@ -1899,6 +1935,7 @@ function safeParse(key, fallback){
 ════════════════════════════════════ */
 const S = {
   mode: 'customer',
+  menu: [],
   vScreen: 's-v-login',
   cScreen: 's-c-login',
   // Vendor
@@ -2043,6 +2080,7 @@ function hideLoad(){document.getElementById('load-over').classList.remove('show'
 function showToast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(window._t);window._t=setTimeout(()=>t.classList.remove('show'),3000)}
 function openSheet(id){
   document.getElementById(id).classList.add('open');
+  if(id==='sh-add-menu')   renderEmojiPalette('nm-emoji-palette','nm-e');
   if(id==='sh-add-reward') renderEmojiPalette('nr-emoji-palette','nr-e');
   if(id==='sh-add-prize')  renderEmojiPalette('np-emoji-palette','np-e');
 }
@@ -2134,6 +2172,7 @@ function goV(id){
   else renderNav(VNAV,id);
   if(id==='s-v-home')     loadVendorHome();
   if(id==='s-v-analytics') loadAnalytics();
+  if(id==='s-v-menu')     loadVMenu();
   if(id==='s-v-rewards')  loadVRewards();
   if(id==='s-v-spin')     loadVPrizes();
   if(id==='s-v-notify')   loadNotifications();
@@ -2612,6 +2651,101 @@ async function clearLocation(){
     showToast('✅ Location cleared');
   }
   updateLocStatusChip();
+}
+
+function money(n){ return '$' + (Number(n)||0).toFixed(2); }
+
+/* ── CUSTOMER: a truck's menu on its page ── */
+async function loadTruckMenu(slug){
+  const bar = document.getElementById('ct-menu-bar');
+  const list = document.getElementById('ct-menu-list');
+  if(!bar || !list || !slug) return;
+  bar.style.display = 'none';
+  const r = await apiGet('/api/truck/'+slug+'/menu');
+  const items = (r.ok && r.data.data) || [];
+  if(!items.length) return;               // no menu yet → keep the card hidden
+  list.innerHTML = items.map(m=>`
+    <div style="display:flex;align-items:flex-start;gap:10px">
+      <div style="font-size:20px;flex-shrink:0;line-height:1.2">${esc(m.emoji||'🍽️')}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:14px;font-weight:800;color:var(--tx)">${esc(m.name)}</div>
+        ${m.description ? `<div style="font-size:12px;color:var(--mu);margin-top:1px;line-height:1.45">${esc(m.description)}</div>` : ''}
+      </div>
+      <div style="font-size:14px;font-weight:900;color:var(--brand);flex-shrink:0">${money(m.price)}</div>
+    </div>`).join('');
+  bar.style.display = 'block';
+}
+
+/* ── VENDOR: MENU ── */
+
+async function loadVMenu(){
+  const r = await apiGet('/api/vendor/menu');
+  S.menu = (r.ok && r.data.data) || [];
+  renderVMenu();
+}
+
+function renderVMenu(){
+  const el = document.getElementById('v-menu-list');
+  if(!el) return;
+  if(!S.menu || !S.menu.length){
+    el.innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--mu)"><div style="font-size:40px;margin-bottom:10px">🍽️</div><div style="font-size:15px;font-weight:700">No menu items yet</div><div style="font-size:13px;margin-top:6px;line-height:1.6">Add what you sell so customers can see it on your truck page.</div></div>';
+    return;
+  }
+  el.innerHTML = S.menu.map((m,i)=>{
+    const out = !m.is_available;
+    return `<div style="background:#fff;border:1.5px solid ${out?'var(--b2)':'var(--b2)'};border-radius:14px;padding:13px 15px;margin-bottom:10px;box-shadow:var(--sh1);${out?'opacity:.6':''}">
+      <div style="display:flex;align-items:center;gap:11px">
+        <div style="font-size:24px;flex-shrink:0">${esc(m.emoji||'🍽️')}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;font-size:15px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}${out?' <span style="font-size:11px;color:var(--rd);font-weight:800">· SOLD OUT</span>':''}</div>
+          ${m.description ? `<div style="font-size:12px;color:var(--mu);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.description)}</div>` : ''}
+          ${m.category ? `<div style="font-size:11px;color:var(--mu);margin-top:2px;font-weight:700">${esc(m.category)}</div>` : ''}
+        </div>
+        <div style="font-weight:900;font-size:16px;color:var(--brand);flex-shrink:0">${money(m.price)}</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:11px">
+        <button class="btn btn-s btn-sm" style="flex:1" onclick="toggleMenuItem(${i})">${out?'✅ Mark available':'🚫 Mark sold out'}</button>
+        <button class="btn btn-s btn-sm" onclick="removeMenuItem(${i})">🗑️</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addMenuItem(){
+  const name = document.getElementById('nm-n')?.value.trim();
+  const price = document.getElementById('nm-p')?.value;
+  if(!name){ showToast('Enter an item name'); return; }
+  if(price===''||price===null||isNaN(parseFloat(price))){ showToast('Enter a price'); return; }
+  showLoad('Adding...');
+  const r = await apiPost('/api/vendor/menu', {
+    name, price: parseFloat(price),
+    description: document.getElementById('nm-d')?.value.trim() || '',
+    category:    document.getElementById('nm-c')?.value.trim() || '',
+    emoji:       document.getElementById('nm-e')?.value.trim() || '🍽️',
+    sort_order:  (S.menu||[]).length,
+  });
+  hideLoad();
+  if(r.ok){
+    closeSheet('sh-add-menu');
+    ['nm-n','nm-p','nm-d','nm-c','nm-e'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+    await loadVMenu();
+    showToast('✅ Item added!');
+  } else showToast('❌ '+(r.data?.error||'Could not add item'));
+}
+
+async function toggleMenuItem(i){
+  const m = S.menu?.[i]; if(!m) return;
+  const next = !m.is_available;
+  const r = await apiPatch('/api/vendor/menu/'+m.id, { is_available: next });
+  if(r.ok){ m.is_available = next; renderVMenu(); showToast(next?'✅ Back on the menu':'🚫 Marked sold out'); }
+  else showToast('❌ Could not update');
+}
+
+async function removeMenuItem(i){
+  const m = S.menu?.[i]; if(!m) return;
+  const r = await apiDel('/api/vendor/menu/'+m.id);
+  if(r.ok){ S.menu.splice(i,1); renderVMenu(); showToast('🗑️ Item removed'); }
+  else showToast('❌ Could not remove');
 }
 
 async function loadVRewards(){
@@ -3307,6 +3441,7 @@ function refreshCurrentScreen(){
       's-v-feed':           ()=>loadVendorFeed(),
       's-v-reviews-screen': ()=>loadVendorReviews(),
       's-v-customers':      ()=>loadCustomers(),
+      's-v-menu':           ()=>loadVMenu(),
       's-v-rewards':        ()=>loadVRewards(),
       's-v-spin':           ()=>loadVPrizes(),
       's-v-award':          ()=>{ if(S.awardCustomer) showAwardCustomer(S.awardCustomer); },
@@ -3981,6 +4116,7 @@ async function renderTruckDash(){
   // Fetch today's schedule from API
   const today_dow = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1; // Mon=0
   try {
+    loadTruckMenu(t.slug);            // menu card (hidden if the truck has none)
     const schedR = await apiGet('/api/truck/'+t.slug+'/schedule');
     if(schedR.ok && schedR.data.data){
       const todaySched = schedR.data.data.find(d=>d.day_of_week===today_dow);

@@ -2071,6 +2071,139 @@ def update_points_config():
     return ok(_safe_vendor(rows[0]))
 
 
+# ══════════════════════════════════════════════════════
+#  MENU  (vendor-managed items customers can browse/order)
+# ══════════════════════════════════════════════════════
+# Every query here tolerates the menu_items table not existing yet, so the app
+# keeps working before the migration is run (see MENU_SCHEMA.sql).
+
+MENU_COLS = "id, vendor_id, name, description, price, category, emoji, is_available, sort_order, created_at"
+
+
+def _money(v):
+    """Parse a price into a clean non-negative float, or None if unusable."""
+    try:
+        f = round(float(v), 2)
+    except (TypeError, ValueError):
+        return None
+    if f < 0 or f > 100000:
+        return None
+    return f
+
+
+@app.route("/api/vendor/menu", methods=["GET"])
+@vendor_active_required
+def get_menu():
+    try:
+        rows = sb.table("menu_items").select(MENU_COLS)\
+            .eq("vendor_id", request.vendor_id)\
+            .order("sort_order").execute().data or []
+    except Exception as e:
+        print(f"[MENU] table unavailable (run the migration): {e}")
+        return ok([])
+    return ok(rows)
+
+
+@app.route("/api/vendor/menu", methods=["POST"])
+@vendor_active_required
+@rate_limit(120, 3600)
+def add_menu_item():
+    body  = request.json or {}
+    name  = (body.get("name") or "").strip()[:80]
+    price = _money(body.get("price"))
+    if not name:
+        return err("Item name is required")
+    if price is None:
+        return err("Enter a valid price")
+    row = {
+        "vendor_id":   request.vendor_id,
+        "name":        name,
+        "description": (body.get("description") or "").strip()[:200],
+        "price":       price,
+        "category":    (body.get("category") or "").strip()[:40],
+        "emoji":       (body.get("emoji") or "🍽️").strip()[:8],
+        "is_available": True,
+        "sort_order":  int(body.get("sort_order") or 0),
+    }
+    try:
+        created = sb.table("menu_items").insert(row).execute().data
+    except Exception as e:
+        print(f"[MENU] insert failed: {e}")
+        return err("Menu isn't set up yet — run the menu migration in Supabase.", 503)
+    return ok(created[0] if created else row), 201
+
+
+@app.route("/api/vendor/menu/<item_id>", methods=["PATCH"])
+@vendor_active_required
+def update_menu_item(item_id):
+    body    = request.json or {}
+    updates = {}
+    if "name" in body:
+        nm = (body["name"] or "").strip()[:80]
+        if not nm:
+            return err("Item name is required")
+        updates["name"] = nm
+    if "price" in body:
+        p = _money(body["price"])
+        if p is None:
+            return err("Enter a valid price")
+        updates["price"] = p
+    for k, cap in (("description", 200), ("category", 40), ("emoji", 8)):
+        if k in body:
+            updates[k] = (str(body[k] or "")).strip()[:cap]
+    if "is_available" in body:
+        updates["is_available"] = bool(body["is_available"])
+    if "sort_order" in body:
+        try:
+            updates["sort_order"] = int(body["sort_order"])
+        except (TypeError, ValueError):
+            pass
+    if not updates:
+        return err("Nothing to update")
+    try:
+        # Scope by vendor_id so a vendor can only touch their own items.
+        rows = sb.table("menu_items").update(updates)\
+            .eq("id", item_id).eq("vendor_id", request.vendor_id).execute().data
+    except Exception as e:
+        print(f"[MENU] update failed: {e}")
+        return err("Could not update that item", 503)
+    if not rows:
+        return err("Item not found", 404)
+    return ok(rows[0])
+
+
+@app.route("/api/vendor/menu/<item_id>", methods=["DELETE"])
+@vendor_active_required
+def delete_menu_item(item_id):
+    try:
+        sb.table("menu_items").delete()\
+            .eq("id", item_id).eq("vendor_id", request.vendor_id).execute()
+    except Exception as e:
+        print(f"[MENU] delete failed: {e}")
+        return err("Could not remove that item", 503)
+    return ok("Item removed")
+
+
+@app.route("/api/truck/<slug>/menu", methods=["GET"])
+def get_public_menu(slug):
+    """Public menu for the customer-facing truck page. Only in-stock items."""
+    row = sb.table("vendors").select("id, plan_active, trial_ends_at, "
+                                     "promo_expires_at, payment_failed_at")\
+        .eq("slug", slug).execute().data
+    if not row:
+        return err("Truck not found", 404)
+    if not _vendor_is_active(row[0]):
+        return ok([])
+    try:
+        items = sb.table("menu_items")\
+            .select("id, name, description, price, category, emoji")\
+            .eq("vendor_id", row[0]["id"]).eq("is_available", True)\
+            .order("sort_order").execute().data or []
+    except Exception:
+        return ok([])
+    return ok(items)
+
+
 # ── Rewards / Prizes / Tiers ──
 
 @app.route("/api/vendor/rewards", methods=["GET"])
