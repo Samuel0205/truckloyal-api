@@ -415,6 +415,7 @@
         </div>
 
         <div class="qa-grid">
+          <div class="qa" onclick="goV('s-v-orders')" style="position:relative"><div class="qa-ico">🧾</div><div class="qa-lbl">Orders</div><div class="qa-sub">Order-ahead queue</div><div id="v-orders-badge" style="display:none;position:absolute;top:8px;right:10px;background:var(--rd);color:#fff;font-size:11px;font-weight:900;min-width:20px;height:20px;border-radius:99px;align-items:center;justify-content:center;padding:0 5px">0</div></div>
           <div class="qa" onclick="goV('s-v-menu')"><div class="qa-ico">🍽️</div><div class="qa-lbl">Menu</div><div class="qa-sub">What you sell</div></div>
           <div class="qa" onclick="goV('s-v-rewards')"><div class="qa-ico">🎁</div><div class="qa-lbl">Rewards</div><div class="qa-sub">What customers earn</div></div>
           <div class="qa" onclick="goV('s-v-spin')"><div class="qa-ico">🎰</div><div class="qa-lbl">Spin Prizes</div><div class="qa-sub">Bonus points on wheel</div></div>
@@ -604,6 +605,24 @@
         </div>
         <div id="v-prizes-list"></div>
         <button class="btn btn-s" onclick="openSheet('sh-add-prize')">+ Add Prize Slot</button>
+      </div>
+    </div>
+
+    <!-- VENDOR: ORDERS QUEUE -->
+    <div class="screen" id="s-v-orders">
+      <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>🧾 Orders</h1><p>Order-ahead queue</p></div></div>
+      <div class="bp">
+        <div id="v-ordering-toggle" style="background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:15px 16px;margin-bottom:14px;box-shadow:var(--sh1)">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="flex:1;min-width:0">
+              <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx)">Taking orders</div>
+              <div style="font-size:12px;color:var(--mu);font-weight:600;margin-top:1px" id="v-ordering-sub">Customers can order ahead</div>
+            </div>
+            <label class="tog"><input type="checkbox" id="tog-ordering" onchange="setAcceptingOrders(this.checked)"><div class="tog-track"></div></label>
+          </div>
+          <div style="font-size:11.5px;color:var(--mu);margin-top:9px;line-height:1.5">💡 Turn this off when you're slammed or closed — customers can still see your menu.</div>
+        </div>
+        <div id="v-orders-list"></div>
       </div>
     </div>
 
@@ -1400,7 +1419,10 @@
         <div id="ct-menu-bar" style="display:none;background:white;border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;margin-bottom:12px">
           <div style="font-size:11px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px">🍽️ Menu</div>
           <div id="ct-menu-list" style="display:flex;flex-direction:column;gap:9px"></div>
+          <div id="ct-cart-foot"></div>
         </div>
+        <!-- Your open order at this truck -->
+        <div id="ct-myorder" style="display:none;margin-bottom:12px"></div>
         <!-- Points hero card -->
         <div style="background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;display:flex;align-items:center;gap:0;box-shadow:var(--sh1)">
           <div style="flex:1;text-align:center;border-right:1.5px solid var(--b1)">
@@ -1778,6 +1800,24 @@
   </div>
 </div>
 
+<div class="overlay" id="sh-cart" onclick="closeSheet('sh-cart')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Your Order</div>
+    <div id="cart-lines" style="margin-bottom:12px"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;font-size:17px;font-weight:900;margin-bottom:14px">
+      <span>Total</span><span style="color:var(--brand)" id="cart-total">$0.00</span>
+    </div>
+    <div class="field"><label>Name for pickup</label><input type="text" id="cart-name" placeholder="Your name"></div>
+    <div class="field"><label>Note for the truck <span style="color:var(--mu);font-weight:600">(optional)</span></label><input type="text" id="cart-note" placeholder="e.g. no onions"></div>
+    <div class="callout co-gd" style="margin-bottom:14px">
+      <div class="co-icon">💵</div>
+      <div><div class="co-desc"><strong>You'll pay at the window</strong> when you pick up — nothing is charged now. You'll earn your points automatically.</div></div>
+    </div>
+    <button class="btn btn-p" onclick="placeOrder()">Place Order</button>
+  </div>
+</div>
+
 <div class="overlay" id="sh-add-menu" onclick="closeSheet('sh-add-menu')">
   <div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
@@ -1936,6 +1976,10 @@ function safeParse(key, fallback){
 const S = {
   mode: 'customer',
   menu: [],
+  orders: null,
+  cart: [],
+  truckMenu: [],
+  truckAccepting: false,
   vScreen: 's-v-login',
   cScreen: 's-c-login',
   // Vendor
@@ -2172,6 +2216,7 @@ function goV(id){
   else renderNav(VNAV,id);
   if(id==='s-v-home')     loadVendorHome();
   if(id==='s-v-analytics') loadAnalytics();
+  if(id==='s-v-orders')   loadVOrders();
   if(id==='s-v-menu')     loadVMenu();
   if(id==='s-v-rewards')  loadVRewards();
   if(id==='s-v-spin')     loadVPrizes();
@@ -2563,6 +2608,7 @@ async function loadVendorHome(){
   if(!S.vendor) return;
   setText('v-hero-name',S.vendor.truck_name+' '+(S.vendor.emoji||'🚚'));
   // Welcome / get-started banner until the vendor dismisses it.
+  updateOrdersBadge();
   const wc=document.getElementById('v-welcome-wrap');
   if(wc) wc.style.display = localStorage.getItem('tl_v_welcome_dismissed') ? 'none' : 'block';
 
@@ -2655,25 +2701,247 @@ async function clearLocation(){
 
 function money(n){ return '$' + (Number(n)||0).toFixed(2); }
 
-/* ── CUSTOMER: a truck's menu on its page ── */
+/* ── CUSTOMER: a truck's menu + order-ahead cart ── */
 async function loadTruckMenu(slug){
   const bar = document.getElementById('ct-menu-bar');
   const list = document.getElementById('ct-menu-list');
   if(!bar || !list || !slug) return;
   bar.style.display = 'none';
-  const r = await apiGet('/api/truck/'+slug+'/menu');
+  S.cart = [];                                   // fresh cart per truck view
+  const [r, ord] = await Promise.all([
+    apiGet('/api/truck/'+slug+'/menu'),
+    apiGet('/api/truck/'+slug+'/ordering'),
+  ]);
   const items = (r.ok && r.data.data) || [];
-  if(!items.length) return;               // no menu yet → keep the card hidden
-  list.innerHTML = items.map(m=>`
-    <div style="display:flex;align-items:flex-start;gap:10px">
+  S.truckMenu = items;
+  S.truckAccepting = !!(ord.ok && ord.data.data?.accepting_orders);
+  if(!items.length) return;                      // no menu yet → keep it hidden
+  renderTruckMenu();
+  bar.style.display = 'block';
+  loadMyOrder();
+}
+
+function renderTruckMenu(){
+  const list = document.getElementById('ct-menu-list');
+  if(!list) return;
+  const canOrder = S.truckAccepting && !!S.customer;
+  list.innerHTML = (S.truckMenu||[]).map((m,i)=>{
+    const qty = (S.cart||[]).find(c=>c.menu_item_id===m.id)?.qty || 0;
+    return `<div style="display:flex;align-items:center;gap:10px">
       <div style="font-size:20px;flex-shrink:0;line-height:1.2">${esc(m.emoji||'🍽️')}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:800;color:var(--tx)">${esc(m.name)}</div>
         ${m.description ? `<div style="font-size:12px;color:var(--mu);margin-top:1px;line-height:1.45">${esc(m.description)}</div>` : ''}
       </div>
       <div style="font-size:14px;font-weight:900;color:var(--brand);flex-shrink:0">${money(m.price)}</div>
-    </div>`).join('');
-  bar.style.display = 'block';
+      ${canOrder ? (qty
+        ? `<div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
+             <button onclick="cartAdd(${i},-1)" style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--b2);background:#fff;font-size:16px;font-weight:900;color:var(--tx);cursor:pointer;line-height:1">−</button>
+             <span style="font-size:14px;font-weight:900;min-width:14px;text-align:center">${qty}</span>
+             <button onclick="cartAdd(${i},1)" style="width:28px;height:28px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:16px;font-weight:900;cursor:pointer;line-height:1">+</button>
+           </div>`
+        : `<button onclick="cartAdd(${i},1)" style="flex-shrink:0;width:30px;height:30px;border-radius:9px;border:none;background:var(--brand);color:#fff;font-size:18px;font-weight:900;cursor:pointer;line-height:1">+</button>`) : ''}
+    </div>`;
+  }).join('');
+
+  // Cart summary + place-order button, or a note about why ordering is off.
+  const foot = document.getElementById('ct-cart-foot');
+  if(!foot) return;
+  if(!S.truckAccepting){
+    foot.innerHTML = '<div style="font-size:12px;color:var(--mu);font-weight:700;text-align:center;padding-top:10px;border-top:1px solid var(--s2);margin-top:10px">Order-ahead is closed right now — order at the window.</div>';
+    return;
+  }
+  if(!S.customer){
+    foot.innerHTML = '<div style="font-size:12px;color:var(--mu);font-weight:700;text-align:center;padding-top:10px;border-top:1px solid var(--s2);margin-top:10px">Sign in to order ahead.</div>';
+    return;
+  }
+  const count = (S.cart||[]).reduce((s,c)=>s+c.qty,0);
+  const total = (S.cart||[]).reduce((s,c)=>s+c.qty*c.price,0);
+  foot.innerHTML = count
+    ? `<div style="border-top:1px solid var(--s2);margin-top:11px;padding-top:11px">
+         <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:800;margin-bottom:9px"><span>${count} item${count!==1?'s':''}</span><span style="color:var(--brand)">${money(total)}</span></div>
+         <button class="btn btn-p" style="width:100%" onclick="openCart()">Review &amp; Order →</button>
+         <div style="font-size:11px;color:var(--mu);text-align:center;margin-top:7px;font-weight:700">💵 Pay at the window when you pick up</div>
+       </div>`
+    : '';
+}
+
+function cartAdd(i, delta){
+  const m = (S.truckMenu||[])[i]; if(!m) return;
+  S.cart = S.cart || [];
+  const line = S.cart.find(c=>c.menu_item_id===m.id);
+  if(line){
+    line.qty += delta;
+    if(line.qty<=0) S.cart = S.cart.filter(c=>c.menu_item_id!==m.id);
+  } else if(delta>0){
+    S.cart.push({menu_item_id:m.id, name:m.name, price:Number(m.price)||0, emoji:m.emoji||'', qty:1});
+  }
+  renderTruckMenu();
+}
+
+function openCart(){
+  const el = document.getElementById('cart-lines');
+  if(el){
+    el.innerHTML = (S.cart||[]).map(c=>`
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--s2)">
+        <div style="font-size:19px">${esc(c.emoji||'🍽️')}</div>
+        <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:800">${esc(c.name)}</div>
+          <div style="font-size:12px;color:var(--mu)">${money(c.price)} each</div></div>
+        <div style="font-size:13px;font-weight:800;color:var(--mu)">×${c.qty}</div>
+        <div style="font-size:14px;font-weight:900;color:var(--brand);min-width:54px;text-align:right">${money(c.price*c.qty)}</div>
+      </div>`).join('');
+  }
+  const tot = (S.cart||[]).reduce((s,c)=>s+c.qty*c.price,0);
+  setText('cart-total', money(tot));
+  const nameEl = document.getElementById('cart-name');
+  if(nameEl && !nameEl.value) nameEl.value = S.customer?.name || '';
+  openSheet('sh-cart');
+}
+
+async function placeOrder(){
+  if(!S.cart?.length){ showToast('Your cart is empty'); return; }
+  if(!S.activeTruck?.id){ showToast('No truck selected'); return; }
+  showLoad('Placing your order...');
+  const r = await apiPost('/api/customer/order', {
+    vendor_id: S.activeTruck.id,
+    items: S.cart.map(c=>({menu_item_id:c.menu_item_id, qty:c.qty})),
+    note: document.getElementById('cart-note')?.value.trim() || '',
+    pickup_name: document.getElementById('cart-name')?.value.trim() || '',
+  });
+  hideLoad();
+  if(!r.ok){ showToast('❌ '+(r.data?.error||'Could not place order')); return; }
+  S.cart = [];
+  closeSheet('sh-cart');
+  const note = document.getElementById('cart-note'); if(note) note.value='';
+  renderTruckMenu();
+  loadMyOrder();
+  confetti();
+  showToast('🎉 Order placed! Code '+(r.data.data?.order_code||''));
+}
+
+/* Live status of the customer's open order at this truck. */
+async function loadMyOrder(){
+  const box = document.getElementById('ct-myorder');
+  if(!box) return;
+  box.style.display='none';
+  if(!S.customer || !S.activeTruck?.id) return;
+  const r = await apiGet('/api/customer/orders');
+  const open = ((r.ok && r.data.data) || []).find(o =>
+    o.vendor_id === S.activeTruck.id && ['pending','accepted','ready'].includes(o.status));
+  if(!open) return;
+  const label = {pending:'⏳ Waiting for the truck to accept',
+                 accepted:'👨‍🍳 They\'re making it',
+                 ready:'🔔 Ready — go pick it up!'}[open.status] || open.status;
+  const bg = open.status==='ready' ? '#E8F5E9' : 'var(--s2)';
+  const bd = open.status==='ready' ? '#A5D6A7' : 'var(--b2)';
+  box.innerHTML = `<div style="background:${bg};border:1.5px solid ${bd};border-radius:14px;padding:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <div style="font-size:13px;font-weight:800;color:var(--tx)">${label}</div>
+        <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--brand)">${esc(open.order_code||'')}</div>
+      </div>
+      <div style="font-size:12px;color:var(--mu);margin-top:5px;font-weight:700">${(open.items||[]).reduce((s,i)=>s+i.qty,0)} item(s) · ${money(open.subtotal)} · pay at the window</div>
+    </div>`;
+  box.style.display='block';
+}
+
+/* ── VENDOR: ORDER QUEUE ── */
+async function loadVOrders(){
+  const r = await apiGet('/api/vendor/orders');
+  S.orders = (r.ok && r.data.data) || [];
+  const tog = document.getElementById('tog-ordering');
+  if(tog) tog.checked = !!S.vendor?.accepting_orders;
+  const sub = document.getElementById('v-ordering-sub');
+  if(sub) sub.textContent = S.vendor?.accepting_orders
+    ? 'Customers can order ahead' : 'Paused — customers can only order at the window';
+  renderVOrders();
+  updateOrdersBadge();
+}
+
+function renderVOrders(){
+  const el = document.getElementById('v-orders-list');
+  if(!el) return;
+  if(!S.orders?.length){
+    el.innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--mu)"><div style="font-size:40px;margin-bottom:10px">🧾</div><div style="font-size:15px;font-weight:700">No orders right now</div><div style="font-size:13px;margin-top:6px;line-height:1.6">New order-ahead orders land here. Keep this screen open during a rush.</div></div>';
+    return;
+  }
+  const NEXT = {pending:{label:'✅ Accept', next:'accepted'},
+                accepted:{label:'🔔 Mark ready', next:'ready'},
+                ready:{label:'✔️ Picked up', next:'completed'}};
+  el.innerHTML = S.orders.map((o,i)=>{
+    const step = NEXT[o.status] || null;
+    const badge = {pending:['#FFF3E0','#E65100','NEW'],
+                   accepted:['#E3F2FD','#1565C0','MAKING'],
+                   ready:['#E8F5E9','#2E7D32','READY']}[o.status] || ['var(--s2)','var(--mu)',o.status];
+    return `<div style="background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:15px 16px;margin-bottom:12px;box-shadow:var(--sh1)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+        <div style="font-family:var(--fd);font-size:24px;font-weight:900;color:var(--brand)">${esc(o.order_code||'')}</div>
+        <div style="background:${badge[0]};color:${badge[1]};font-size:10px;font-weight:900;letter-spacing:.5px;padding:4px 9px;border-radius:99px">${badge[2]}</div>
+        <div style="flex:1"></div>
+        <div style="font-size:16px;font-weight:900;color:var(--tx)">${money(o.subtotal)}</div>
+      </div>
+      <div style="font-size:13px;font-weight:800;color:var(--tx);margin-bottom:6px">${esc(o.pickup_name||o.customer_name||'Customer')}</div>
+      <div style="background:var(--s2);border-radius:10px;padding:9px 11px;margin-bottom:${o.note?'8':'11'}px">
+        ${(o.items||[]).map(it=>`<div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;padding:2px 0"><span>${esc(it.emoji||'')} ${esc(it.name)} ×${it.qty}</span><span style="color:var(--mu)">${money(it.price*it.qty)}</span></div>`).join('')}
+      </div>
+      ${o.note?`<div style="font-size:12.5px;color:#E65100;font-weight:700;margin-bottom:11px">📝 ${esc(o.note)}</div>`:''}
+      <div style="display:flex;gap:8px">
+        ${step?`<button class="btn btn-p btn-sm" style="flex:1" onclick="advanceOrder(${i},'${step.next}')">${step.label}</button>`:''}
+        <button class="btn btn-s btn-sm" onclick="advanceOrder(${i},'cancelled')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function advanceOrder(i, status){
+  const o = S.orders?.[i]; if(!o) return;
+  if(status==='cancelled' && !confirm('Cancel order '+(o.order_code||'')+'?')) return;
+  const r = await apiPatch('/api/vendor/orders/'+o.id, {status});
+  if(!r.ok){ showToast('❌ '+(r.data?.error||'Could not update')); return; }
+  const msg = {accepted:'✅ Accepted', ready:'🔔 Marked ready', completed:'✔️ Done — points awarded', cancelled:'✕ Cancelled'}[status];
+  showToast(msg||'Updated');
+  await loadVOrders();
+}
+
+async function setAcceptingOrders(on){
+  const r = await apiPatch('/api/vendor/ordering', {accepting_orders: !!on});
+  if(!r.ok){
+    showToast('❌ '+(r.data?.error||'Could not update'));
+    const tog=document.getElementById('tog-ordering'); if(tog) tog.checked=!on;
+    return;
+  }
+  if(S.vendor) S.vendor.accepting_orders = !!on;
+  const sub = document.getElementById('v-ordering-sub');
+  if(sub) sub.textContent = on ? 'Customers can order ahead' : 'Paused — customers can only order at the window';
+  showToast(on?'✅ Taking orders':'⏸️ Ordering paused');
+}
+
+/* Badge on the home grid so a new order is visible without opening the queue. */
+async function updateOrdersBadge(){
+  const b = document.getElementById('v-orders-badge');
+  if(!b || S.mode!=='vendor' || !S.vendorToken) return;
+  let list = S.orders;
+  if(!list){
+    const r = await apiGet('/api/vendor/orders');
+    list = (r.ok && r.data.data) || [];
+    S.orders = list;
+  }
+  const pending = list.filter(o=>o.status==='pending').length;
+  b.textContent = pending>9?'9+':String(pending);
+  b.style.display = pending ? 'flex' : 'none';
+  // Audible ping the first time a new order shows up.
+  if(pending > (S._lastPending||0)) beepNewOrder();
+  S._lastPending = pending;
+}
+
+function beepNewOrder(){
+  try{
+    const C = window.AudioContext || window.webkitAudioContext; if(!C) return;
+    const ctx = new C(); const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='sine'; o.frequency.value=880; g.gain.value=0.15;
+    o.start(); o.stop(ctx.currentTime+0.18);
+    setTimeout(()=>{ try{ctx.close();}catch(e){} }, 400);
+  }catch(e){}
 }
 
 /* ── VENDOR: MENU ── */
@@ -3441,6 +3709,7 @@ function refreshCurrentScreen(){
       's-v-feed':           ()=>loadVendorFeed(),
       's-v-reviews-screen': ()=>loadVendorReviews(),
       's-v-customers':      ()=>loadCustomers(),
+      's-v-orders':         ()=>loadVOrders(),
       's-v-menu':           ()=>loadVMenu(),
       's-v-rewards':        ()=>loadVRewards(),
       's-v-spin':           ()=>loadVPrizes(),
@@ -5208,6 +5477,8 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
   // fetches only in customer mode, so this is a no-op otherwise. Also refresh
   // when the tab regains focus (phones freeze background timers).
   setInterval(updateNotifBell, 90000);
+  // Surface new order-ahead orders without needing the queue open.
+  setInterval(function(){ if(S.mode==='vendor' && S.vendorToken){ S.orders=null; updateOrdersBadge(); } }, 45000);
   document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) updateNotifBell(); });
 })();
 /* ── TRUCK SEARCH ── */
