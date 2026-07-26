@@ -2204,6 +2204,309 @@ def get_public_menu(slug):
     return ok(items)
 
 
+# ══════════════════════════════════════════════════════
+#  ORDERS  (order ahead, pay at the window)
+# ══════════════════════════════════════════════════════
+# Money never moves through the app — the customer pays the truck at pickup.
+# Every query tolerates the orders tables not existing yet.
+
+ORDER_OPEN_STATUSES = ("pending", "accepted", "ready")
+
+
+def _order_code():
+    """Short pickup code that's easy to call out at a window (e.g. 'B42')."""
+    return random.choice(string.ascii_uppercase) + str(random.randint(10, 99))
+
+
+def _award_order_points(vendor, customer_id, order_total):
+    """Award loyalty points for a completed order — an order counts as that
+    day's visit, using the same one-per-day rule as a QR check-in so a customer
+    can't order AND check in for double points. Returns points awarded (0 if
+    they already earned today). Never raises: points must not block an order."""
+    try:
+        vendor_id = vendor["id"]
+        today     = _local_today()
+        today_iso = today.isoformat()
+        ct_row = sb.table("customer_trucks").select("*")\
+            .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
+        if not ct_row:
+            return 0                      # not a member — nothing to credit
+        ct = ct_row[0]
+        last_date = _safe_date(ct.get("last_visit_date"))
+        if last_date == today:
+            return 0                      # already earned today
+
+        new_streak = (ct["current_streak"] + 1) if (last_date and (today - last_date).days == 1) else 1
+        longest    = max(ct.get("longest_streak") or 0, new_streak)
+        breakdown  = _calc_points(vendor, float(order_total or 0), ct["visit_count"], new_streak - 1)
+        pts        = breakdown["total"]
+
+        tiers = sb.table("tiers").select("*").eq("vendor_id", vendor_id)\
+            .order("pts_threshold", desc=True).execute().data or []
+        new_total   = (ct["points_total"] or 0) + pts
+        new_tier_id = ct.get("current_tier_id")
+        for tier in tiers:
+            if new_total >= tier["pts_threshold"]:
+                new_tier_id = tier["id"]
+                break
+
+        # Same atomic claim as record_visit — only credit if today isn't taken.
+        claimed = sb.table("customer_trucks").update({
+            "points_balance": (ct["points_balance"] or 0) + pts,
+            "points_total":   new_total,
+            "visit_count":    (ct["visit_count"] or 0) + 1,
+            "current_streak": new_streak,
+            "longest_streak": longest,
+            "last_visit_date": today_iso,
+            "current_tier_id": new_tier_id,
+        }).eq("id", ct["id"])\
+          .or_(f"last_visit_date.is.null,last_visit_date.neq.{today_iso}").execute().data
+        if not claimed:
+            return 0
+        try:
+            sb.table("visits").insert({
+                "customer_id": customer_id, "vendor_id": vendor_id,
+                "pts_earned": pts, "streak_day": new_streak, "awarded_by": "order",
+            }).execute()
+        except Exception:
+            pass
+        return pts
+    except Exception as e:
+        print(f"[ORDER POINTS] {e}")
+        return 0
+
+
+def _order_with_items(order):
+    try:
+        order["items"] = sb.table("order_items")\
+            .select("id, name, price, emoji, qty").eq("order_id", order["id"]).execute().data or []
+    except Exception:
+        order["items"] = []
+    return order
+
+
+@app.route("/api/truck/<slug>/ordering", methods=["GET"])
+def truck_ordering_status(slug):
+    """Whether this truck is taking order-ahead right now."""
+    row = sb.table("vendors").select("id, plan_active, trial_ends_at, promo_expires_at, "
+                                     "payment_failed_at, accepting_orders")\
+        .eq("slug", slug).execute().data
+    if not row:
+        return err("Truck not found", 404)
+    v = row[0]
+    return ok({"accepting_orders": bool(v.get("accepting_orders")) and _vendor_is_active(v)})
+
+
+@app.route("/api/customer/order", methods=["POST"])
+@customer_required
+@rate_limit(30, 3600)
+def place_order():
+    body      = request.json or {}
+    vendor_id = body.get("vendor_id")
+    raw_items = body.get("items") or []
+    if not vendor_id:
+        return err("vendor_id required")
+    if not isinstance(raw_items, list) or not raw_items:
+        return err("Your cart is empty")
+    if len(raw_items) > 50:
+        return err("That's too many items for one order")
+
+    vrow = sb.table("vendors").select("*").eq("id", vendor_id).execute().data
+    if not vrow:
+        return err("Truck not found", 404)
+    vendor = vrow[0]
+    if not _vendor_is_active(vendor):
+        return err("This truck isn't taking orders right now", 403)
+    if not vendor.get("accepting_orders"):
+        return err("This truck has paused ordering right now", 409)
+
+    # Price from OUR menu, never from the client — a tampered cart can't
+    # invent prices or order something that's sold out.
+    try:
+        menu = sb.table("menu_items")\
+            .select("id, name, price, emoji, is_available")\
+            .eq("vendor_id", vendor_id).execute().data or []
+    except Exception:
+        return err("This truck hasn't set up a menu yet", 409)
+    by_id = {m["id"]: m for m in menu}
+
+    line_items, subtotal = [], 0.0
+    for it in raw_items:
+        if not isinstance(it, dict):
+            continue
+        m = by_id.get(it.get("menu_item_id"))
+        if not m or not m.get("is_available"):
+            return err("Something in your cart just sold out — please review your order", 409)
+        try:
+            qty = int(it.get("qty") or 1)
+        except (TypeError, ValueError):
+            qty = 1
+        qty = max(1, min(qty, 20))
+        price = float(m.get("price") or 0)
+        subtotal += price * qty
+        line_items.append({
+            "menu_item_id": m["id"], "name": m["name"],
+            "price": price, "emoji": m.get("emoji") or "", "qty": qty,
+        })
+    if not line_items:
+        return err("Your cart is empty")
+
+    # One open order per truck at a time keeps the window queue sane.
+    try:
+        existing = sb.table("orders").select("id")\
+            .eq("customer_id", request.customer_id).eq("vendor_id", vendor_id)\
+            .in_("status", list(ORDER_OPEN_STATUSES)).execute().data
+        if existing:
+            return err("You already have an order in progress with this truck", 409)
+    except Exception:
+        return err("Ordering isn't set up yet for this truck", 503)
+
+    order = {
+        "vendor_id":   vendor_id,
+        "customer_id": request.customer_id,
+        "order_code":  _order_code(),
+        "status":      "pending",
+        "subtotal":    round(subtotal, 2),
+        "note":        (str(body.get("note") or "")).strip()[:200],
+        "pickup_name": (str(body.get("pickup_name") or "")).strip()[:60],
+    }
+    try:
+        created = sb.table("orders").insert(order).execute().data
+        if not created:
+            return err("Could not place your order — please try again")
+        order = created[0]
+        for li in line_items:
+            li["order_id"] = order["id"]
+        sb.table("order_items").insert(line_items).execute()
+    except Exception as e:
+        print(f"[ORDER] place failed: {e}")
+        return err("Could not place your order — please try again", 503)
+
+    order["items"] = line_items
+    _notify_vendor_new_order(vendor_id, order)   # phone alert, off-thread
+    return ok(order), 201
+
+
+@app.route("/api/customer/orders", methods=["GET"])
+@customer_required
+def customer_orders():
+    try:
+        rows = sb.table("orders").select("*")\
+            .eq("customer_id", request.customer_id)\
+            .order("created_at", desc=True).limit(20).execute().data or []
+    except Exception:
+        return ok([])
+    out = []
+    for o in rows:
+        v = sb.table("vendors").select("truck_name, emoji, slug")\
+            .eq("id", o["vendor_id"]).execute().data
+        if v:
+            o["truck_name"] = v[0].get("truck_name")
+            o["truck_emoji"] = v[0].get("emoji")
+            o["slug"] = v[0].get("slug")
+        out.append(_order_with_items(o))
+    return ok(out)
+
+
+@app.route("/api/vendor/orders", methods=["GET"])
+@vendor_active_required
+def vendor_orders():
+    """The window queue: everything still open, newest last so the oldest
+    order is worked first."""
+    try:
+        rows = sb.table("orders").select("*")\
+            .eq("vendor_id", request.vendor_id)\
+            .in_("status", list(ORDER_OPEN_STATUSES))\
+            .order("created_at").execute().data or []
+    except Exception:
+        return ok([])
+    out = []
+    for o in rows:
+        c = sb.table("customers").select("name").eq("id", o["customer_id"]).execute().data
+        o["customer_name"] = (c[0].get("name") if c else "") or ""
+        out.append(_order_with_items(o))
+    return ok(out)
+
+
+@app.route("/api/vendor/orders/<order_id>", methods=["PATCH"])
+@vendor_active_required
+def update_order_status(order_id):
+    """Move an order along: accepted → ready → completed (or cancelled).
+    Completing it awards the customer's loyalty points for that visit."""
+    body   = request.json or {}
+    status = (body.get("status") or "").strip().lower()
+    allowed = {"accepted", "ready", "completed", "cancelled"}
+    if status not in allowed:
+        return err("Invalid status")
+
+    try:
+        rows = sb.table("orders").select("*")\
+            .eq("id", order_id).eq("vendor_id", request.vendor_id).execute().data
+    except Exception:
+        return err("Ordering isn't set up yet", 503)
+    if not rows:
+        return err("Order not found", 404)
+    order = rows[0]
+    if order["status"] in ("completed", "cancelled"):
+        return err("That order is already closed", 409)
+
+    stamp   = datetime.utcnow().isoformat()
+    updates = {"status": status}
+    updates[{"accepted": "accepted_at", "ready": "ready_at",
+             "completed": "completed_at", "cancelled": "cancelled_at"}[status]] = stamp
+    if status == "cancelled":
+        updates["cancel_reason"] = (str(body.get("reason") or "")).strip()[:200]
+
+    pts = 0
+    if status == "completed":
+        vrow = sb.table("vendors").select("*").eq("id", request.vendor_id).execute().data
+        if vrow:
+            pts = _award_order_points(vrow[0], order["customer_id"], order.get("subtotal"))
+            updates["points_awarded"] = pts
+
+    try:
+        saved = sb.table("orders").update(updates).eq("id", order_id)\
+            .eq("vendor_id", request.vendor_id).execute().data
+    except Exception as e:
+        print(f"[ORDER] status update failed: {e}")
+        return err("Could not update that order", 503)
+    if not saved:
+        return err("Order not found", 404)
+
+    # Let the customer know where their food is.
+    try:
+        msg = {"accepted": "👍 Your order was accepted",
+               "ready":    "🔔 Your order is ready for pickup!",
+               "completed":"✅ Order complete" + (f" · +{pts} pts" if pts else ""),
+               "cancelled":"❌ Your order was cancelled"}[status]
+        sb.table("notifications").insert({
+            "vendor_id": request.vendor_id, "customer_id": order["customer_id"],
+            "title": msg, "message": f"Order {order.get('order_code','')}",
+            "type": "order",
+        }).execute()
+    except Exception:
+        pass
+
+    return ok(_order_with_items(saved[0]))
+
+
+@app.route("/api/vendor/ordering", methods=["PATCH"])
+@vendor_active_required
+def set_accepting_orders():
+    """Pause/resume order-ahead — the 'we're slammed' switch."""
+    body = request.json or {}
+    want = bool(body.get("accepting_orders"))
+    try:
+        rows = sb.table("vendors").update({"accepting_orders": want})\
+            .eq("id", request.vendor_id).execute().data
+    except Exception as e:
+        print(f"[ORDER] accepting toggle failed: {e}")
+        return err("Ordering isn't set up yet — run the orders migration.", 503)
+    if not rows:
+        return err("Vendor not found", 404)
+    return ok({"accepting_orders": want})
+
+
 # ── Rewards / Prizes / Tiers ──
 
 @app.route("/api/vendor/rewards", methods=["GET"])
@@ -3805,12 +4108,83 @@ def push_subscribe():
         "auth":        auth[:255],
     }
     try:
-        # One row per browser endpoint; re-subscribing just refreshes it.
-        sb.table("push_subscriptions").upsert(row, on_conflict="endpoint").execute()
+        # One row per browser endpoint; re-subscribing just refreshes it. Update-
+        # then-insert so we don't wipe a vendor_id if this same browser is also
+        # signed in as a vendor.
+        existing = sb.table("push_subscriptions").select("id")\
+            .eq("endpoint", row["endpoint"]).execute().data
+        if existing:
+            sb.table("push_subscriptions").update({
+                "customer_id": row["customer_id"], "p256dh": row["p256dh"], "auth": row["auth"],
+            }).eq("endpoint", row["endpoint"]).execute()
+        else:
+            sb.table("push_subscriptions").insert(row).execute()
     except Exception as e:
         print(f"[PUSH SUBSCRIBE] {e}")
         return err("Notifications aren't available yet — please try again later")
     return ok("subscribed")
+
+
+@app.route("/api/vendor/push-subscribe", methods=["POST"])
+@vendor_active_required
+@rate_limit(20, 3600)
+def vendor_push_subscribe():
+    """Store a Web Push subscription for a VENDOR so they get a phone alert the
+    moment an order comes in — even with the app closed. Shares the
+    push_subscriptions table with customers (vendor rows have customer_id null)."""
+    body = request.json or {}
+    sub  = body.get("subscription") or {}
+    endpoint = (sub.get("endpoint") or "").strip()
+    keys     = sub.get("keys") or {}
+    p256dh   = (keys.get("p256dh") or "").strip()
+    auth     = (keys.get("auth") or "").strip()
+    if not endpoint.startswith("https://") or not p256dh or not auth:
+        return err("Invalid subscription")
+    row = {
+        "vendor_id": request.vendor_id,
+        "endpoint":  endpoint[:1000],
+        "p256dh":    p256dh[:255],
+        "auth":      auth[:255],
+    }
+    try:
+        # Update-then-insert rather than upsert: one browser can be signed in as
+        # both a vendor and a customer, and a blind upsert on endpoint would wipe
+        # the other role's id off the row.
+        existing = sb.table("push_subscriptions").select("id")\
+            .eq("endpoint", row["endpoint"]).execute().data
+        if existing:
+            sb.table("push_subscriptions").update({
+                "vendor_id": row["vendor_id"], "p256dh": row["p256dh"], "auth": row["auth"],
+            }).eq("endpoint", row["endpoint"]).execute()
+        else:
+            sb.table("push_subscriptions").insert(row).execute()
+    except Exception as e:
+        print(f"[VENDOR PUSH SUBSCRIBE] {e}")
+        return err("Order alerts aren't available yet — run the vendor-push migration.", 503)
+    return ok("subscribed")
+
+
+def _notify_vendor_new_order(vendor_id, order):
+    """Phone alert + in-app record for a brand-new order. Best-effort and
+    threaded — a slow push must never delay the customer's order going through."""
+    try:
+        subs = sb.table("push_subscriptions").select("*")\
+            .eq("vendor_id", vendor_id).execute().data or []
+    except Exception as e:
+        print(f"[ORDER ALERT] subscriptions unavailable: {e}")
+        subs = []
+    if subs and VAPID_PRIVATE_KEY:
+        try:
+            import json as _json, threading
+            n = sum(int(i.get("qty") or 1) for i in (order.get("items") or []))
+            note = _json.dumps({
+                "title": f"🧾 New order {order.get('order_code','')}",
+                "body":  f"{n} item(s) · ${float(order.get('subtotal') or 0):.2f} — tap to view",
+                "url":   "/app",
+            })
+            threading.Thread(target=_deliver_web_push, args=(subs, note), daemon=True).start()
+        except Exception as e:
+            print(f"[ORDER ALERT] {e}")
 
 
 @app.route("/api/customer/notifications", methods=["GET"])
