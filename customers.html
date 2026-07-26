@@ -298,5 +298,16 @@
   }
 </script>
 
+<script>
+/* First-party website analytics — anonymous page-view ping (no cookies/PII). */
+(function(){
+  try{
+    var v=localStorage.getItem("ftr_vid");
+    if(!v){ v=Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem("ftr_vid",v); }
+    fetch("/api/track",{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,
+      body:JSON.stringify({path:location.pathname,visitor:v,ref:document.referrer||""})}).catch(function(){});
+  }catch(e){}
+})();
+</script>
 </body>
 </html>

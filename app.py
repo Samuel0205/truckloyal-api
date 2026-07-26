@@ -691,6 +691,27 @@ def public_config():
     })
 
 
+@app.route("/api/track", methods=["POST"])
+@rate_limit(600, 3600)
+def track_view():
+    """First-party website analytics. Records a page view (path + an anonymous
+    random visitor id, no cookies/IP/PII). Tolerant: if the page_views table
+    hasn't been created yet it silently no-ops so it never breaks a page."""
+    body    = request.json or {}
+    path    = (str(body.get("path") or "/")).strip()[:200] or "/"
+    visitor = (str(body.get("visitor") or "")).strip()[:64]
+    ref     = (str(body.get("ref") or "")).strip()[:300]
+    try:
+        sb.table("page_views").insert({
+            "path": path,
+            "visitor": visitor or None,
+            "referrer": ref or None,
+        }).execute()
+    except Exception:
+        pass
+    return ok("ok")
+
+
 @app.route("/app")
 @app.route("/app/")
 def serve_app():
@@ -999,6 +1020,19 @@ def admin_stats():
     except Exception:
         pass
 
+    # Website analytics (first-party page views). Tolerant if not migrated yet.
+    site_views = site_views_30d = site_visitors_30d = 0
+    try:
+        since30 = (datetime.utcnow() - timedelta(days=30)).isoformat()
+        site_views = sb.table("page_views").select("id", count="exact").execute().count or 0
+        site_views_30d = sb.table("page_views").select("id", count="exact")\
+            .gte("created_at", since30).execute().count or 0
+        vrows = sb.table("page_views").select("visitor")\
+            .gte("created_at", since30).limit(20000).execute().data or []
+        site_visitors_30d = len({r["visitor"] for r in vrows if r.get("visitor")})
+    except Exception:
+        pass
+
     return ok({
         "vendors":         vendors,
         "total_vendors":   len(vendors),
@@ -1013,6 +1047,9 @@ def admin_stats():
         "customers_lost_30d": customers_lost_30d,
         "vendors_lost":       vendors_lost,
         "vendors_lost_30d":   vendors_lost_30d,
+        "site_views":         site_views,
+        "site_views_30d":     site_views_30d,
+        "site_visitors_30d":  site_visitors_30d,
         "mrr":             round(mrr, 2),
         "promo_codes":     promos,
     })
