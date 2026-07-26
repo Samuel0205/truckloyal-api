@@ -2383,6 +2383,7 @@ def place_order():
         return err("Could not place your order — please try again", 503)
 
     order["items"] = line_items
+    _notify_vendor_new_order(vendor_id, order)   # phone alert, off-thread
     return ok(order), 201
 
 
@@ -4107,12 +4108,83 @@ def push_subscribe():
         "auth":        auth[:255],
     }
     try:
-        # One row per browser endpoint; re-subscribing just refreshes it.
-        sb.table("push_subscriptions").upsert(row, on_conflict="endpoint").execute()
+        # One row per browser endpoint; re-subscribing just refreshes it. Update-
+        # then-insert so we don't wipe a vendor_id if this same browser is also
+        # signed in as a vendor.
+        existing = sb.table("push_subscriptions").select("id")\
+            .eq("endpoint", row["endpoint"]).execute().data
+        if existing:
+            sb.table("push_subscriptions").update({
+                "customer_id": row["customer_id"], "p256dh": row["p256dh"], "auth": row["auth"],
+            }).eq("endpoint", row["endpoint"]).execute()
+        else:
+            sb.table("push_subscriptions").insert(row).execute()
     except Exception as e:
         print(f"[PUSH SUBSCRIBE] {e}")
         return err("Notifications aren't available yet — please try again later")
     return ok("subscribed")
+
+
+@app.route("/api/vendor/push-subscribe", methods=["POST"])
+@vendor_active_required
+@rate_limit(20, 3600)
+def vendor_push_subscribe():
+    """Store a Web Push subscription for a VENDOR so they get a phone alert the
+    moment an order comes in — even with the app closed. Shares the
+    push_subscriptions table with customers (vendor rows have customer_id null)."""
+    body = request.json or {}
+    sub  = body.get("subscription") or {}
+    endpoint = (sub.get("endpoint") or "").strip()
+    keys     = sub.get("keys") or {}
+    p256dh   = (keys.get("p256dh") or "").strip()
+    auth     = (keys.get("auth") or "").strip()
+    if not endpoint.startswith("https://") or not p256dh or not auth:
+        return err("Invalid subscription")
+    row = {
+        "vendor_id": request.vendor_id,
+        "endpoint":  endpoint[:1000],
+        "p256dh":    p256dh[:255],
+        "auth":      auth[:255],
+    }
+    try:
+        # Update-then-insert rather than upsert: one browser can be signed in as
+        # both a vendor and a customer, and a blind upsert on endpoint would wipe
+        # the other role's id off the row.
+        existing = sb.table("push_subscriptions").select("id")\
+            .eq("endpoint", row["endpoint"]).execute().data
+        if existing:
+            sb.table("push_subscriptions").update({
+                "vendor_id": row["vendor_id"], "p256dh": row["p256dh"], "auth": row["auth"],
+            }).eq("endpoint", row["endpoint"]).execute()
+        else:
+            sb.table("push_subscriptions").insert(row).execute()
+    except Exception as e:
+        print(f"[VENDOR PUSH SUBSCRIBE] {e}")
+        return err("Order alerts aren't available yet — run the vendor-push migration.", 503)
+    return ok("subscribed")
+
+
+def _notify_vendor_new_order(vendor_id, order):
+    """Phone alert + in-app record for a brand-new order. Best-effort and
+    threaded — a slow push must never delay the customer's order going through."""
+    try:
+        subs = sb.table("push_subscriptions").select("*")\
+            .eq("vendor_id", vendor_id).execute().data or []
+    except Exception as e:
+        print(f"[ORDER ALERT] subscriptions unavailable: {e}")
+        subs = []
+    if subs and VAPID_PRIVATE_KEY:
+        try:
+            import json as _json, threading
+            n = sum(int(i.get("qty") or 1) for i in (order.get("items") or []))
+            note = _json.dumps({
+                "title": f"🧾 New order {order.get('order_code','')}",
+                "body":  f"{n} item(s) · ${float(order.get('subtotal') or 0):.2f} — tap to view",
+                "url":   "/app",
+            })
+            threading.Thread(target=_deliver_web_push, args=(subs, note), daemon=True).start()
+        except Exception as e:
+            print(f"[ORDER ALERT] {e}")
 
 
 @app.route("/api/customer/notifications", methods=["GET"])

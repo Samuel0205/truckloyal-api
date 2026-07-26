@@ -612,6 +612,7 @@
     <div class="screen" id="s-v-orders">
       <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>🧾 Orders</h1><p>Order-ahead queue</p></div></div>
       <div class="bp">
+        <div id="v-push-card" style="background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:14px 16px;margin-bottom:12px;box-shadow:var(--sh1)"></div>
         <div id="v-ordering-toggle" style="background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:15px 16px;margin-bottom:14px;box-shadow:var(--sh1)">
           <div style="display:flex;align-items:center;gap:12px">
             <div style="flex:1;min-width:0">
@@ -2854,6 +2855,7 @@ async function loadVOrders(){
   if(sub) sub.textContent = S.vendor?.accepting_orders
     ? 'Customers can order ahead' : 'Paused — customers can only order at the window';
   renderVOrders();
+  renderVendorPushCard();
   updateOrdersBadge();
 }
 
@@ -5335,6 +5337,60 @@ async function enableWebPush(silent){
     }
   } catch(e) {
     if (!silent) showToast('Could not enable notifications on this device');
+  }
+}
+
+/* ── VENDOR order alerts: a phone notification the second an order lands,
+   even with the app closed. Same Web Push plumbing as the customer side. ── */
+function vendorPushState(){
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return 'unsupported';
+  return Notification.permission;   // 'granted' | 'denied' | 'default'
+}
+
+function renderVendorPushCard(){
+  const el = document.getElementById('v-push-card');
+  if(!el) return;
+  const st = vendorPushState();
+  if(st === 'unsupported'){
+    el.innerHTML = '<div style="font-size:12px;color:var(--mu);font-weight:700">Order alerts need a phone browser — add the app to your home screen to get them.</div>';
+    return;
+  }
+  if(st === 'granted'){
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:9px"><div style="font-size:19px">🔔</div><div style="flex:1"><div style="font-size:13.5px;font-weight:800;color:var(--gn)">Order alerts are on</div><div style="font-size:11.5px;color:var(--mu);font-weight:600;margin-top:1px">You\'ll get a notification the moment an order comes in.</div></div></div>';
+    enableVendorPush(true);   // keep the subscription fresh
+    return;
+  }
+  if(st === 'denied'){
+    el.innerHTML = '<div style="display:flex;align-items:center;gap:9px"><div style="font-size:19px">🔕</div><div style="flex:1"><div style="font-size:13.5px;font-weight:800;color:var(--tx)">Order alerts are blocked</div><div style="font-size:11.5px;color:var(--mu);font-weight:600;margin-top:1px;line-height:1.5">Turn notifications on for this app in your phone Settings, then reopen this screen.</div></div></div>';
+    return;
+  }
+  el.innerHTML = '<div style="display:flex;align-items:center;gap:10px"><div style="font-size:19px">🔔</div><div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:800;color:var(--tx)">Get alerted for new orders</div><div style="font-size:11.5px;color:var(--mu);font-weight:600;margin-top:1px">So you never miss one during a rush.</div></div><button class="btn btn-p btn-sm" onclick="enableVendorPush(false)" style="flex-shrink:0">Turn on</button></div>';
+}
+
+async function enableVendorPush(silent){
+  try{
+    if(!S.vendorToken) return;
+    if(!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+    if(!silent){
+      const perm = await Notification.requestPermission();
+      if(perm !== 'granted'){ showToast('Order alerts stay off — you can turn them on anytime'); renderVendorPushCard(); return; }
+    }
+    const cfg = await apiGet('/api/config');
+    const key = cfg.ok && cfg.data?.data?.vapid_public_key;
+    if(!key){ if(!silent) showToast('Order alerts aren\'t available yet'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(key),
+    });
+    const r = await apiPost('/api/vendor/push-subscribe', { subscription: sub.toJSON() });
+    if(r.ok){
+      if(!silent){ showToast('🔔 Order alerts on!'); renderVendorPushCard(); }
+    } else if(!silent){
+      showToast('❌ '+(r.data?.error||'Could not turn on order alerts'));
+    }
+  }catch(e){
+    if(!silent) showToast('Could not turn on order alerts on this device');
   }
 }
 
