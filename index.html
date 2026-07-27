@@ -2837,21 +2837,25 @@ async function loadMyOrder(vendorId){
   const r = await apiGet('/api/customer/orders');
   // If they navigated to a different truck while this was in flight, drop it.
   if(S.activeTruck?.id !== vid) return;
-  const open = ((r.ok && r.data.data) || []).find(o =>
-    o.vendor_id === vid && ['pending','accepted','ready'].includes(o.status));
-  if(!open) return;
-  const label = {pending:'⏳ Waiting for the truck to accept',
+  // A customer can have more than one order going here — show them all,
+  // oldest first so the one they'll collect next is on top.
+  const open = ((r.ok && r.data.data) || [])
+    .filter(o => o.vendor_id === vid && ['pending','accepted','ready'].includes(o.status))
+    .sort((a,b) => String(a.created_at||'').localeCompare(String(b.created_at||'')));
+  if(!open.length) return;
+  const LABEL = {pending:'⏳ Waiting for the truck to accept',
                  accepted:'👨‍🍳 They\'re making it',
-                 ready:'🔔 Ready — go pick it up!'}[open.status] || open.status;
-  const bg = open.status==='ready' ? '#E8F5E9' : 'var(--s2)';
-  const bd = open.status==='ready' ? '#A5D6A7' : 'var(--b2)';
-  box.innerHTML = `<div style="background:${bg};border:1.5px solid ${bd};border-radius:14px;padding:14px">
+                 ready:'🔔 Ready — go pick it up!'};
+  box.innerHTML = open.map((o,i) => {
+    const ready = o.status === 'ready';
+    return `<div style="background:${ready?'#E8F5E9':'var(--s2)'};border:1.5px solid ${ready?'#A5D6A7':'var(--b2)'};border-radius:14px;padding:14px;${i?'margin-top:9px':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <div style="font-size:13px;font-weight:800;color:var(--tx)">${label}</div>
-        <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--brand)">${esc(open.order_code||'')}</div>
+        <div style="font-size:13px;font-weight:800;color:var(--tx)">${LABEL[o.status]||esc(o.status)}</div>
+        <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--brand)">${esc(o.order_code||'')}</div>
       </div>
-      <div style="font-size:12px;color:var(--mu);margin-top:5px;font-weight:700">${(open.items||[]).reduce((s,i)=>s+i.qty,0)} item(s) · ${money(open.subtotal)} · pay at the window</div>
+      <div style="font-size:12px;color:var(--mu);margin-top:5px;font-weight:700">${(o.items||[]).reduce((s,it)=>s+it.qty,0)} item(s) · ${money(o.subtotal)} · pay at the window</div>
     </div>`;
+  }).join('');
   box.style.display='block';
 }
 
