@@ -2212,6 +2212,11 @@ def get_public_menu(slug):
 
 ORDER_OPEN_STATUSES = ("pending", "accepted", "ready")
 
+# A customer can have this many orders going at one truck at once — enough to
+# add a second order (a friend shows up, they forgot a drink) without letting
+# anyone flood the window queue.
+MAX_OPEN_ORDERS_PER_TRUCK = 2
+
 
 def _order_code():
     """Short pickup code that's easy to call out at a window (e.g. 'B42')."""
@@ -2351,13 +2356,14 @@ def place_order():
     if not line_items:
         return err("Your cart is empty")
 
-    # One open order per truck at a time keeps the window queue sane.
+    # Cap concurrent open orders per truck so the window queue stays sane.
     try:
         existing = sb.table("orders").select("id")\
             .eq("customer_id", request.customer_id).eq("vendor_id", vendor_id)\
-            .in_("status", list(ORDER_OPEN_STATUSES)).execute().data
-        if existing:
-            return err("You already have an order in progress with this truck", 409)
+            .in_("status", list(ORDER_OPEN_STATUSES)).execute().data or []
+        if len(existing) >= MAX_OPEN_ORDERS_PER_TRUCK:
+            return err(f"You've got {MAX_OPEN_ORDERS_PER_TRUCK} orders going with this truck — "
+                       "pick those up before starting another", 409)
     except Exception:
         return err("Ordering isn't set up yet for this truck", 503)
 
