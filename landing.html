@@ -234,6 +234,9 @@
 
   /* ── demo carousel ───────────────────────────────────── */
   .demo-wrap { display:flex; justify-content:center; }
+  .demo-video { width:300px; max-width:78vw; aspect-ratio:1080/1920; border-radius:30px;
+    border:9px solid #0B0906; background:#0B0906; object-fit:cover; display:block;
+    box-shadow:0 34px 70px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); }
   .demo-stage { position:relative; width:264px; aspect-ratio:1080/2209;
     filter:drop-shadow(0 34px 64px rgba(0,0,0,.55)); border-radius:26px; overflow:hidden;
     border:9px solid #0B0906; background:#000; }
@@ -474,15 +477,14 @@
       <p>Your dashboard, the at-the-window checkout, real analytics and marketing tools.</p>
     </div>
     <div class="demo-wrap">
-      <div class="demo-stage" id="demo-stage">
-        <img data-tour src="/tour-1.png" alt="Food Truck Rewards vendor dashboard">
-        <img data-tour src="/tour-2.png" alt="At the Window — find a customer">
-        <img data-tour src="/tour-3.png" alt="Award points at checkout">
-        <img data-tour src="/tour-4.png" alt="Analytics dashboard">
-        <img data-tour src="/tour-5.png" alt="Marketing tools">
-      </div>
+      <video class="demo-video" poster="/demo-poster.jpg"
+             autoplay muted loop playsinline preload="metadata"
+             aria-label="Awarding points to a customer at the window, inside the Food Truck Rewards app">
+        <source src="/demo.mp4" type="video/mp4">
+        <source src="/demo.webm" type="video/webm">
+      </video>
     </div>
-    <div class="demo-note">A quick tour of the actual app.</div>
+    <div class="demo-note">Awarding points at the window — in about ten seconds.</div>
   </div>
 </section>
 

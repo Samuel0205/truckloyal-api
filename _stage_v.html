@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --orange:#FF5722; --orange-lt:#FF8A50; --gold:#F9A825; --ink:#14100C; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:1080px;height:1920px;overflow:hidden;
+    font-family:'Nunito',system-ui,sans-serif;background:var(--ink);color:#fff}
+  .bg{position:absolute;inset:0;
+    background:
+      radial-gradient(90% 46% at 50% 6%, rgba(255,87,34,.36) 0%, transparent 60%),
+      radial-gradient(80% 40% at 50% 100%, rgba(249,168,37,.22) 0%, transparent 62%),
+      linear-gradient(170deg,#241B13 0%, #14100C 52%, #0A0705 100%);}
+  /* radial gradients instead of filter:blur — same soft glow, far cheaper to
+     composite every frame (blur was making the recorder drop time). */
+  .orb{position:absolute;border-radius:50%;pointer-events:none}
+  .orb1{width:900px;height:900px;left:50%;margin-left:-450px;top:-380px;
+    background:radial-gradient(circle, rgba(255,87,34,.34) 0%, rgba(255,87,34,.12) 45%, transparent 70%)}
+
+  .stage{position:relative;width:1080px;height:1920px;display:flex;flex-direction:column;
+    align-items:center;padding:96px 70px 76px}
+
+  .eyebrow{font-size:24px;font-weight:900;letter-spacing:.26em;text-transform:uppercase;
+    color:var(--orange-lt);opacity:0;transform:translateY(16px);
+    transition:opacity .6s ease, transform .6s ease}
+  .eyebrow.on{opacity:1;transform:none}
+  h1{font-size:88px;font-weight:900;line-height:1.02;letter-spacing:-.03em;margin:26px 0 0;
+     text-align:center;min-height:200px}
+  .line{display:block;opacity:0;transform:translateY(30px);
+    transition:opacity .6s cubic-bezier(.2,.7,.3,1), transform .6s cubic-bezier(.2,.7,.3,1)}
+  .line.on{opacity:1;transform:none}
+  .line.hl{color:var(--orange)}
+  .sub{font-size:30px;font-weight:700;color:#CDBAA9;margin-top:18px;line-height:1.4;
+    text-align:center;max-width:760px;min-height:84px;
+    opacity:0;transform:translateY(16px);transition:opacity .55s ease .1s, transform .55s ease .1s}
+  .sub.on{opacity:1;transform:none}
+
+  .phone-wrap{position:relative;margin-top:34px;display:flex;justify-content:center;align-items:center;
+    opacity:0;transform:translateY(34px) scale(.97);
+    transition:opacity .8s cubic-bezier(.2,.7,.3,1), transform .8s cubic-bezier(.2,.7,.3,1)}
+  .phone-wrap.on{opacity:1;transform:none}
+  .halo{position:absolute;width:720px;height:720px;border-radius:50%;
+    background:radial-gradient(circle, rgba(255,87,34,.40) 0%, rgba(255,87,34,.14) 44%, transparent 70%)}
+  .device{position:relative;width:474px;height:986px;background:#080605;border-radius:60px;
+    padding:15px;box-shadow:0 60px 120px rgba(0,0,0,.75), 0 0 0 2px rgba(255,255,255,.13)}
+  .screen{width:100%;height:100%;border-radius:46px;overflow:hidden;background:#FFF8F0;position:relative}
+  .screen iframe{width:390px;height:844px;border:0;transform:scale(1.1385);
+    transform-origin:top left;display:block}
+  .notch{position:absolute;top:15px;left:50%;transform:translateX(-50%);
+    width:160px;height:36px;background:#080605;border-radius:0 0 22px 22px;z-index:5}
+
+  .dots{display:flex;gap:13px;margin-top:44px;opacity:0;transition:opacity .5s ease}
+  .dots.on{opacity:1}
+  .dot{width:46px;height:6px;border-radius:99px;background:rgba(255,255,255,.22);transition:background .4s ease}
+  .dot.act{background:var(--orange)}
+
+  .endcard{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    background:radial-gradient(90% 60% at 50% 42%, rgba(255,87,34,.26) 0%, transparent 62%), rgba(10,7,5,.97);
+    opacity:0;pointer-events:none;transition:opacity .7s ease;z-index:20}
+  .endcard.on{opacity:1}
+  .ec-logo{width:168px;height:168px;border-radius:44px;object-fit:cover;margin-bottom:38px;
+    box-shadow:0 26px 64px rgba(255,87,34,.45)}
+  .ec-name{font-size:76px;font-weight:900;letter-spacing:-.025em;text-align:center;line-height:1.06}
+  .ec-name .o{color:var(--orange)}
+  .ec-tag{font-size:34px;font-weight:700;color:#CDBAA9;margin-top:22px;text-align:center}
+  .ec-price{margin-top:46px;background:var(--orange);color:#fff;font-size:32px;font-weight:900;
+    padding:24px 48px;border-radius:20px;box-shadow:0 22px 56px rgba(255,87,34,.55)}
+  .ec-url{margin-top:34px;font-size:31px;font-weight:900;color:#fff}
+</style>
+</head>
+<body>
+  <div class="bg"></div><div class="orb orb1"></div>
+  <div class="stage">
+    <div class="eyebrow" id="eyebrow">Food Truck Rewards</div>
+    <h1><span class="line" id="l1"></span><span class="line hl" id="l2"></span></h1>
+    <div class="sub" id="sub"></div>
+    <div class="phone-wrap" id="phoneWrap">
+      <div class="halo"></div>
+      <div class="device">
+        <div class="notch"></div>
+        <div class="screen"><iframe id="app" src="/index.html"></iframe></div>
+      </div>
+    </div>
+    <div class="dots" id="dots">
+      <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+      <div class="dot"></div><div class="dot"></div>
+    </div>
+  </div>
+  <div class="endcard" id="endcard">
+    <img class="ec-logo" src="/logo.png" alt="">
+    <div class="ec-name">FOOD TRUCK<br><span class="o">REWARDS</span></div>
+    <div class="ec-tag">Turn every customer into a regular.</div>
+    <div class="ec-price">$9.99/mo · 30-day free trial</div>
+    <div class="ec-url">foodtruckrewards.com</div>
+  </div>
+<script>
+  window.setStep = function(i, l1, l2, sub){
+    const a=document.getElementById('l1'), b=document.getElementById('l2'), s=document.getElementById('sub');
+    [a,b,s].forEach(e=>e.classList.remove('on'));
+    setTimeout(()=>{
+      a.textContent=l1; b.textContent=l2||''; s.textContent=sub||'';
+      a.classList.add('on');
+      setTimeout(()=>b.classList.add('on'),110);
+      setTimeout(()=>s.classList.add('on'),200);
+    },260);
+    document.querySelectorAll('#dots .dot').forEach((d,n)=>d.classList.toggle('act', n===i));
+  };
+  window.showChrome = function(){
+    document.getElementById('eyebrow').classList.add('on');
+    document.getElementById('phoneWrap').classList.add('on');
+    document.getElementById('dots').classList.add('on');
+  };
+  window.showEnd = function(){ document.getElementById('endcard').classList.add('on'); };
+</script>
+</body>
+</html>

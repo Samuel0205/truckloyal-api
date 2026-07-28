@@ -135,7 +135,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/download', '/customers', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/tour-5.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
+_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/download', '/customers', '/demo.mp4', '/demo.webm', '/demo-poster.jpg', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/tour-5.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -825,6 +825,28 @@ def serve_sw():
     resp.headers['Service-Worker-Allowed'] = '/'
     # Never cache the worker itself so updates roll out immediately
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+@app.route("/demo.mp4")
+def serve_demo_video():
+    # Product demo shown in the landing page's "See it in action" section.
+    resp = send_from_directory('.', 'demo.mp4')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/demo.webm")
+def serve_demo_webm():
+    resp = send_from_directory('.', 'demo.webm')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
+    return resp
+
+
+@app.route("/demo-poster.jpg")
+def serve_demo_poster():
+    resp = send_from_directory('.', 'demo-poster.jpg')
+    resp.headers['Cache-Control'] = 'public, max-age=604800'
     return resp
 
 
