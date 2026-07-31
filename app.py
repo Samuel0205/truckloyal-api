@@ -63,7 +63,7 @@ GRACE_PERIOD_DAYS  = int(os.environ.get("GRACE_PERIOD_DAYS", 5))
 MONTHLY_PRICE      = 9.99
 # Free-trial length. Used for BOTH the Stripe trial and vendors.trial_ends_at —
 # keep it a single value so the two can never drift and bill someone early.
-TRIAL_DAYS         = int(os.environ.get("TRIAL_DAYS", 90))
+TRIAL_DAYS         = int(os.environ.get("TRIAL_DAYS", 45))
 STRIPE_PRICE_ID    = os.environ.get("STRIPE_PRICE_ID", "")
 # Publishable key served to the app (/api/config). NO hardcoded fallback on
 # purpose: if this env var is missing, /api/config returns "" and the app shows

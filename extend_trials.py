@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Move every ACTIVE trial onto the current TRIAL_DAYS length (90 days).
+Move every ACTIVE trial onto the current TRIAL_DAYS length (45 days).
 
 The trial is enforced by Stripe (it decides when the card is charged); the app's
 vendors.trial_ends_at just mirrors it. So this updates BOTH:
@@ -9,7 +9,7 @@ vendors.trial_ends_at just mirrors it. So this updates BOTH:
 
 IDEMPOTENT BY DESIGN. It does not add N days — it recomputes each trial as
 (trial start + TRIAL_DAYS) from Stripe's own record of when the trial began.
-So it doesn't matter whether a vendor originally got 14, 30, or 90 days, and
+So it doesn't matter whether a vendor originally got 14, 30, 45, or 90 days,
 running it twice changes nothing the second time. It also never SHORTENS a
 trial: anyone already ending later than the new date is left alone.
 
@@ -30,7 +30,7 @@ import sys
 from datetime import datetime, timezone
 
 # Keep in step with TRIAL_DAYS in app.py.
-TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", 90))
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", 45))
 DAY = 86400
 # Stripe rejects a trial_end that isn't comfortably in the future.
 MIN_LEAD_SECONDS = 2 * DAY
