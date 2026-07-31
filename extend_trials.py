@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """
-Extend every ACTIVE trial from 14 days to 30 days (adds 16 days).
+Move every ACTIVE trial onto the current TRIAL_DAYS length (90 days).
 
 The trial is enforced by Stripe (it decides when the card is charged); the app's
 vendors.trial_ends_at just mirrors it. So this updates BOTH:
-  1. the Stripe subscription's trial_end (+16 days)  -> stops the early charge
-  2. vendors.trial_ends_at in Supabase               -> keeps the app in sync
+  1. the Stripe subscription's trial_end  -> stops the early charge
+  2. vendors.trial_ends_at in Supabase    -> keeps the app in sync
 
-Only touches subscriptions Stripe reports as status == "trialing", so already-paid,
-cancelled, comped, and promo vendors are left alone.
+IDEMPOTENT BY DESIGN. It does not add N days — it recomputes each trial as
+(trial start + TRIAL_DAYS) from Stripe's own record of when the trial began.
+So it doesn't matter whether a vendor originally got 14, 30, or 90 days, and
+running it twice changes nothing the second time. It also never SHORTENS a
+trial: anyone already ending later than the new date is left alone.
+
+Only touches subscriptions Stripe reports as status == "trialing", so
+already-paid, cancelled, comped, and promo vendors are left alone.
 
 SAFE BY DEFAULT: dry run unless you pass --confirm. Read the dry-run list first.
-Run --confirm ONCE — a second confirmed run would add another 16 days.
 
 Requires the same env vars the app uses (already set in the Render Shell):
     SUPABASE_URL, SUPABASE_SERVICE_KEY, STRIPE_SECRET_KEY   (use your LIVE key)
@@ -24,8 +29,11 @@ import os
 import sys
 from datetime import datetime, timezone
 
-ADD_DAYS = 30 - 14            # 16 — the amount each 14-day trial is short by
-ADD_SECONDS = ADD_DAYS * 86400
+# Keep in step with TRIAL_DAYS in app.py.
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", 90))
+DAY = 86400
+# Stripe rejects a trial_end that isn't comfortably in the future.
+MIN_LEAD_SECONDS = 2 * DAY
 
 
 def main():
@@ -45,7 +53,8 @@ def main():
     sb = create_client(url, key)
 
     live = skey.startswith("sk_live_")
-    print(f"Stripe mode: {'LIVE' if live else 'TEST'}\n")
+    print(f"Stripe mode: {'LIVE' if live else 'TEST'}")
+    print(f"Target trial length: {TRIAL_DAYS} days\n")
 
     # Page through all vendors that have a Stripe subscription.
     vendors, start = [], 0
@@ -58,8 +67,12 @@ def main():
             break
         start += 1000
 
-    to_extend = []   # (vendor, sub, new_trial_end_ts)
+    now = int(datetime.now(tz=timezone.utc).timestamp())
+    to_extend = []      # (vendor, sub, new_trial_end_ts)
+    already_ok = 0      # trial already ends on/after the new date
+    too_late = []       # would land inside Stripe's minimum lead time
     skipped_no_sub = 0
+
     for v in vendors:
         sub_id = v.get("stripe_sub_id")
         if not sub_id:
@@ -75,23 +88,45 @@ def main():
         cur = sub.get("trial_end")
         if not cur:
             continue
-        to_extend.append((v, sub, cur + ADD_SECONDS))
+
+        # Recompute from when the trial actually started, so this is repeatable.
+        began = sub.get("trial_start") or sub.get("created")
+        if not began:
+            continue
+        new_ts = began + TRIAL_DAYS * DAY
+
+        if new_ts <= cur:
+            already_ok += 1          # never shorten someone's trial
+            continue
+        if new_ts - now < MIN_LEAD_SECONDS:
+            too_late.append((v, cur, new_ts))
+            continue
+        to_extend.append((v, sub, new_ts))
 
     def fmt(ts):
         return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
 
     print(f"Vendors scanned: {len(vendors)}  (no Stripe sub: {skipped_no_sub})")
-    print(f"Active trials to extend (+{ADD_DAYS} days): {len(to_extend)}\n")
+    print(f"Already at {TRIAL_DAYS}+ days: {already_ok}")
+    print(f"Trials to extend: {len(to_extend)}\n")
     for v, sub, new_ts in to_extend:
         print(f"  {(v.get('email') or v['id']):40} "
               f"{(v.get('truck_name') or ''):22} "
               f"{fmt(sub['trial_end'])}  ->  {fmt(new_ts)}")
 
+    if too_late:
+        print(f"\n  !! {len(too_late)} trial(s) started too long ago — the new end "
+              f"date is under {MIN_LEAD_SECONDS // DAY} days out and Stripe will "
+              f"reject it. Comp these from the admin page instead:")
+        for v, cur, new_ts in too_late:
+            print(f"     {(v.get('email') or v['id']):40} "
+                  f"ends {fmt(cur)}, would be {fmt(new_ts)}")
+
     if not to_extend:
-        print("\nNo active trials found. Nothing to do.")
+        print("\nNothing to extend.")
         return
     if not confirm:
-        print(f"\n*** DRY RUN — nothing changed. ***")
+        print("\n*** DRY RUN — nothing changed. ***")
         print(f"Re-run with --confirm to extend the {len(to_extend)} trial(s) above.")
         return
 
