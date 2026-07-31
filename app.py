@@ -61,6 +61,9 @@ JWT_ALGO           = "HS256"
 JWT_EXPIRY         = 30   # days
 GRACE_PERIOD_DAYS  = int(os.environ.get("GRACE_PERIOD_DAYS", 5))
 MONTHLY_PRICE      = 9.99
+# Free-trial length. Used for BOTH the Stripe trial and vendors.trial_ends_at —
+# keep it a single value so the two can never drift and bill someone early.
+TRIAL_DAYS         = int(os.environ.get("TRIAL_DAYS", 90))
 STRIPE_PRICE_ID    = os.environ.get("STRIPE_PRICE_ID", "")
 # Publishable key served to the app (/api/config). NO hardcoded fallback on
 # purpose: if this env var is missing, /api/config returns "" and the app shows
@@ -554,7 +557,7 @@ def _purge_vendor(vendor_id: str):
 def _create_vendor_account(*, email, password, truck_name, owner_name, service_states,
                            home_zip=None, phone=None, phone_public=False, email_public=False,
                            stripe_customer_id=None, stripe_sub_id=None,
-                           plan_active=False, promo_expires=None, trial_days=30):
+                           plan_active=False, promo_expires=None, trial_days=TRIAL_DAYS):
     """Insert a vendor row (+ defaults, TOS record, verification email) and
     return it. Called only AFTER a subscription is confirmed (paying vendors)
     or from the gated tester path — never on a failed/abandoned payment."""
@@ -1634,7 +1637,7 @@ def vendor_complete_signup():
         subscription = stripe.Subscription.create(
             customer=stripe_customer_id,
             items=[{"price": STRIPE_PRICE_ID}],
-            trial_period_days=30,
+            trial_period_days=TRIAL_DAYS,
             default_payment_method=payment_method,
             expand=["latest_invoice.payment_intent"],
             collection_method="charge_automatically",
@@ -1798,7 +1801,7 @@ def create_subscription():
             invoice_settings={"default_payment_method": payment_method}
         )
 
-        # Only grant the 30-day Stripe trial the first time. Otherwise a vendor
+        # Only grant the free Stripe trial the first time. Otherwise a vendor
         # could cancel and re-subscribe repeatedly to farm free trials.
         sub_args = dict(
             customer=customer_id,
@@ -1808,7 +1811,7 @@ def create_subscription():
             collection_method="charge_automatically",
         )
         if not vendor.get("stripe_trial_used"):
-            sub_args["trial_period_days"] = 30
+            sub_args["trial_period_days"] = TRIAL_DAYS
 
         subscription = stripe.Subscription.create(**sub_args)
 

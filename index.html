@@ -100,7 +100,7 @@
               <span style="font-size:13px;color:var(--brand);font-weight:700;cursor:pointer" onclick="goV('s-v-forgot')">Forgot password?</span>
             </div>
             <button class="btn btn-p" id="v-login-btn" onclick="vendorLogin()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Sign In</button>
-            <div class="auth-switch" style="margin-top:20px">No account? <span onclick="goV('s-v-signup')">Start free 30-day trial →</span></div>
+            <div class="auth-switch" style="margin-top:20px">No account? <span onclick="goV('s-v-signup')">Start free 90-day trial →</span></div>
           </div>
           <div style="text-align:center;margin-top:24px;font-size:10px;color:var(--fa);font-weight:600;letter-spacing:.5px">
             Food Truck Rewards · v2.1.0
@@ -185,7 +185,7 @@
         <div class="auth-header">
           <div class="auth-logo">🚀</div>
           <div class="auth-title">Food Truck Rewards</div>
-          <div class="auth-sub">30 days free, then $9.99/mo</div>
+          <div class="auth-sub">90 days free, then $9.99/mo</div>
         </div>
         <div class="auth-body">
           <div class="auth-body-title">Start Free Trial</div>
@@ -247,7 +247,7 @@
         <button type="button" id="card-back-btn" onclick="backToSignup()" style="align-self:flex-start;background:none;border:none;color:var(--brand);font-weight:800;font-size:15px;padding:4px 0;margin-bottom:4px;cursor:pointer">← Back</button>
         <div class="auth-logo" style="animation:none">💳</div>
         <div class="auth-title">Set Up Payment</div>
-        <div class="auth-sub">Your 30-day free trial starts today. Your first payment of <strong>$9.99</strong> will be charged on <strong id="trial-end-date">—</strong>. You can cancel before then at no charge.</div>
+        <div class="auth-sub">Your 90-day free trial starts today. Your first payment of <strong>$9.99</strong> will be charged on <strong id="trial-end-date">—</strong>. You can cancel before then at no charge.</div>
 
         <!-- Trial timeline -->
         <div style="width:100%;background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:var(--sh1)">
@@ -260,7 +260,7 @@
             <div style="flex:2;height:3px;background:linear-gradient(90deg,var(--gn),var(--brand));border-radius:99px;margin:0 6px;margin-top:-20px"></div>
             <div style="text-align:center;flex:1">
               <div style="font-size:20px">💳</div>
-              <div style="font-size:11px;font-weight:800;color:var(--brand);margin-top:2px" id="trial-end-label">Day 30</div>
+              <div style="font-size:11px;font-weight:800;color:var(--brand);margin-top:2px" id="trial-end-label">Day 90</div>
               <div style="font-size:10px;color:var(--mu);font-weight:600">$9.99 billed<br>to your card</div>
             </div>
             <div style="flex:2;height:3px;background:var(--b2);border-radius:99px;margin:0 6px;margin-top:-20px"></div>
@@ -322,12 +322,12 @@
         </div>
 
         <button class="btn btn-p" id="v-card-btn" onclick="submitCardSetup()" style="font-size:16px;padding:17px 20px">
-          🎉 Start My Free 30-Day Trial
+          🎉 Start My Free 90-Day Trial
         </button>
 
         <!-- Billing summary line — clearly shows what happens -->
         <div style="width:100%;background:white;border:1.5px solid var(--b1);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:12px;color:var(--mu);font-weight:600;line-height:1.8">
-          <div style="display:flex;justify-content:space-between"><span>Trial period</span><span style="color:var(--gn);font-weight:800">FREE — 30 days</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Trial period</span><span style="color:var(--gn);font-weight:800">FREE — 90 days</span></div>
           <div style="display:flex;justify-content:space-between"><span>First charge</span><span style="font-weight:800" id="trial-end-summary">—</span></div>
           <div style="display:flex;justify-content:space-between"><span>Then every</span><span style="font-weight:800">30 days · $9.99</span></div>
           <div style="display:flex;justify-content:space-between"><span>Invoice sent to</span><span style="font-weight:800" id="billing-email-display">your email</span></div>
@@ -1954,6 +1954,11 @@
 // foodtruckrewards.com and the onrender URL alike (no cross-origin / CORS needed).
 const API = location.origin;
 
+// Free-trial length shown on the signup + card screens. Mirrors TRIAL_DAYS in
+// app.py — if you change one, change the other or the dates we promise the
+// vendor won't match the date Stripe actually bills them.
+const TRIAL_DAYS = 90;
+
 /* ════════════════════════════════════
    HTML ESCAPING — prevent stored XSS
    Any user- or vendor-controlled value (names, truck names, review
@@ -2387,7 +2392,7 @@ async function vendorSignup(){
 
   // Show trial end date
   const trialEnd = new Date();
-  trialEnd.setDate(trialEnd.getDate() + 30);
+  trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS);
   const trialStr = trialEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   ['trial-end-date','trial-end-label','trial-end-consent','trial-end-cancel','trial-end-summary'].forEach(id=>{
     const el = document.getElementById(id);
@@ -2417,7 +2422,7 @@ function enterCardScreen(mode){
     if(backBtn){ backBtn.textContent = 'Log out'; backBtn.onclick = vendorLogout; }
   } else {
     if(titleEl) titleEl.textContent = 'Set Up Payment';
-    if(btn)     btn.textContent = '🎉 Start My Free 30-Day Trial';
+    if(btn)     btn.textContent = '🎉 Start My Free 90-Day Trial';
     if(backBtn){ backBtn.textContent = '← Back'; backBtn.onclick = backToSignup; }
   }
   initStripeCard();
@@ -2564,14 +2569,14 @@ async function submitCardSetup(){
     localStorage.setItem('tl_vendor_token', S.vendorToken);
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
-    showToast('🎉 Welcome! Your 30-day free trial has started!');
+    showToast('🎉 Welcome! Your 90-day free trial has started!');
 
   } catch(e) {
     // Nothing to roll back — in the new flow no account is created unless the
     // whole payment succeeds. Just surface the error and let them retry.
     showErr(errEl, (e && e.msg) || 'Something went wrong. Please try again.');
     btn.disabled = false;
-    btn.textContent = isReactivate ? 'Reactivate Subscription' : '🎉 Start My Free 30-Day Trial';
+    btn.textContent = isReactivate ? 'Reactivate Subscription' : '🎉 Start My Free 90-Day Trial';
   }
 }
 
