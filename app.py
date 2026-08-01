@@ -513,6 +513,69 @@ def _stripe():
     return stripe
 
 
+# ── Promo codes ────────────────────────────────────────────
+# A promo grants ACCESS via vendors.promo_expires_at. That alone does not
+# stop Stripe billing, so a "free forever" code ALSO attaches a 100%-off
+# coupon to the subscription — otherwise the vendor keeps access and keeps
+# being charged, which is worse than no promo at all.
+
+# Far enough out that the access gate treats it as permanent. A real date
+# (rather than null) keeps _vendor_is_active/_vendor_status unchanged.
+LIFETIME_PROMO_DAYS = 365 * 100
+
+
+def _promo_free_until(pc: dict) -> str:
+    """ISO timestamp that redeeming this promo grants access until."""
+    if pc.get("is_lifetime"):
+        return (datetime.utcnow() + timedelta(days=LIFETIME_PROMO_DAYS)).isoformat()
+    months = pc.get("free_months") or 1
+    return (datetime.utcnow() + timedelta(days=30 * months)).isoformat()
+
+
+def _lifetime_coupon_id(stripe, pc: dict) -> str:
+    """Return the 100%-off-forever Stripe coupon for this promo code.
+
+    Created once and cached on the promo_codes row, so every vendor on the
+    same code shares one coupon in the Stripe dashboard. If the cached
+    coupon was deleted in Stripe we transparently make a new one.
+    """
+    cid = pc.get("stripe_coupon_id")
+    if cid:
+        try:
+            c = stripe.Coupon.retrieve(cid)
+            if c and not c.get("deleted"):
+                return cid
+        except Exception:
+            pass                      # deleted in the dashboard — recreate below
+
+    c = stripe.Coupon.create(
+        percent_off=100,
+        duration="forever",
+        name=f"Food Truck Rewards — {pc.get('code', 'PROMO')} (lifetime)",
+    )
+    try:
+        sb.table("promo_codes").update({"stripe_coupon_id": c.id}).eq("id", pc["id"]).execute()
+    except Exception as e:
+        # Column may not exist yet (migration not run). We still return a
+        # working coupon; the only cost is a fresh coupon next redemption.
+        print(f"[PROMO] cache coupon id: {e}")
+    return c.id
+
+
+def _attach_coupon(stripe, sub_id: str, coupon_id: str):
+    """Attach a coupon to an existing subscription.
+
+    stripe-python 9.x pins an API version that takes `coupon=`. Newer API
+    versions replaced it with `discounts=[{"coupon": ...}]`, so fall back to
+    that shape if the pinned version ever moves — a silent failure here means
+    billing a vendor we promised free access.
+    """
+    try:
+        return stripe.Subscription.modify(sub_id, coupon=coupon_id)
+    except TypeError:
+        return stripe.Subscription.modify(sub_id, discounts=[{"coupon": coupon_id}])
+
+
 def _ensure_stripe_customer(stripe, vendor: dict) -> str:
     """Return the vendor's Stripe customer id, creating it if the signup-time
     creation was skipped or failed (which used to leave billing permanently
@@ -1424,6 +1487,7 @@ def create_promo_code():
     code     = (body.get("code") or "").strip().upper()
     months   = int(body.get("free_months") or 1)
     max_uses = body.get("max_uses")
+    lifetime = bool(body.get("is_lifetime"))
 
     if not code:
         return err("Code is required")
@@ -1434,13 +1498,25 @@ def create_promo_code():
     if existing:
         return err("A promo code with that name already exists")
 
-    row = sb.table("promo_codes").insert({
+    payload = {
         "code":       code,
         "free_months": months,
         "max_uses":    max_uses,
         "uses":        0,
         "is_active":   True,
-    }).execute().data[0]
+    }
+    if lifetime:
+        payload["is_lifetime"] = True
+    try:
+        row = sb.table("promo_codes").insert(payload).execute().data[0]
+    except Exception as e:
+        # is_lifetime column missing → migration not run yet. Refuse rather
+        # than quietly creating a month-based code someone thinks is forever.
+        if lifetime:
+            print(f"[PROMO] lifetime insert failed: {e}")
+            return err("Lifetime codes need the promo migration — run "
+                       "PROMO_LIFETIME_SCHEMA.sql in Supabase first.")
+        raise
     return ok(row), 201
 
 
@@ -1625,8 +1701,7 @@ def vendor_complete_signup():
         max_uses = pc.get("max_uses")
         if max_uses and pc.get("uses", 0) >= max_uses:
             return err("This promo code has reached its maximum uses")
-        months = pc.get("free_months", 1)
-        promo_expires = (datetime.utcnow() + timedelta(days=30 * months)).isoformat()
+        promo_expires = _promo_free_until(pc)
 
     # Attach the card + create the subscription. No vendor row exists yet, so if
     # ANY of this fails the email stays free and no account is created.
@@ -1634,7 +1709,7 @@ def vendor_complete_signup():
         stripe = _stripe()
         stripe.PaymentMethod.attach(payment_method, customer=stripe_customer_id)
         stripe.Customer.modify(stripe_customer_id, invoice_settings={"default_payment_method": payment_method})
-        subscription = stripe.Subscription.create(
+        sub_args = dict(
             customer=stripe_customer_id,
             items=[{"price": STRIPE_PRICE_ID}],
             trial_period_days=TRIAL_DAYS,
@@ -1642,6 +1717,13 @@ def vendor_complete_signup():
             expand=["latest_invoice.payment_intent"],
             collection_method="charge_automatically",
         )
+        # Free-forever code: discount the subscription 100% from its very first
+        # invoice. Without this the vendor would have access AND a monthly
+        # charge. If the coupon can't be made we abort rather than sign someone
+        # up for a bill we told them they'd never get.
+        if pc and pc.get("is_lifetime"):
+            sub_args["coupon"] = _lifetime_coupon_id(stripe, pc)
+        subscription = stripe.Subscription.create(**sub_args)
     except Exception as e:
         print(f"[COMPLETE SIGNUP] stripe: {e}")
         return err("Could not start your subscription — please check your card and try again.")
@@ -1669,6 +1751,13 @@ def vendor_complete_signup():
             sb.table("promo_codes").update({"uses": pc["uses"] + 1}).eq("id", pc["id"]).execute()
         except Exception:
             pass
+        try:
+            # Record which code they took, so the same one can't be replayed
+            # later from Settings to stack more free months.
+            sb.table("vendors").update({"billing_promo_code": pc["code"]})\
+                .eq("id", vendor["id"]).execute()
+        except Exception as e:
+            print(f"[COMPLETE SIGNUP] billing_promo_code: {e}")
 
     return ok({
         "token":         make_vendor_token(vendor["id"]),
@@ -1902,17 +1991,54 @@ def apply_vendor_billing_promo():
     if max_uses and pc.get("uses", 0) >= max_uses:
         return err("This promo code has reached its maximum uses")
 
-    months       = pc.get("free_months", 1)
-    promo_expires = (datetime.utcnow() + timedelta(days=30 * months)).isoformat()
+    # One redemption per code per vendor. Without this a vendor can POST the
+    # same code repeatedly and stack free months indefinitely.
+    try:
+        vrow = sb.table("vendors").select(
+            "id, stripe_sub_id, promo_expires_at, billing_promo_code"
+        ).eq("id", request.vendor_id).execute().data
+    except Exception:
+        vrow = sb.table("vendors").select(
+            "id, stripe_sub_id, promo_expires_at"
+        ).eq("id", request.vendor_id).execute().data
+    vendor = vrow[0] if vrow else {}
+    if (vendor.get("billing_promo_code") or "").upper() == code:
+        return err("You've already used this code")
 
-    sb.table("vendors").update({
-        "promo_expires_at": promo_expires,
-    }).eq("id", request.vendor_id).execute()
-    sb.table("promo_codes").update({"uses": pc["uses"] + 1}).eq("id", pc["id"]).execute()
+    lifetime      = bool(pc.get("is_lifetime"))
+    promo_expires = _promo_free_until(pc)
+
+    # Free forever also has to stop the billing, not just open the door.
+    if lifetime:
+        sub_id = vendor.get("stripe_sub_id")
+        if sub_id:
+            try:
+                stripe = _stripe()
+                _attach_coupon(stripe, sub_id, _lifetime_coupon_id(stripe, pc))
+            except Exception as e:
+                print(f"[APPLY PROMO] coupon: {e}")
+                return err("Could not apply that code to your billing — "
+                           "please contact support so you aren't charged.")
+        # No subscription (cancelled/never started) means nothing to discount;
+        # the access grant below is the whole story.
+
+    updates = {"promo_expires_at": promo_expires}
+    try:
+        sb.table("vendors").update({**updates, "billing_promo_code": pc["code"]})\
+            .eq("id", request.vendor_id).execute()
+    except Exception as e:
+        print(f"[APPLY PROMO] billing_promo_code: {e}")   # column not migrated yet
+        sb.table("vendors").update(updates).eq("id", request.vendor_id).execute()
+
+    try:
+        sb.table("promo_codes").update({"uses": pc.get("uses", 0) + 1}).eq("id", pc["id"]).execute()
+    except Exception as e:
+        print(f"[APPLY PROMO] uses: {e}")
 
     return ok({
         "promo_expires_at": promo_expires,
-        "free_months":      months,
+        "free_months":      pc.get("free_months", 1),
+        "is_lifetime":      lifetime,
     })
 
 
