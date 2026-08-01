@@ -182,9 +182,16 @@
           <div class="field" style="margin:0"><label>Max uses (blank = ∞)</label><input class="in" id="p-max" type="number" min="1" placeholder="∞"></div>
           <button class="btn" id="p-create-btn" onclick="createPromo()">Create</button>
         </div>
+        <label style="display:flex;align-items:center;gap:9px;margin-top:12px;cursor:pointer;font-weight:800;font-size:13.5px">
+          <input type="checkbox" id="p-lifetime" style="width:17px;height:17px;accent-color:#FF5722;cursor:pointer" onchange="onLifetimeToggle()">
+          Free for life — 100% off forever, ignores &ldquo;free months&rdquo;
+        </label>
+        <div id="p-lifetime-note" style="display:none;font-size:12.5px;color:#9a6a00;background:rgba(249,168,37,.14);border-radius:8px;padding:9px 11px;margin-top:9px;line-height:1.55;font-weight:700">
+          Attaches a 100%-off Stripe coupon to the vendor&rsquo;s subscription, so they are never billed. <b>Always set a max uses</b> — an uncapped lifetime code is one screenshot away from being free for everyone.
+        </div>
       </div>
       <div class="tbl-wrap"><div class="tbl-scroll"><table>
-        <thead><tr><th>Code</th><th>Free months</th><th>Uses</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Code</th><th>Type</th><th>Uses</th><th>Status</th><th></th></tr></thead>
         <tbody id="p-rows"></tbody>
       </table></div></div>
     </div>
@@ -513,7 +520,7 @@
         : '<button class="btn btn-sm btn-gn" onclick="togglePromo(\''+p.id+'\',true)">Enable</button>';
       return '<tr>'+
         '<td><div class="t-main">'+esc(p.code)+'</div></td>'+
-        '<td>'+(p.free_months||1)+' mo</td>'+
+        '<td>'+(p.is_lifetime ? '<span class="badge b-promo">Free for life</span>' : ((p.free_months||1)+' mo'))+'</td>'+
         '<td>'+uses+'</td>'+
         '<td>'+status+'</td>'+
         '<td><div class="row-act">'+toggle+
@@ -521,6 +528,13 @@
         '</div></td></tr>';
     }).join('');
   }
+  function onLifetimeToggle(){
+    var on = document.getElementById('p-lifetime').checked;
+    var m  = document.getElementById('p-months');
+    m.disabled = on; m.style.opacity = on ? .45 : 1;
+    document.getElementById('p-lifetime-note').style.display = on ? 'block' : 'none';
+  }
+
   async function createPromo(){
     var code=document.getElementById('p-code').value.trim();
     var months=parseInt(document.getElementById('p-months').value)||1;
@@ -529,9 +543,11 @@
     var btn=document.getElementById('p-create-btn'); btn.disabled=true;
     try{
       var body={code:code, free_months:months}; if(maxv) body.max_uses=parseInt(maxv);
+      if(document.getElementById('p-lifetime').checked) body.is_lifetime=true;
       var p = await api('POST','/api/admin/promo-codes', body);
       S.promos.unshift(p); renderPromos();
       document.getElementById('p-code').value=''; document.getElementById('p-max').value='';
+      document.getElementById('p-lifetime').checked=false; onLifetimeToggle();
       toast('✅ Promo created');
     }catch(ex){ toast('⚠️ '+ex.message); }
     btn.disabled=false;

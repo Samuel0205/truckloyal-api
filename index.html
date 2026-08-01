@@ -1085,6 +1085,20 @@
           <div class="tr"><div class="tr-info"><div class="tt">Plan</div><div class="td">Food Truck Rewards</div></div><div class="tag tag-gn">$9.99/mo</div></div>
           <div class="tr"><div class="tr-info"><div class="tt">Status</div></div><div class="tag tag-bl" id="v-plan-status">Trial</div></div>
           <div class="tr"><div class="tr-info"><div class="tt">Trial ends</div></div><div style="font-size:13px;color:var(--mu)" id="v-trial-end">–</div></div>
+          <div class="tr" id="v-promo-until-row" style="display:none"><div class="tr-info"><div class="tt">Free until</div></div><div style="font-size:13px;color:var(--mu)" id="v-promo-until">–</div></div>
+
+          <!-- Redeem a billing promo code -->
+          <div id="v-promo-box" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--s2)">
+            <div style="font-size:12px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Have a promo code?</div>
+            <div style="display:flex;gap:8px">
+              <input type="text" id="v-promo-input" placeholder="Enter code" autocomplete="off" maxlength="24"
+                     oninput="this.value=this.value.toUpperCase()"
+                     style="flex:1;min-width:0;padding:11px 12px;border:1.5px solid var(--b2);border-radius:10px;font-family:var(--fb);font-size:14px;font-weight:800;letter-spacing:2px;text-transform:uppercase">
+              <button class="btn btn-sm btn-p" style="flex-shrink:0;padding:11px 18px" id="v-promo-btn" onclick="applyVendorPromo()">Apply</button>
+            </div>
+            <div id="v-promo-msg" style="display:none;font-size:12.5px;font-weight:700;margin-top:9px;line-height:1.5"></div>
+          </div>
+
           <div class="callout co-or" style="margin-top:12px;margin-bottom:0">
             <div class="co-icon">⚠️</div>
             <div><div class="co-title">Cancel subscription</div><div class="co-desc">You'll keep access until the end of your billing period.</div>
@@ -3555,13 +3569,31 @@ async function renderVSettings(){
   const ep=document.getElementById('v-set-email-public'); if(ep) ep.checked=!!S.vendor.email_public;
 
   // Status badge
+  const now         = new Date();
+  const promoAt     = S.vendor.promo_expires_at ? new Date(S.vendor.promo_expires_at) : null;
+  const promoActive = promoAt && promoAt > now;
+  // A "free forever" promo is stored as a real date ~100 years out so the
+  // access gate keeps working unchanged. Past this horizon it's forever, not
+  // a date worth showing a vendor.
+  const lifetime    = promoActive && (promoAt - now) > 50*365*864e5;
+
   const statusEl = document.getElementById('v-plan-status');
   if(statusEl){
-    const now = new Date();
     let status='Trial', cls='tag-bl';
-    if(S.vendor.plan_active){status='Active';cls='tag-gn';}
-    else if(S.vendor.promo_expires_at&&new Date(S.vendor.promo_expires_at)>now){status='Promo';cls='tag-gd';}
+    // Lifetime wins over plan_active — a comped vendor's subscription is still
+    // live in Stripe, just discounted to $0.
+    if(lifetime){status='Free forever';cls='tag-gd';}
+    else if(S.vendor.plan_active){status='Active';cls='tag-gn';}
+    else if(promoActive){status='Promo';cls='tag-gd';}
     statusEl.textContent=status; statusEl.className='tag '+cls;
+  }
+
+  const puRow = document.getElementById('v-promo-until-row');
+  const puVal = document.getElementById('v-promo-until');
+  if(puRow && puVal){
+    if(lifetime){ puRow.style.display='flex'; puVal.textContent='Forever 🎉'; }
+    else if(promoActive){ puRow.style.display='flex'; puVal.textContent=promoAt.toLocaleDateString(); }
+    else { puRow.style.display='none'; }
   }
 
   // Profile picture
@@ -5836,6 +5868,44 @@ async function deleteCustomerAccount() {
 }
 
 /* ── CANCEL VENDOR SUBSCRIPTION ── */
+// Redeem a billing promo code from Settings. Until now this endpoint existed
+// with no way to reach it, so a code could only ever be used at signup.
+async function applyVendorPromo(){
+  const input = document.getElementById('v-promo-input');
+  const msg   = document.getElementById('v-promo-msg');
+  const btn   = document.getElementById('v-promo-btn');
+  const code  = (input?.value || '').trim().toUpperCase();
+
+  const say = (text, good) => {
+    if(!msg) return;
+    msg.style.display = 'block';
+    msg.style.color   = good ? 'var(--gn)' : 'var(--rd)';
+    msg.textContent   = text;
+  };
+
+  if(!code){ say('Enter a code first.', false); return; }
+
+  btn.disabled = true;
+  const res = await apiPost('/api/vendor/apply-promo', {code});
+  btn.disabled = false;
+
+  if(!res.ok){
+    say(res.data?.error || 'That code could not be applied.', false);
+    return;
+  }
+
+  const d = res.data.data || {};
+  S.vendor.promo_expires_at = d.promo_expires_at;
+  localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
+  input.value = '';
+  say(d.is_lifetime
+        ? '🎉 Applied — your subscription is free for life. You will not be charged.'
+        : '🎉 Applied — free until ' + new Date(d.promo_expires_at).toLocaleDateString() + '.',
+      true);
+  showToast(d.is_lifetime ? '🎉 Free for life unlocked!' : '🎉 Promo applied!');
+  renderVSettings();
+}
+
 async function cancelSubscription() {
   if (!confirm('Cancel your subscription? You\'ll keep access until the end of your billing period.')) return;
   showLoad('Cancelling...');
