@@ -1107,7 +1107,45 @@ def admin_stats():
     except Exception:
         pass
 
+    # ── Daily series for the dashboard charts ──────────────────
+    # A totals-only dashboard can't show a trend. These are 30 buckets of
+    # counts, computed here so the browser doesn't have to pull raw rows.
+    DAYS = 30
+    day_keys = [(datetime.utcnow().date() - timedelta(days=DAYS - 1 - i)).isoformat()
+                for i in range(DAYS)]
+    since_days = (datetime.utcnow() - timedelta(days=DAYS - 1)).date().isoformat()
+
+    def _daily(table, ts_col="created_at", exclude_demo=False):
+        """Count rows per day for the window. Returns a list aligned to day_keys."""
+        buckets = {d: 0 for d in day_keys}
+        try:
+            q = sb.table(table).select(ts_col).gte(ts_col, since_days)
+            if exclude_demo and demo_ids:
+                q = q.not_.in_("vendor_id", demo_ids)
+            for r in (q.limit(20000).execute().data or []):
+                day = str(r.get(ts_col) or "")[:10]
+                if day in buckets:
+                    buckets[day] += 1
+        except Exception as e:
+            print(f"[STATS] daily {table}: {e}")
+        return [buckets[d] for d in day_keys]
+
+    series = {
+        "days":       day_keys,
+        "visits":     _daily("visits", exclude_demo=True),
+        "customers":  _daily("customers"),
+        "page_views": _daily("page_views"),
+    }
+    # Vendor signups come from the list we already have — no extra query.
+    vend_buckets = {d: 0 for d in day_keys}
+    for v in real_vendors:
+        day = str(v.get("created_at") or "")[:10]
+        if day in vend_buckets:
+            vend_buckets[day] += 1
+    series["vendors"] = [vend_buckets[d] for d in day_keys]
+
     return ok({
+        "series":          series,
         "vendors":         vendors,          # full list — the table shows demos too
         "total_vendors":   len(real_vendors),
         "demo_vendors":    len(demo_vendors),
