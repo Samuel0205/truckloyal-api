@@ -112,6 +112,16 @@
   .mini .grp{font-size:10.5px;font-weight:900;color:var(--ink3);text-transform:uppercase;
              letter-spacing:.7px;padding-top:16px}
 
+  .numbtn{margin-top:12px;background:transparent;border:1.5px solid var(--line);border-radius:9px;
+          padding:7px 13px;font-size:12.5px;font-weight:800;color:var(--ink2);font-family:var(--f)}
+  .numbtn:hover{border-color:var(--or);color:var(--or)}
+  .numtbl{margin-top:10px;max-height:260px;overflow-y:auto;border:1px solid var(--line);
+          border-radius:10px;padding:0 12px}
+  .nums th{position:sticky;top:0;background:var(--card);padding:9px 0;font-size:10.5px;
+           border-bottom:1.5px solid var(--line);white-space:nowrap}
+  .nums td{padding:8px 0;font-size:13px}
+  .nums .r{text-align:right;width:26%;font-variant-numeric:tabular-nums}
+
   .tip{position:fixed;pointer-events:none;z-index:60;background:var(--dark);color:#fff;
        border-radius:9px;padding:8px 11px;font-size:12px;font-weight:800;line-height:1.5;
        box-shadow:0 8px 24px rgba(0,0,0,.28);opacity:0;transition:opacity .12s ease;white-space:nowrap}
@@ -473,6 +483,59 @@
   }
   function hideTip(){ if(TIP) TIP.classList.remove('on'); }
 
+  function cap1(t){ return t.charAt(0).toUpperCase()+t.slice(1); }
+
+  /* Mouse and touch both scrub the chart. Touch matters more than it sounds:
+     the admin page gets used on a phone, where mousemove never fires — without
+     this the daily numbers are simply unreachable. `touch-action:pan-y` lets
+     the page still scroll vertically while a horizontal drag scrubs. */
+  function bindPointer(svg, onAt, onClear){
+    svg.style.touchAction = 'pan-y';
+    svg.addEventListener('mousemove', function(ev){ onAt(ev.clientX); });
+    svg.addEventListener('mouseleave', onClear);
+    var hideT;
+    function touch(ev){
+      if(!ev.touches || !ev.touches.length) return;
+      clearTimeout(hideT);
+      onAt(ev.touches[0].clientX);
+    }
+    svg.addEventListener('touchstart', touch, {passive:true});
+    svg.addEventListener('touchmove',  touch, {passive:true});
+    svg.addEventListener('touchend', function(){
+      // leave the reading up long enough to actually read it
+      clearTimeout(hideT); hideT = setTimeout(onClear, 2500);
+    }, {passive:true});
+  }
+
+  /* Every chart gets a table twin. A tooltip must never be the only way to
+     read a value — it isn't reachable by screen reader, and on a phone it
+     takes a deliberate drag to summon. */
+  var NUM_OPEN = {};
+  function numbers(box, id, head, rows){
+    var open = !!NUM_OPEN[id];
+    var d=document.createElement('div');
+    d.innerHTML =
+      '<button type="button" class="numbtn" aria-expanded="'+open+'">'
+      + (open?'Hide numbers':'Show numbers')+'</button>'
+      + '<div class="numtbl"'+(open?'':' hidden')+'><table class="mini nums"><thead><tr>'
+      + head.map(function(h,i){ return '<th'+(i?' class="r"':'')+'>'+h+'</th>'; }).join('')
+      + '</tr></thead><tbody>'
+      + rows.slice().reverse().map(function(r){
+          return '<tr>'+r.map(function(c,i){
+            return '<td'+(i?' class="r"':'')+'>'+c+'</td>'; }).join('')+'</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+    var btn=d.querySelector('.numbtn'), tbl=d.querySelector('.numtbl');
+    btn.addEventListener('click', function(){
+      var nowOpen = tbl.hasAttribute('hidden');
+      if(nowOpen) tbl.removeAttribute('hidden'); else tbl.setAttribute('hidden','');
+      btn.textContent = nowOpen?'Hide numbers':'Show numbers';
+      btn.setAttribute('aria-expanded', nowOpen);
+      NUM_OPEN[id] = nowOpen;      // survives the resize redraw
+    });
+    box.appendChild(d);
+  }
+
   function niceMax(v){
     if(v<=4) return 4;
     var mag=Math.pow(10, Math.floor(Math.log10(v)));
@@ -537,9 +600,9 @@
       + '</svg>';
 
     var svg=box.querySelector('svg'), cx=svg.querySelector('.cx'), dot=svg.querySelector('.dot');
-    function at(ev){
+    function at(clientX){
       var r=svg.getBoundingClientRect();
-      var px=(ev.clientX-r.left)/r.width*W;
+      var px=(clientX-r.left)/r.width*W;
       var i=Math.round((px-PL)/(iw||1)*(days.length-1));
       i=Math.max(0, Math.min(days.length-1, i));
       cx.setAttribute('x1',X(i)); cx.setAttribute('x2',X(i)); cx.setAttribute('opacity','.55');
@@ -547,10 +610,9 @@
       var sx=r.left+X(i)/W*r.width, sy=r.top+Y(vals[i])/H*r.height;
       showTip(sx, sy, '<div>'+shortDay(days[i])+'</div><div>'+vals[i]+' '+unit+'</div>');
     }
-    svg.addEventListener('mousemove', at);
-    svg.addEventListener('mouseleave', function(){
-      cx.setAttribute('opacity','0'); dot.setAttribute('opacity','0'); hideTip();
-    });
+    function clear(){ cx.setAttribute('opacity','0'); dot.setAttribute('opacity','0'); hideTip(); }
+    bindPointer(svg, at, clear);
+    numbers(box, id, ['Day', cap1(unit)], days.map(function(d,i){ return [shortDay(d), vals[i]]; }));
   }
 
   /* Two-series daily bars — distinct series, so categorical + legend. */
@@ -607,15 +669,16 @@
       + '</div>';
 
     var svg=box.querySelector('svg');
-    svg.addEventListener('mousemove', function(ev){
+    bindPointer(svg, function(clientX){
       var r=svg.getBoundingClientRect();
-      var px=(ev.clientX-r.left)/r.width*W;
+      var px=(clientX-r.left)/r.width*W;
       var i=Math.floor((px-PL)/slot);
       if(i<0||i>=days.length){ hideTip(); return; }
-      showTip(ev.clientX, r.top+PT/H*r.height+40,
+      showTip(r.left+(PL+i*slot+slot/2)/W*r.width, r.top+PT/H*r.height+42,
         '<div>'+shortDay(days[i])+'</div><div>'+(vend[i]||0)+' trucks · '+(cust[i]||0)+' customers</div>');
-    });
-    svg.addEventListener('mouseleave', hideTip);
+    }, hideTip);
+    numbers(box, id, ['Day','New trucks','New customers'],
+            days.map(function(d,i){ return [shortDay(d), vend[i]||0, cust[i]||0]; }));
   }
 
   /* Part-to-whole across 4 stages — stacked bar, 2px surface gaps,
