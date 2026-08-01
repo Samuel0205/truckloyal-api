@@ -81,6 +81,7 @@
   .b-promo{background:rgba(249,168,37,.16);color:#9a6a00}
   .b-grace{background:rgba(198,40,40,.1);color:var(--rd)}
   .b-inactive{background:#eee;color:#888}
+  .b-demo{background:rgba(120,90,200,.14);color:#5b3fa8}
   .b-blocked{background:var(--rd);color:#fff}
 
   /* Modal */
@@ -132,6 +133,7 @@
     <!-- OVERVIEW -->
     <div class="page on" id="page-overview">
       <div class="stats" id="ov-stats"></div>
+      <div id="ov-note" style="display:none;margin-top:12px;font-size:13px;font-weight:700;color:#7a6a5c;line-height:1.6"></div>
       <div class="toolbar"><button class="btn btn-sm btn-gh" onclick="loadAll()">↻ Refresh</button></div>
     </div>
 
@@ -302,6 +304,18 @@
     document.getElementById('ov-stats').innerHTML = cards.map(function(c){
       return '<div class="stat '+c[0]+'"><div class="v">'+c[1]+'</div><div class="l">'+c[2]+'</div></div>';
     }).join('');
+
+    // Say out loud what these numbers leave out, so the dashboard can be
+    // trusted without remembering how it's wired.
+    var note = document.getElementById('ov-note');
+    if(note){
+      var bits = ['Revenue counts only vendors Stripe is actually billing '
+                + '(past trial, no active promo).'];
+      if(s.demo_vendors) bits.push(s.demo_vendors + ' demo account'
+                + (s.demo_vendors===1?'':'s') + ' excluded from every figure above.');
+      note.innerHTML = bits.join(' ');
+      note.style.display = 'block';
+    }
   }
 
   /* ── Vendor status ── */
@@ -342,7 +356,7 @@
         '<td><div class="t-main">'+esc(v.truck_name||'—')+'</div><div class="t-sub">'+esc(v.owner_name||'')+'</div></td>'+
         '<td><div class="t-sub">'+esc(v.email||'—')+'</div></td>'+
         '<td>#'+esc(v.vendor_number||'—')+'</td>'+
-        '<td><span class="badge b-'+st.k+'">'+st.label+'</span></td>'+
+        '<td><span class="badge b-'+st.k+'">'+st.label+'</span>'+(v.is_demo?' <span class="badge b-demo">Demo</span>':'')+'</td>'+
         '<td class="t-sub">'+fmtDate(v.created_at)+'</td>'+
         '<td><div class="row-act">'+
           '<button class="btn btn-sm btn-gh" onclick="viewVendor(\''+v.id+'\')">View</button>'+
@@ -408,6 +422,7 @@
         ['Total visits', (v.total_visits||0)],
         ['Trial ends', fmtDate(v.trial_ends_at)],
         ['Promo expires', fmtDate(v.promo_expires_at)],
+        ['Counts toward revenue', v.is_demo ? '<span class="badge b-demo">No — demo account</span>' : 'Yes'],
         ['Payment failed', fmtDate(v.payment_failed_at)],
         ['Joined', fmtDate(v.created_at)],
       ];
@@ -423,6 +438,9 @@
                        :'<button class="btn btn-sm btn-rd" onclick="if(confirm(\'Block this vendor?\')){overrideVendor(\''+v.id+'\',{is_blocked:true});closeModal(\'v-modal\')}">Block</button>')+
           '<button class="btn btn-sm btn-gn" onclick="compVendor(\''+v.id+'\',30)">🎁 Comp 30 days</button>'+
           '<button class="btn btn-sm btn-gh" onclick="compVendorPrompt(\''+v.id+'\')">Extend…</button>'+
+          (v.is_demo
+            ? '<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{is_demo:false});closeModal(\'v-modal\')">Unmark demo</button>'
+            : '<button class="btn btn-sm btn-gh" onclick="overrideVendor(\''+v.id+'\',{is_demo:true});closeModal(\'v-modal\')">Mark as demo</button>')+
           '<button class="btn btn-sm btn-gh" onclick="editVendor(\''+v.id+'\')">✏️ Edit</button>'+
           '<button class="btn btn-sm btn-rd" onclick="deleteVendor(\''+v.id+'\')">🗑 Delete</button>'+
         '</div>';

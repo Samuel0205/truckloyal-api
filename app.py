@@ -1009,24 +1009,73 @@ def admin_stats():
     # the whole dashboard (one missing column = a blank admin page).
     _vcols = ("id, plan_active, trial_ends_at, payment_failed_at, promo_expires_at, "
               "created_at, truck_name, email, vendor_number, slug, owner_name")
+    vendors = None
+    for _extra in (", is_blocked, is_demo", ", is_blocked", ""):
+        try:
+            vendors = sb.table("vendors").select(_vcols + _extra).execute().data
+            break
+        except Exception:
+            continue
+    promos = sb.table("promo_codes").select("*").execute().data
+
+    # Demo/internal trucks are excluded from every headline number. They stay
+    # fully usable — they just shouldn't make the business look bigger than it
+    # is. Counted separately so the dashboard can say what it left out.
+    demo_vendors = [v for v in vendors if v.get("is_demo")]
+    demo_ids     = [v["id"] for v in demo_vendors]
+    real_vendors = [v for v in vendors if not v.get("is_demo")]
+
+    def _count(table, col="id"):
+        """Row count for a table, skipping anything owned by a demo truck."""
+        q = sb.table(table).select(col, count="exact")
+        if demo_ids:
+            q = q.not_.in_("vendor_id", demo_ids)
+        return q.execute().count or 0
+
     try:
-        vendors = sb.table("vendors").select(_vcols + ", is_blocked").execute().data
+        visits_n      = _count("visits")
+        redemptions_n = _count("redemptions")
     except Exception:
-        vendors = sb.table("vendors").select(_vcols).execute().data
-    customers   = sb.table("customers").select("id", count="exact").execute()
-    visits      = sb.table("visits").select("id", count="exact").execute()
-    redemptions = sb.table("redemptions").select("id", count="exact").execute()
-    promos      = sb.table("promo_codes").select("*").execute().data
+        # No vendor_id on one of them, or the filter was rejected — fall back
+        # to raw totals rather than showing nothing.
+        visits_n      = sb.table("visits").select("id", count="exact").execute().count or 0
+        redemptions_n = sb.table("redemptions").select("id", count="exact").execute().count or 0
+
+    # A customer who only ever joined a demo truck isn't a real customer.
+    customers_n = sb.table("customers").select("id", count="exact").execute().count or 0
+    if demo_ids:
+        try:
+            real_members = sb.table("customer_trucks").select("customer_id")\
+                .not_.in_("vendor_id", demo_ids).limit(20000).execute().data or []
+            customers_n = len({r["customer_id"] for r in real_members if r.get("customer_id")})
+        except Exception:
+            pass
 
     # Classify each vendor into exactly one bucket so the dashboard tiles
     # don't double-count (a promo or long-lapsed vendor was previously swept
     # into both "trial" and "grace").
-    statuses       = [_vendor_status(v) for v in vendors]
-    active_vendors = [v for v in vendors if _vendor_is_active(v)]
-    paying_vendors = [v for v in vendors if v.get("plan_active")]
+    statuses       = [_vendor_status(v) for v in real_vendors]
+    active_vendors = [v for v in real_vendors if _vendor_is_active(v)]
     trial_vendors  = [s for s in statuses if s == "trial"]
     grace_vendors  = [s for s in statuses if s == "grace"]
 
+    # MRR must mean money that actually arrives. plan_active is set the moment
+    # a subscription exists, so on its own it counts vendors mid-trial and
+    # vendors on a 100%-off promo as paying $9.99 — neither pays anything yet.
+    now = datetime.utcnow()
+
+    def _is_paying(v):
+        if not v.get("plan_active"):
+            return False
+        trial = _parse_dt(v.get("trial_ends_at"))
+        if trial and trial > now:
+            return False                      # still inside the free trial
+        promo = _parse_dt(v.get("promo_expires_at"))
+        if promo and promo > now:
+            return False                      # comped / free-for-life
+        return True
+
+    paying_vendors = [v for v in real_vendors if _is_paying(v)]
     mrr = len(paying_vendors) * MONTHLY_PRICE
 
     # Anonymous churn — accounts deleted (all-time + last 30 days), by type
@@ -1059,15 +1108,16 @@ def admin_stats():
         pass
 
     return ok({
-        "vendors":         vendors,
-        "total_vendors":   len(vendors),
+        "vendors":         vendors,          # full list — the table shows demos too
+        "total_vendors":   len(real_vendors),
+        "demo_vendors":    len(demo_vendors),
         "active_vendors":  len(active_vendors),
         "paying_vendors":  len(paying_vendors),
         "trial_vendors":   len(trial_vendors),
         "grace_vendors":   len(grace_vendors),
-        "total_customers": customers.count or 0,
-        "total_visits":    visits.count    or 0,
-        "total_redemptions": redemptions.count or 0,
+        "total_customers": customers_n,
+        "total_visits":    visits_n,
+        "total_redemptions": redemptions_n,
         "customers_lost":     customers_lost,
         "customers_lost_30d": customers_lost_30d,
         "vendors_lost":       vendors_lost,
@@ -1123,6 +1173,12 @@ def admin_override_vendor(vendor_id):
                             "promo_expires_at": past, "payment_failed_at": None})
         action = "blocked" if blocked else "unblocked"
 
+    if "is_demo" in body:
+        # Purely a reporting flag — the vendor keeps working exactly the same,
+        # it's just left out of revenue and vendor counts on the dashboard.
+        updates["is_demo"] = bool(body["is_demo"])
+        action = "marked as demo" if updates["is_demo"] else "marked as a real account"
+
     if "plan_active" in body:
         if bool(body["plan_active"]):
             updates.update({"plan_active": True, "payment_failed_at": None, "is_blocked": False})
@@ -1154,9 +1210,16 @@ def admin_override_vendor(vendor_id):
         action = f"comped {days} day(s)"
 
     if not updates:
-        return err("plan_active, is_blocked, or grant_days is required")
+        return err("plan_active, is_blocked, is_demo, or grant_days is required")
 
-    sb.table("vendors").update(updates).eq("id", vendor_id).execute()
+    try:
+        sb.table("vendors").update(updates).eq("id", vendor_id).execute()
+    except Exception as e:
+        if "is_demo" in updates:
+            print(f"[ADMIN OVERRIDE] is_demo: {e}")
+            return err("Marking demo accounts needs the migration — run "
+                       "DEMO_VENDORS_SCHEMA.sql in Supabase first.")
+        raise
     return ok(f"Vendor {action}")
 
 
