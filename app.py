@@ -757,12 +757,22 @@ def public_config():
     })
 
 
+# Remembers whether the last page-view insert worked, so the admin dashboard
+# can say "analytics table missing" instead of quietly reporting zero.
+_analytics_state = {"last_error": None}
+
+
 @app.route("/api/track", methods=["POST"])
 @rate_limit(600, 3600)
 def track_view():
     """First-party website analytics. Records a page view (path + an anonymous
-    random visitor id, no cookies/IP/PII). Tolerant: if the page_views table
-    hasn't been created yet it silently no-ops so it never breaks a page."""
+    random visitor id, no cookies/IP/PII).
+
+    Never raises — a failed insert must not break the page. But it DOES log,
+    and sets a flag the admin dashboard reads, because a silent failure here
+    is indistinguishable from "nobody visited" and that is the worst possible
+    thing for an analytics feature to be wrong about.
+    """
     body    = request.json or {}
     path    = (str(body.get("path") or "/")).strip()[:200] or "/"
     visitor = (str(body.get("visitor") or "")).strip()[:64]
@@ -773,8 +783,10 @@ def track_view():
             "visitor": visitor or None,
             "referrer": ref or None,
         }).execute()
-    except Exception:
-        pass
+        _analytics_state["last_error"] = None
+    except Exception as e:
+        _analytics_state["last_error"] = str(e)[:200]
+        print(f"[TRACK] page_views insert failed: {e}")
     return ok("ok")
 
 
@@ -1159,6 +1171,7 @@ def admin_stats():
 
     # Website analytics (first-party page views). Tolerant if not migrated yet.
     site_views = site_views_30d = site_visitors_30d = 0
+    analytics_error = _analytics_state.get("last_error")
     try:
         since30 = (datetime.utcnow() - timedelta(days=30)).isoformat()
         site_views = sb.table("page_views").select("id", count="exact").execute().count or 0
@@ -1167,8 +1180,10 @@ def admin_stats():
         vrows = sb.table("page_views").select("visitor")\
             .gte("created_at", since30).limit(20000).execute().data or []
         site_visitors_30d = len({r["visitor"] for r in vrows if r.get("visitor")})
-    except Exception:
-        pass
+        analytics_error = None          # reads fine, so the table exists
+    except Exception as e:
+        analytics_error = str(e)[:200]
+        print(f"[STATS] page_views read failed: {e}")
 
     # ── Daily series for the dashboard charts ──────────────────
     # A totals-only dashboard can't show a trend. These are 30 buckets of
@@ -1226,6 +1241,7 @@ def admin_stats():
         "site_views":         site_views,
         "site_views_30d":     site_views_30d,
         "site_visitors_30d":  site_visitors_30d,
+        "analytics_error":    analytics_error,
         "mrr":             round(mrr, 2),
         "promo_codes":     promos,
     })

@@ -203,6 +203,7 @@
   <main>
     <!-- OVERVIEW -->
     <div class="page on viz" id="page-overview">
+      <div id="ov-banner" style="display:none;background:#FDECEA;border:1px solid #F5C6CB;color:#B02A37;border-radius:12px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;font-weight:700;line-height:1.6"></div>
       <div class="hero-row">
         <div class="hero">
           <div class="lbl">Monthly recurring revenue</div>
@@ -393,8 +394,10 @@
       renderStats(st); renderVendors(); renderPromos();
     }catch(ex){
       if(ex.message!=='Session expired'){
-        var el=document.getElementById('ov-stats');
-        if(el) el.innerHTML='<div style="grid-column:1/-1;background:#FDECEA;border:1px solid #F5C6CB;color:#B02A37;border-radius:12px;padding:16px 18px;font-weight:700;line-height:1.5">⚠️ Couldn\'t load stats — '+esc(ex.message)+'<div style="font-weight:600;font-size:13px;margin-top:6px;color:#8a4b50">Tap Refresh to retry.</div></div>';
+        var el=document.getElementById('ov-banner');
+        if(el){ el.innerHTML='⚠️ Couldn\'t load stats — '+esc(ex.message)
+          +'<div style="font-weight:600;font-size:12.5px;margin-top:6px;opacity:.85">Tap Refresh to retry.</div>';
+          el.style.display='block'; }
         toast('⚠️ Stats: '+ex.message);
       }
     }
@@ -451,6 +454,22 @@
 
     // Say out loud what these numbers leave out, so the dashboard can be
     // trusted without remembering how it's wired.
+    // A broken analytics table looks exactly like "nobody visited" — say so
+    // rather than reporting a zero that can't be trusted.
+    var ban = document.getElementById('ov-banner');
+    if(ban){
+      if(s.analytics_error){
+        ban.innerHTML = '⚠️ <b>Website views are not being recorded.</b> Run '
+          + '<code>PAGE_VIEWS_SCHEMA.sql</code> in Supabase to create the page_views '
+          + 'table. The traffic figures below are not real until you do.'
+          + '<div style="font-weight:600;font-size:12.5px;margin-top:6px;opacity:.85">'
+          + esc(s.analytics_error) + '</div>';
+        ban.style.display = 'block';
+      } else {
+        ban.style.display = 'none';
+      }
+    }
+
     var note = document.getElementById('ov-note');
     if(note){
       var bits = ['Revenue counts only vendors Stripe is actually billing '
