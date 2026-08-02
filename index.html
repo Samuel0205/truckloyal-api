@@ -241,6 +241,63 @@
       </div>
     </div>
 
+    <!-- VENDOR FREE ACCOUNT — step 2 when a free-for-life code was used.
+         These vendors never see a card field or a billing authorisation,
+         because there is genuinely nothing to authorise. -->
+    <div class="screen" id="s-v-free">
+      <div class="auth-wrap" style="background:linear-gradient(160deg,#E9F7EC 0%,#FFF8F0 100%);padding-bottom:60px">
+        <button type="button" onclick="backToSignup()" style="align-self:flex-start;background:none;border:none;color:var(--brand);font-weight:800;font-size:15px;padding:4px 0;margin-bottom:4px;cursor:pointer">← Back</button>
+        <div class="auth-logo" style="animation:none">🎉</div>
+        <div class="auth-title">Your account is free</div>
+        <div class="auth-sub">Your code <strong id="free-code">—</strong> covers Food Truck Rewards <strong>for life</strong>. No card, no trial countdown, no bill — ever.</div>
+
+        <div style="width:100%;background:#fff;border:2px solid #A5D6A7;border-radius:16px;padding:18px;margin-bottom:16px;box-shadow:var(--sh1)">
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1.5px solid var(--b1)">
+            <span style="font-size:14px;font-weight:700;color:var(--mu)">What you pay today</span>
+            <span style="font-size:17px;font-weight:900;color:var(--gn)">$0.00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1.5px solid var(--b1)">
+            <span style="font-size:14px;font-weight:700;color:var(--mu)">What you pay later</span>
+            <span style="font-size:17px;font-weight:900;color:var(--gn)">$0.00</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0">
+            <span style="font-size:14px;font-weight:700;color:var(--mu)">Card required</span>
+            <span style="font-size:15px;font-weight:900;color:var(--gn)">No</span>
+          </div>
+        </div>
+
+        <div style="width:100%;background:#F1F8E9;border:2px solid #C5E1A5;border-radius:16px;padding:16px 18px;margin-bottom:16px">
+          <div style="font-size:12px;font-weight:900;color:#33691E;text-transform:uppercase;letter-spacing:.5px;margin-bottom:9px">Everything included</div>
+          <div style="font-size:14px;font-weight:700;color:var(--tx);line-height:2">
+            ✅ Unlimited customer check-ins<br>
+            ✅ Loyalty points &amp; rewards<br>
+            ✅ Order-ahead &amp; menu<br>
+            ✅ Live location &amp; analytics<br>
+            ✅ Marketing tools &amp; notifications
+          </div>
+        </div>
+
+        <!-- Terms were already accepted on the signup form; a second tick-box
+             here would gate a free account on authorising nothing. -->
+        <div style="width:100%;background:#FFF8F0;border:2px solid var(--b2);border-radius:12px;padding:14px 16px;margin-bottom:16px">
+          <div style="font-size:12.5px;color:var(--tx);line-height:1.75;font-weight:700">
+            You accepted the <span style="color:var(--brand);text-decoration:underline;cursor:pointer" onclick="window.open('/terms','_blank')">Terms</span> and <span style="color:var(--brand);text-decoration:underline;cursor:pointer" onclick="window.open('/privacy','_blank')">Privacy Policy</span> on the previous step.
+            There is no card on file and <strong style="color:var(--gn)">nothing will ever be charged</strong>. Cancel any time from Settings.
+          </div>
+        </div>
+
+        <button class="btn btn-p" id="v-free-btn" onclick="completeFreeSignup()" style="font-size:16px;padding:17px 20px">
+          🚀 Create my account
+        </button>
+        <div class="auth-err" id="v-free-err"></div>
+
+        <div style="text-align:center;margin-top:18px;font-size:12px;color:var(--fa);font-weight:600;line-height:1.7">
+          Food Truck Rewards is operated by Samuel McCune.<br>
+          Questions? <span style="color:var(--brand);text-decoration:underline;cursor:pointer" onclick="window.open('/terms','_blank')">Read our full Terms</span>
+        </div>
+      </div>
+    </div>
+
     <!-- VENDOR CARD SETUP — step 2 of signup -->
     <div class="screen" id="s-v-card-setup">
       <div class="auth-wrap" style="background:linear-gradient(160deg,#FFF3E0 0%,#FFF8F0 100%);padding-bottom:60px">
@@ -2178,8 +2235,8 @@ function setMode(mode){
   if(mode==='vendor'){
     if(S.vendorToken&&S.vendor){
       // card-setup is a required step — if they're on it, keep them there
-      if(S.vScreen==='s-v-card-setup'){
-        show('s-v-card-setup'); renderNav([],'' );
+      if(S.vScreen==='s-v-card-setup' || S.vScreen==='s-v-free'){
+        show(S.vScreen); renderNav([],'' );
         return;
       }
       // Lapsed / never-active vendor → payment wall (reactivation), not the app.
@@ -2204,7 +2261,7 @@ function setMode(mode){
       updateRefreshBtn();
     } else {
       // Not logged in — allow forgot/reset screens without redirecting to login
-      const allowedUnauth=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup'];
+      const allowedUnauth=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup','s-v-free'];
       if(allowedUnauth.includes(S.vScreen)){
         show(S.vScreen); renderNav([],'' );
       } else {
@@ -2231,7 +2288,7 @@ function setMode(mode){
 function goV(id){
   S.vScreen=id; show(id);
   // Only show nav when logged in AND on an authenticated screen
-  const noNavScreens=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup'];
+  const noNavScreens=['s-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup','s-v-free'];
   if(noNavScreens.includes(id)) renderNav([],'' );
   else renderNav(VNAV,id);
   if(id==='s-v-home')     loadVendorHome();
@@ -2415,8 +2472,69 @@ async function vendorSignup(){
   const emailDisplay = document.getElementById('billing-email-display');
   if(emailDisplay) emailDisplay.textContent = email;
 
+  // A free-for-life code means there is nothing to charge, so send them to the
+  // congrats screen instead of a billing authorisation for a bill that will
+  // never arrive. The server re-checks the code — this only picks the screen.
+  if(promo){
+    const btn = document.getElementById('v-signup-btn');
+    const was = btn ? btn.textContent : '';
+    if(btn){ btn.disabled = true; btn.textContent = '⏳ Checking your code...'; }
+    const chk = await apiPost('/api/vendor/check-promo', {code: promo});
+    if(btn){ btn.disabled = false; btn.textContent = was; }
+    if(chk.ok && chk.data.data?.is_lifetime){
+      setText('free-code', chk.data.data.code || promo);
+      S.vScreen = 's-v-free';
+      show('s-v-free'); renderNav([], '');
+      return;
+    }
+    if(!chk.ok){
+      showErr(errEl, chk.data?.error || 'That promo code isn\'t valid.');
+      return;
+    }
+  }
+
   // Go to payment — account is created only after payment succeeds.
   enterCardScreen('signup');
+}
+
+// Free-for-life signup: same server endpoint, no card. The server only
+// accepts a missing payment method when it confirms the code is lifetime.
+async function completeFreeSignup(){
+  const errEl = document.getElementById('v-free-err');
+  errEl.classList.remove('show');
+
+  const ps = S.pendingSignup;
+  if(!ps){ showErr(errEl, 'Your signup session expired — please start again.'); return; }
+
+  const btn = document.getElementById('v-free-btn');
+  btn.disabled = true; btn.textContent = '⏳ Creating your account...';
+  try {
+    const beginRes = await apiPost('/api/vendor/begin-checkout', {email: ps.email});
+    if(!beginRes.ok || !beginRes.data?.data?.checkout_token){
+      throw { msg: beginRes.data?.error || 'Could not start signup. Please try again.' };
+    }
+    const doneRes = await apiPost('/api/vendor/complete-signup', {
+      checkout_token: beginRes.data.data.checkout_token,
+      email: ps.email, password: ps.password, truck_name: ps.truck_name,
+      owner_name: ps.owner_name, service_states: ps.service_states,
+      home_zip: ps.home_zip, phone: ps.phone,
+      phone_public: ps.phone_public, email_public: ps.email_public,
+      accepted_tos: true, promo_code: ps.promo_code
+    });
+    if(!doneRes.ok){
+      throw { msg: doneRes.data?.error || 'Could not create your account. Please try again.' };
+    }
+    S.pendingSignup = null;
+    S.vendorToken = doneRes.data.data.token;
+    S.vendor      = doneRes.data.data.vendor;
+    localStorage.setItem('tl_vendor_token', S.vendorToken);
+    localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
+    landOnDashboard();
+    showToast('🎉 You\'re in — your account is free for life!');
+  } catch(e) {
+    showErr(errEl, (e && e.msg) || 'Something went wrong. Please try again.');
+    btn.disabled = false; btn.textContent = '🚀 Create my account';
+  }
 }
 
 // Show the card screen in the right mode: 'signup' (new vendor, pay-first) or
@@ -3788,7 +3906,7 @@ function updateRefreshBtn(){
   const btn = document.getElementById('rfsh-btn');
   if(!btn) return;
   const noRefresh = new Set([
-    's-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup',
+    's-v-login','s-v-signup','s-v-forgot','s-v-reset','s-v-card-setup','s-v-free',
     's-v-brand','s-v-points','s-v-marketing','s-v-getstarted',
     's-c-login','s-c-signup','s-c-forgot','s-c-reset',
     's-c-scan','s-c-spin','s-c-qr','s-c-review','s-c-promo','s-c-map',
