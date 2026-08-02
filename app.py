@@ -1709,6 +1709,41 @@ def vendor_signup():
     }), 201
 
 
+@app.route("/api/vendor/check-promo", methods=["POST"])
+@rate_limit(20, 900)
+def vendor_check_promo():
+    """Tell signup what a code is worth BEFORE the card screen.
+
+    A free-for-life vendor should never be shown a billing authorisation for a
+    charge that will never happen. Rate limited because this is unauthenticated
+    and would otherwise let someone guess codes.
+
+    Returns only what the signup screen needs — never the coupon id or uses.
+    """
+    code = ((request.json or {}).get("code") or "").strip().upper()
+    if not code:
+        return err("Enter a promo code")
+
+    rows = sb.table("promo_codes").select("*").eq("code", code).eq("is_active", True).execute().data
+    if not rows:
+        return err("That promo code isn't valid")
+    pc = rows[0]
+
+    max_uses = pc.get("max_uses")
+    if max_uses and pc.get("uses", 0) >= max_uses:
+        return err("That promo code has been fully claimed")
+
+    lifetime = bool(pc.get("is_lifetime"))
+    months   = pc.get("free_months") or 1
+    return ok({
+        "code":        pc["code"],
+        "is_lifetime": lifetime,
+        "free_months": months,
+        "label": "Free for life" if lifetime
+                 else f"{months} month{'s' if months != 1 else ''} free",
+    })
+
+
 @app.route("/api/vendor/begin-checkout", methods=["POST"])
 @rate_limit(10, 900)
 def vendor_begin_checkout():
@@ -1751,7 +1786,9 @@ def vendor_complete_signup():
     body           = request.json or {}
     token          = body.get("checkout_token") or ""
     payment_method = body.get("payment_method_id") or ""
-    if not token or not payment_method:
+    # A card is required for everyone EXCEPT a free-for-life promo, which is
+    # checked against the database below — never taken on the client's word.
+    if not token:
         return err("Missing payment details — please restart signup.")
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
@@ -1804,30 +1841,44 @@ def vendor_complete_signup():
             return err("This promo code has reached its maximum uses")
         promo_expires = _promo_free_until(pc)
 
+    lifetime = bool(pc and pc.get("is_lifetime"))
+
+    # A card is only required when there is something to charge. Free-for-life
+    # vendors skip it entirely — asking them to authorise $9.99 for a bill that
+    # will never arrive is alarming and, worse, untrue.
+    if not lifetime and not payment_method:
+        return err("Missing payment details — please restart signup.")
+
     # Attach the card + create the subscription. No vendor row exists yet, so if
     # ANY of this fails the email stays free and no account is created.
+    subscription = None
     try:
         stripe = _stripe()
-        stripe.PaymentMethod.attach(payment_method, customer=stripe_customer_id)
-        stripe.Customer.modify(stripe_customer_id, invoice_settings={"default_payment_method": payment_method})
         sub_args = dict(
             customer=stripe_customer_id,
             items=[{"price": STRIPE_PRICE_ID}],
             trial_period_days=TRIAL_DAYS,
-            default_payment_method=payment_method,
             expand=["latest_invoice.payment_intent"],
             collection_method="charge_automatically",
         )
+        if payment_method:
+            stripe.PaymentMethod.attach(payment_method, customer=stripe_customer_id)
+            stripe.Customer.modify(stripe_customer_id,
+                                   invoice_settings={"default_payment_method": payment_method})
+            sub_args["default_payment_method"] = payment_method
         # Free-forever code: discount the subscription 100% from its very first
-        # invoice. Without this the vendor would have access AND a monthly
-        # charge. If the coupon can't be made we abort rather than sign someone
-        # up for a bill we told them they'd never get.
-        if pc and pc.get("is_lifetime"):
+        # invoice, so every invoice is $0 and no payment method is needed.
+        if lifetime:
             sub_args["coupon"] = _lifetime_coupon_id(stripe, pc)
         subscription = stripe.Subscription.create(**sub_args)
     except Exception as e:
         print(f"[COMPLETE SIGNUP] stripe: {e}")
-        return err("Could not start your subscription — please check your card and try again.")
+        if not lifetime:
+            return err("Could not start your subscription — please check your card and try again.")
+        # A comped vendor was promised a free account; don't block them on
+        # Stripe. Access comes from promo_expires_at either way, so create the
+        # account with no subscription rather than failing the signup.
+        print("[COMPLETE SIGNUP] lifetime: continuing with no Stripe subscription")
 
     # Payment is set up — NOW it's safe to create the account.
     try:
@@ -1836,15 +1887,17 @@ def vendor_complete_signup():
             service_states=service_states, home_zip=home_zip, phone=phone,
             phone_public=phone_public, email_public=email_public,
             stripe_customer_id=stripe_customer_id,
-            stripe_sub_id=subscription.id, plan_active=True, promo_expires=promo_expires,
+            stripe_sub_id=(subscription.id if subscription else None),
+            plan_active=True, promo_expires=promo_expires,
         )
     except Exception as e:
         print(f"[COMPLETE SIGNUP] account create failed after payment: {e}")
         # Don't leave a paid subscription with no account — cancel it and retry.
-        try:
-            _stripe().Subscription.delete(subscription.id)
-        except Exception:
-            pass
+        if subscription:
+            try:
+                _stripe().Subscription.delete(subscription.id)
+            except Exception:
+                pass
         return err("Something went wrong finishing your account — please try again.")
 
     if pc:
