@@ -346,7 +346,7 @@
       <a class="lnk" href="#how">How it works</a>
       <a class="lnk" href="#features">Features</a>
       <a class="lnk" href="#get-app">Pricing</a>
-      <a class="btn btn-primary nav-cta" href="#get-app" onclick="return goInstall(event)">Start Free Trial</a>
+      <a class="btn btn-primary nav-cta" href="/app">Start Free Trial</a>
     </nav>
   </div>
 </header>
@@ -361,7 +361,7 @@
       <h1>Turn Every<br>Customer Into<br><span class="script">a Regular.</span></h1>
       <p class="hero-lead">Everything your food truck needs — from one app that runs entirely on your phone.</p>
       <div class="hero-ctas">
-        <a class="btn btn-primary" href="#get-app" onclick="return goInstall(event)">Start 45-Day Free Trial</a>
+        <a class="btn btn-primary" href="/app">Start 45-Day Free Trial</a>
         <a class="btn btn-outline" href="#demo">▶ See it in action</a>
       </div>
       <div class="hero-ticks">
@@ -573,13 +573,16 @@
       </div>
     </div>
 
+    <div style="text-align:center;font-size:15px;font-weight:800;color:rgba(255,255,255,.9);margin:6px 0 18px">
+      Optional — want the icon on your home screen?
+    </div>
     <div class="install-grid">
       <div class="install-card">
         <h3>🤖 On Android</h3>
         <ol>
-          <li>Tap “Download Now” above</li>
+          <li>Tap “Add to my phone” above</li>
           <li>Confirm “Install” in the pop-up</li>
-          <li>Open Food Truck Rewards &amp; start your trial</li>
+          <li>Open Food Truck Rewards from your home screen</li>
         </ol>
       </div>
       <div class="install-card ios">
@@ -591,7 +594,7 @@
         </ol>
       </div>
     </div>
-    <div class="getapp-note">Works on any Android or iPhone — no app store download required.</div>
+    <div class="getapp-note">You don't need to install anything to start — the app runs in your browser on any phone.</div>
   </div>
 </section>
 
@@ -657,8 +660,14 @@
   var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
   var cta = document.getElementById('install-cta');
 
-  function renderInstalled(){ cta.innerHTML = '<div class="warn" style="background:#F1F8E9;border-color:#C5E1A5;color:#2E7D32">✓ App installed! Open Food Truck Rewards from your home screen.</div>'; }
-  function renderAndroid(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" id="android-install-btn" onclick="androidInstall()">⬇️ Download Now</button><div class="sub">Free · installs in seconds · no app store</div>'; }
+  /* Every path starts with OPEN — the app runs in any browser, so making
+     someone install before they can look at it throws away the visit.
+     Installing is offered second, for the people who decide they want the
+     home-screen icon. */
+  var OPEN_BTN = '<a class="btn btn-primary getapp-btn" href="/app">Open the app &rarr;</a>';
+
+  function renderInstalled(){ cta.innerHTML = '<div class="warn" style="background:#F1F8E9;border-color:#C5E1A5;color:#2E7D32">&#10003; App installed! Open Food Truck Rewards from your home screen.</div>' + '<div class="cta-row" style="margin-top:14px">' + OPEN_BTN + '</div>'; }
+  function renderAndroid(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '<button class="btn btn-outline getapp-btn" id="android-install-btn" onclick="androidInstall()">&#11015;&#65039; Add to my phone</button></div><div class="sub">Free &middot; works in your browser right now &middot; no app store</div>'; }
   window.androidInstall = function(){
     if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(r){ if(r&&r.outcome==='accepted') renderInstalled(); deferredPrompt=null; }); }
     else { cta.innerHTML = '<div class="warn">Tap the ⋮ menu (top-right) then “Install app” or “Add to Home screen”.</div>'; }
@@ -673,9 +682,11 @@
     }
     return true; // let the href scroll to #get-app (with the install instructions)
   };
-  function renderIOSSafari(){ cta.innerHTML = '<div class="warn">Tap <strong>Share</strong> ⬆️ then <strong>Add to Home Screen</strong> to install — see the iPhone steps below.</div>'; }
-  function renderIOSOther(){ cta.innerHTML = '<button class="btn btn-primary getapp-btn" onclick="copyLink(this)"><span id="copy-lbl">🔗 Copy link for Safari</span></button><div class="sub">On iPhone, apps install from Safari only</div>'; }
-  function renderDesktop(){ cta.innerHTML = '<div class="cta-row"><a class="btn btn-primary getapp-btn" href="#get-app" onclick="return goInstall(event)">⬇️ Download App Now</a><a class="btn btn-outline getapp-btn" href="/app">Open the Web App →</a></div><div class="sub">📱 On your phone, tap <b>Download App Now</b> for a one-tap install</div>'; }
+  function renderIOSSafari(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '</div><div class="sub">Works right here in Safari &middot; want the home-screen icon? Tap <strong>Share</strong> &#11014;&#65039; then <strong>Add to Home Screen</strong></div>'; }
+  /* In-app browsers (Facebook, Instagram) can't install a PWA. That is fine —
+     they can still use the whole app. Copying a link was a dead end. */
+  function renderIOSOther(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '</div><div class="sub">Works right here &middot; for a home-screen icon, open this page in Safari (<span onclick="copyLink(this)" style="text-decoration:underline;cursor:pointer"><span id="copy-lbl">copy the link</span></span>)</div>'; }
+  function renderDesktop(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '<a class="btn btn-outline getapp-btn" href="#get-app" onclick="return goInstall(event)">&#11015;&#65039; Install the app</a></div><div class="sub">&#128241; On your phone it installs in one tap &mdash; no app store</div>'; }
   window.copyLink = function(btn){ var u=location.origin+'/'; var l=document.getElementById('copy-lbl'); var d=function(){ if(l) l.textContent='✅ Copied! Open Safari'; }; if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(d).catch(function(){fb(u,d);}); else fb(u,d); };
   function fb(t,cb){ try{ var a=document.createElement('textarea'); a.value=t; a.style.position='fixed'; a.style.opacity='0'; document.body.appendChild(a); a.select(); document.execCommand('copy'); document.body.removeChild(a); cb(); }catch(e){} }
 
