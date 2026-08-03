@@ -459,9 +459,18 @@
     var ban = document.getElementById('ov-banner');
     if(ban){
       if(s.analytics_error){
-        ban.innerHTML = '⚠️ <b>Website views are not being recorded.</b> Run '
-          + '<code>PAGE_VIEWS_SCHEMA.sql</code> in Supabase to create the page_views '
-          + 'table. The traffic figures below are not real until you do.'
+        // PGRST205 means PostgREST's schema cache is stale, NOT that the table
+        // is missing. Telling someone to re-run SQL they already ran sends them
+        // in a circle, so name the actual fix.
+        var stale = /PGRST205|schema cache/i.test(s.analytics_error);
+        ban.innerHTML = '⚠️ <b>Website views are not being recorded.</b> '
+          + (stale
+              ? 'The table exists but Supabase\'s API hasn\'t picked it up yet. '
+                + 'In the SQL editor run <code>NOTIFY pgrst, \'reload schema\';</code> '
+                + '&mdash; or Settings &rarr; API &rarr; Restart server.'
+              : 'Run <code>PAGE_VIEWS_SCHEMA.sql</code> in Supabase to create the '
+                + 'page_views table.')
+          + ' The traffic figures below are not real until this is fixed.'
           + '<div style="font-weight:600;font-size:12.5px;margin-top:6px;opacity:.85">'
           + esc(s.analytics_error) + '</div>';
         ban.style.display = 'block';
