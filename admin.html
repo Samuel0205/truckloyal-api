@@ -462,14 +462,14 @@
         // PGRST205 means PostgREST's schema cache is stale, NOT that the table
         // is missing. Telling someone to re-run SQL they already ran sends them
         // in a circle, so name the actual fix.
-        var stale = /PGRST205|schema cache/i.test(s.analytics_error);
+        // PGRST205 covers three different causes — table missing, privileges
+        // missing, cache stale — and they are indistinguishable from here.
+        // Sending someone to one specific cause was what wasted the last two
+        // rounds, so point at the file that handles all three.
         ban.innerHTML = '⚠️ <b>Website views are not being recorded.</b> '
-          + (stale
-              ? 'The table exists but Supabase\'s API hasn\'t picked it up yet. '
-                + 'In the SQL editor run <code>NOTIFY pgrst, \'reload schema\';</code> '
-                + '&mdash; or Settings &rarr; API &rarr; Restart server.'
-              : 'Run <code>PAGE_VIEWS_SCHEMA.sql</code> in Supabase to create the '
-                + 'page_views table.')
+          + 'Paste all of <code>PAGE_VIEWS_SCHEMA.sql</code> into the Supabase '
+          + 'SQL editor and run it — it creates the table, fixes privileges and '
+          + 'reloads the API cache, and ends with a row proving it worked.'
           + ' The traffic figures below are not real until this is fixed.'
           + '<div style="font-weight:600;font-size:12.5px;margin-top:6px;opacity:.85">'
           + esc(s.analytics_error) + '</div>';

@@ -1,21 +1,19 @@
 -- ═══════════════════════════════════════════════════════════
---  Website analytics  ·  run in the Supabase SQL editor
+--  Website analytics · page_views
+--  Supabase → SQL Editor → paste ALL of this → Run
 -- ═══════════════════════════════════════════════════════════
---  THIS TABLE WAS NEVER CREATED. The tracking beacon has been
---  firing on every page load, the insert has been failing, and
---  the error was being swallowed — so the admin dashboard has
---  always shown 0 views no matter how much traffic you had.
+--  This is ONE block on purpose. The earlier version was split
+--  into five, and the last of them (NOTIFY) succeeds even when
+--  the CREATE TABLE above it failed — so the editor said
+--  "Success" while nothing had been created.
 --
---  Run each block on its own. If the editor adds a stray ")"
---  and you get "syntax error at or near )", delete it.
+--  Safe to run as many times as you like.
 -- ═══════════════════════════════════════════════════════════
 
-
--- 1 ── The table.
---      No cookies, no IP, no personal data — just which page, an
---      anonymous random id so repeat loads can be de-duplicated,
---      and where they came from.
-CREATE TABLE IF NOT EXISTS page_views (
+-- 1 ── The table. No cookies, no IP, no personal data: which page,
+--      an anonymous random id so repeat loads can be de-duplicated,
+--      and where the visitor came from.
+CREATE TABLE IF NOT EXISTS public.page_views (
   id         BIGSERIAL PRIMARY KEY,
   path       TEXT NOT NULL DEFAULT '/',
   visitor    TEXT,
@@ -23,39 +21,39 @@ CREATE TABLE IF NOT EXISTS page_views (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 2 ── Indexes for the dashboard's date filter and unique-visitor count.
+CREATE INDEX IF NOT EXISTS page_views_created_at_idx ON public.page_views (created_at DESC);
+CREATE INDEX IF NOT EXISTS page_views_visitor_idx    ON public.page_views (visitor);
 
--- 2 ── The dashboard filters by date on every load.
-CREATE INDEX IF NOT EXISTS page_views_created_at_idx ON page_views (created_at DESC);
+-- 3 ── Match every other table in this database.
+--      An earlier version of this file switched RLS on. Nothing else
+--      here uses RLS — the app talks to Postgres with the service key
+--      and every table relies on that — so page_views was the odd one
+--      out, and the only one that failed. It holds no personal data.
+ALTER TABLE public.page_views DISABLE ROW LEVEL SECURITY;
 
+-- 4 ── Privileges. A table made in the SQL editor does not always
+--      inherit the grants the API roles need, and PostgREST reports a
+--      table it cannot touch as "not found in the schema cache"
+--      (PGRST205) — which reads like the table is missing when it is
+--      really a permissions problem.
+GRANT ALL ON TABLE    public.page_views        TO postgres, service_role, anon, authenticated;
+GRANT ALL ON SEQUENCE public.page_views_id_seq TO postgres, service_role, anon, authenticated;
 
--- 3 ── Unique-visitor counts group by this.
-CREATE INDEX IF NOT EXISTS page_views_visitor_idx ON page_views (visitor);
-
-
--- 4 ── The service key writes these rows; nobody else should read
---      them. Enabling RLS with no policy blocks anon/authenticated
---      while the server's service key keeps working.
-ALTER TABLE page_views ENABLE ROW LEVEL SECURITY;
-
-
--- 5 ── Tell the API about the new table.
---      Supabase's API layer (PostgREST) caches the schema. Creating a
---      table in the SQL editor does not always refresh that cache, and
---      until it does every insert fails with:
---        PGRST205 · Could not find the table 'public.page_views'
---                   in the schema cache
---      Run this whether or not you have seen that error.
+-- 5 ── Tell the API the schema changed.
 NOTIFY pgrst, 'reload schema';
 
+-- 6 ── Proof. This returns a row only if the table really exists —
+--      unlike NOTIFY, which succeeds no matter what.
+SELECT
+  'page_views EXISTS'                                   AS status,
+  (SELECT COUNT(*) FROM public.page_views)              AS rows_so_far,
+  (SELECT relrowsecurity FROM pg_class
+     WHERE oid = 'public.page_views'::regclass)         AS rls_enabled,
+  has_table_privilege('service_role','public.page_views','INSERT') AS service_can_insert;
 
--- ── Verify ─────────────────────────────────────────────────
--- 1. Confirm the table exists:
--- SELECT table_name FROM information_schema.tables
--- WHERE table_schema = 'public' AND table_name = 'page_views';
---
--- 2. Load foodtruckrewards.com in another tab, then:
--- SELECT path, referrer, created_at FROM page_views
--- ORDER BY created_at DESC LIMIT 20;
---
--- Still PGRST205 after the NOTIFY? Supabase dashboard ->
--- Settings -> API -> Restart server forces a cold reload.
+-- ── If the row above comes back, you are done. ─────────────
+--  Load foodtruckrewards.com in another tab, then run:
+--    SELECT path, referrer, created_at FROM public.page_views
+--    ORDER BY created_at DESC LIMIT 20;
+--  Then reload /admin — the red banner should be gone.
