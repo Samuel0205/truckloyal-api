@@ -38,7 +38,24 @@ CREATE INDEX IF NOT EXISTS page_views_visitor_idx ON page_views (visitor);
 ALTER TABLE page_views ENABLE ROW LEVEL SECURITY;
 
 
--- ── Verify (optional) ──────────────────────────────────────
--- Load foodtruckrewards.com in another tab, then run:
+-- 5 ── Tell the API about the new table.
+--      Supabase's API layer (PostgREST) caches the schema. Creating a
+--      table in the SQL editor does not always refresh that cache, and
+--      until it does every insert fails with:
+--        PGRST205 · Could not find the table 'public.page_views'
+--                   in the schema cache
+--      Run this whether or not you have seen that error.
+NOTIFY pgrst, 'reload schema';
+
+
+-- ── Verify ─────────────────────────────────────────────────
+-- 1. Confirm the table exists:
+-- SELECT table_name FROM information_schema.tables
+-- WHERE table_schema = 'public' AND table_name = 'page_views';
+--
+-- 2. Load foodtruckrewards.com in another tab, then:
 -- SELECT path, referrer, created_at FROM page_views
 -- ORDER BY created_at DESC LIMIT 20;
+--
+-- Still PGRST205 after the NOTIFY? Supabase dashboard ->
+-- Settings -> API -> Restart server forces a cold reload.
