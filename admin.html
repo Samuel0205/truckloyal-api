@@ -122,6 +122,21 @@
   .nums td{padding:8px 0;font-size:13px}
   .nums .r{text-align:right;width:26%;font-variant-numeric:tabular-nums}
 
+  /* traffic sources — one measure across named categories, so one hue for
+     every bar. Colouring by size would double-encode the length. */
+  .ref{display:grid;grid-template-columns:minmax(0,1fr) 78px 78px;gap:12px;align-items:center;
+       padding:11px 0;border-bottom:1px solid var(--line)}
+  .ref:last-child{border-bottom:none}
+  .ref .nm{font-size:13.5px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ref .track{height:9px;border-radius:99px;background:#F1E8DC;margin-top:7px;overflow:hidden}
+  .ref .fill{height:100%;border-radius:99px;background:var(--s1)}
+  .ref .n{text-align:right;font-size:14px;font-weight:900;font-variant-numeric:tabular-nums}
+  .ref-head{display:grid;grid-template-columns:minmax(0,1fr) 78px 78px;gap:12px;
+            padding-bottom:8px;border-bottom:1.5px solid var(--line);
+            font-size:10.5px;font-weight:900;color:var(--ink3);
+            text-transform:uppercase;letter-spacing:.6px}
+  .ref-head span:not(:first-child){text-align:right}
+
   .tip{position:fixed;pointer-events:none;z-index:60;background:var(--dark);color:#fff;
        border-radius:9px;padding:8px 11px;font-size:12px;font-weight:800;line-height:1.5;
        box-shadow:0 8px 24px rgba(0,0,0,.28);opacity:0;transition:opacity .12s ease;white-space:nowrap}
@@ -236,6 +251,12 @@
         <h3>Sign-ups</h3>
         <div class="cap">New trucks and new customers per day, last 30 days.</div>
         <div id="ov-signups"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Where your traffic comes from</h3>
+        <div class="cap">Website visits by source, last 30 days.</div>
+        <div id="ov-refs"></div>
       </div>
 
       <div class="grid2">
@@ -438,6 +459,8 @@
     areaChart('ov-traffic', ser.days, ser.page_views, 'var(--s1)', 'page views');
     signupChart('ov-signups', ser.days, ser.vendors, ser.customers);
 
+    renderReferrers(s.referrers);
+
     document.getElementById('ov-totals').innerHTML = miniRows([
       ['Customer visits',      s.total_visits],
       ['Rewards redeemed',     s.total_redemptions],
@@ -496,6 +519,30 @@
     clearTimeout(_rzT);
     _rzT = setTimeout(function(){ renderStats(LAST_STATS); }, 160);
   });
+
+  /* Traffic sources. One bar per source, all the same colour — the length
+     already carries the magnitude, so tinting by size would say it twice.
+     Both numbers are printed, so the bars are decoration not the only read. */
+  function renderReferrers(list){
+    var box=document.getElementById('ov-refs'); if(!box) return;
+    list = list || [];
+    if(!list.length){
+      box.innerHTML = '<div class="empty-viz">No visits recorded in the last 30 days.'
+        + '<br>Sources appear here as traffic arrives.</div>';
+      return;
+    }
+    var max = Math.max.apply(null, list.map(function(r){ return r.views||0; })) || 1;
+    box.innerHTML = '<div class="ref-head"><span>Source</span><span>Views</span><span>People</span></div>'
+      + list.map(function(r){
+          var pct = Math.max(2, Math.round((r.views||0)/max*100));
+          return '<div class="ref">'
+            + '<div><div class="nm">'+esc(r.source)+'</div>'
+            +   '<div class="track"><div class="fill" style="width:'+pct+'%"></div></div></div>'
+            + '<div class="n">'+(r.views||0).toLocaleString()+'</div>'
+            + '<div class="n">'+(r.visitors||0).toLocaleString()+'</div>'
+            + '</div>';
+        }).join('');
+  }
 
   function miniRows(rows){
     return rows.map(function(r){
