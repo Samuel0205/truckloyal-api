@@ -580,7 +580,7 @@
       <div class="install-card">
         <h3>🤖 On Android</h3>
         <ol>
-          <li>Tap “Add to my phone” above</li>
+          <li>Tap “Install App” above</li>
           <li>Confirm “Install” in the pop-up</li>
           <li>Open Food Truck Rewards from your home screen</li>
         </ol>
@@ -667,7 +667,7 @@
   var OPEN_BTN = '<a class="btn btn-primary getapp-btn" href="/app">Open the app &rarr;</a>';
 
   function renderInstalled(){ cta.innerHTML = '<div class="warn" style="background:#F1F8E9;border-color:#C5E1A5;color:#2E7D32">&#10003; App installed! Open Food Truck Rewards from your home screen.</div>' + '<div class="cta-row" style="margin-top:14px">' + OPEN_BTN + '</div>'; }
-  function renderAndroid(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '<button class="btn btn-outline getapp-btn" id="android-install-btn" onclick="androidInstall()">&#11015;&#65039; Add to my phone</button></div><div class="sub">Free &middot; works in your browser right now &middot; no app store</div>'; }
+  function renderAndroid(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '<button class="btn btn-outline getapp-btn" id="android-install-btn" onclick="androidInstall()">&#11015;&#65039; Install App</button></div><div class="sub">Free &middot; works in your browser right now &middot; no app store</div>'; }
   window.androidInstall = function(){
     if (deferredPrompt){ deferredPrompt.prompt(); deferredPrompt.userChoice.then(function(r){ if(r&&r.outcome==='accepted') renderInstalled(); deferredPrompt=null; }); }
     else { cta.innerHTML = '<div class="warn">Tap the ⋮ menu (top-right) then “Install app” or “Add to Home screen”.</div>'; }
@@ -686,7 +686,7 @@
   /* In-app browsers (Facebook, Instagram) can't install a PWA. That is fine —
      they can still use the whole app. Copying a link was a dead end. */
   function renderIOSOther(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '</div><div class="sub">Works right here &middot; for a home-screen icon, open this page in Safari (<span onclick="copyLink(this)" style="text-decoration:underline;cursor:pointer"><span id="copy-lbl">copy the link</span></span>)</div>'; }
-  function renderDesktop(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '<a class="btn btn-outline getapp-btn" href="#get-app" onclick="return goInstall(event)">&#11015;&#65039; Install the app</a></div><div class="sub">&#128241; On your phone it installs in one tap &mdash; no app store</div>'; }
+  function renderDesktop(){ cta.innerHTML = '<div class="cta-row">' + OPEN_BTN + '<a class="btn btn-outline getapp-btn" href="#get-app" onclick="return goInstall(event)">&#11015;&#65039; Install App</a></div><div class="sub">&#128241; On your phone it installs in one tap &mdash; no app store</div>'; }
   window.copyLink = function(btn){ var u=location.origin+'/'; var l=document.getElementById('copy-lbl'); var d=function(){ if(l) l.textContent='✅ Copied! Open Safari'; }; if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(u).then(d).catch(function(){fb(u,d);}); else fb(u,d); };
   function fb(t,cb){ try{ var a=document.createElement('textarea'); a.value=t; a.style.position='fixed'; a.style.opacity='0'; document.body.appendChild(a); a.select(); document.execCommand('copy'); document.body.removeChild(a); cb(); }catch(e){} }
 

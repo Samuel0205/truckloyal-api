@@ -70,6 +70,9 @@
   /* what customers see */
   .flow{counter-reset:f}
   .flow li{list-style:none;display:flex;gap:14px;padding:14px 0;font-size:16.5px}
+  /* the text is a flex item, so it needs min-width:0 or a long line pushes
+     the whole page sideways instead of wrapping */
+  .flow li>span{min-width:0}
   .flow li::before{counter-increment:f;content:counter(f);flex:0 0 30px;height:30px;
     border-radius:9px;background:var(--gold);color:var(--ink);font-weight:900;font-size:15px;
     display:flex;align-items:center;justify-content:center}
@@ -124,7 +127,7 @@
         <div>
           <h3>Want it on your home screen?</h3>
           <p><b>iPhone:</b> open this page in Safari, tap <b>Share</b> ⬆️, then <b>Add to Home Screen</b>.<br>
-             <b>Android:</b> tap <b>Add to my phone</b> on the site, or the ⋮ menu → <b>Install app</b>.</p>
+             <b>Android:</b> tap <b>Install App</b> on the site, or the ⋮ menu → <b>Install app</b>.</p>
           <div class="tip">Optional. Everything works in the browser — the icon just saves you typing the address.</div>
         </div>
       </div>
@@ -161,7 +164,7 @@
 
 <section>
   <div class="wrap">
-    <h2>3 · Three things, about five minutes</h2>
+    <h2>3 · Four things, about five minutes</h2>
     <p class="lead">Your program is live the moment you sign up. These make it yours.</p>
 
     <div class="step">
@@ -178,6 +181,10 @@
         </div>
         <div class="tip">So a $18 order on a first visit is 50 + 180 = <b>230 points</b> — most of
           the way to a free side. Set these to match your margins.</div>
+        <p style="margin-top:12px"><b>Every bit of this is yours to change.</b> Rewards and what
+           they cost, points per visit and per dollar, spin-wheel prizes, your truck's colours,
+           emoji and name — set it up to match how you actually run. Change it whenever you like;
+           it takes effect straight away.</p>
       </div>
     </div>
 
@@ -195,6 +202,20 @@
 
     <div class="step">
       <div class="n">3</div>
+      <div>
+        <h3>🪟 Two ways to find a customer</h3>
+        <p>At the window, open <b>At the Window</b> and either:</p>
+        <p style="margin-top:8px">📷 <b>Scan their QR code</b> — fastest, one tap, nothing to type.
+           Best when you're slammed.<br>
+           📱 <b>Type their phone number</b> — for when their battery's dead, they've lost the
+           app, or they're just faster at saying it than finding it.</p>
+        <div class="tip">Either way you enter the order total and the points work themselves out.
+          Most trucks scan during a rush and type the rest of the time.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="n">4</div>
       <div>
         <h3>📍 Post where you're parked — and clear it when you leave</h3>
         <p>Tap <b>Today's Location</b> on your dashboard and put in the address. Customers can see
@@ -217,11 +238,11 @@
     <h2>4 · What your customers get</h2>
     <p class="lead">This is the part that decides whether they come back. Here's their side of it.</p>
     <ol class="flow">
-      <li>They scan your window poster — the app opens and they've joined your rewards.</li>
-      <li>They order at the window, or order ahead from their phone and pay you when they pick up.</li>
-      <li>You scan their code and enter the total. Points are added automatically — no punch card to lose or fake.</li>
-      <li>They watch their points climb, keep a visit streak alive, and spin the wheel for bonus points.</li>
-      <li>At 100 points they cash in a free drink. They show a code, you confirm it, done.</li>
+      <li><span>They scan your window poster — the app opens and they've joined your rewards.</span></li>
+      <li><span>They order at the window, or order ahead from their phone and pay you when they pick up.</span></li>
+      <li><span>You pull them up — <b>scan their QR code</b> for the fastest option, or just <b>type their phone number</b> if their phone's dead or they can't find it. Enter the total and points are added automatically — no punch card to lose or fake.</span></li>
+      <li><span>They watch their points climb, keep a visit streak alive, and spin the wheel for bonus points.</span></li>
+      <li><span>At 100 points they cash in a free drink. They show a code, you confirm it, done.</span></li>
     </ol>
     <div class="cards" style="margin-top:22px">
       <div class="card"><div class="e">🧾</div><h4>Order ahead</h4>
