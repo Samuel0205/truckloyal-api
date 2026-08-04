@@ -867,6 +867,18 @@
             <input type="text" id="v-brand-states" placeholder="e.g. OH or OH, IN, KY" oninput="this.value=this.value.toUpperCase()" style="text-transform:uppercase;letter-spacing:1px">
             <div style="font-size:11px;color:var(--mu);margin-top:4px">2-letter codes, comma separated. Customers use this to find local trucks.</div>
           </div>
+          <div class="field"><label>Time Zone</label>
+            <select id="v-brand-tz" onchange="saveTimezone()" style="width:100%;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:12px 14px;color:var(--tx);font-size:14px;font-family:var(--fb);outline:none">
+              <option value="America/New_York">Eastern — New York</option>
+              <option value="America/Chicago">Central — Chicago</option>
+              <option value="America/Denver">Mountain — Denver</option>
+              <option value="America/Phoenix">Arizona — no daylight saving</option>
+              <option value="America/Los_Angeles">Pacific — Los Angeles</option>
+              <option value="America/Anchorage">Alaska — Anchorage</option>
+              <option value="Pacific/Honolulu">Hawaii — Honolulu</option>
+            </select>
+            <div style="font-size:11px;color:var(--mu);margin-top:4px">Decides when your day rolls over — streaks, check-ins and your posted location. Set from your phone at sign-up; change it if you moved.</div>
+          </div>
           <div class="field"><label>Home Base ZIP Code</label>
             <input type="text" id="v-brand-zip" placeholder="e.g. 44906" maxlength="5" inputmode="numeric" pattern="[0-9]*">
             <div style="font-size:11px;color:var(--mu);margin-top:4px">Your primary area ZIP. Used to match you with nearby customers.</div>
@@ -2591,7 +2603,9 @@ async function completeFreeSignup(){
       owner_name: ps.owner_name, service_states: ps.service_states,
       home_zip: ps.home_zip, phone: ps.phone,
       phone_public: ps.phone_public, email_public: ps.email_public,
-      accepted_tos: true, promo_code: ps.promo_code
+      accepted_tos: true, promo_code: ps.promo_code,
+      // The device knows its own timezone exactly, so nobody has to pick one.
+      timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone || '')
     });
     if(!doneRes.ok){
       throw { msg: doneRes.data?.error || 'Could not create your account. Please try again.' };
@@ -2761,7 +2775,9 @@ async function submitCardSetup(){
       owner_name: ps.owner_name, service_states: ps.service_states,
       home_zip: ps.home_zip, phone: ps.phone,
       phone_public: ps.phone_public, email_public: ps.email_public,
-      accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code })
+      accepted_tos: true, ...(ps.promo_code && { promo_code: ps.promo_code }),
+      // The device knows its own timezone exactly, so nobody has to pick one.
+      timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone || '')
     });
     if(!doneRes.ok){
       throw { msg: doneRes.data?.error || 'Payment could not be completed. Please try again.' };
@@ -2897,6 +2913,18 @@ async function saveLocation(){
     if(v) showToast('📍 Location posted — customers can see it!');
   }
   updateLocStatusChip();
+}
+
+async function saveTimezone(){
+  const sel = document.getElementById('v-brand-tz');
+  if(!sel) return;
+  const r = await apiPatch('/api/vendor/brand', {timezone: sel.value});
+  if(r.ok){
+    if(S.vendor) S.vendor.timezone = sel.value;
+    showToast('✅ Time zone saved');
+  } else {
+    showToast('❌ '+(r.data?.error||'Could not save time zone'));
+  }
 }
 
 async function clearLocation(){
@@ -3568,6 +3596,16 @@ function populateBrandForm(){
   setVal('v-brand-tag',S.vendor.tagline||'');
   setVal('v-brand-states',(S.vendor.service_states||'').toUpperCase());
   setVal('v-brand-zip',S.vendor.home_zip||'');
+  // Show whatever was captured at sign-up; fall back to this device's zone so
+  // the control is never blank and never silently wrong.
+  const tzSel = document.getElementById('v-brand-tz');
+  if(tzSel){
+    const want = S.vendor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if(want && ![...tzSel.options].some(o=>o.value===want)){
+      const o=document.createElement('option'); o.value=want; o.textContent=want; tzSel.appendChild(o);
+    }
+    tzSel.value = want;
+  }
   S.selectedEmoji=S.vendor.emoji||'🚚';
   renderVEP(); renderVPresets();
 }

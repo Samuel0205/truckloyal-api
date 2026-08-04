@@ -269,12 +269,21 @@ def vendor_active_required(f):
         except JWTError:
             return err("Invalid or expired token", 401)
 
-        vendor = sb.table("vendors").select(
-            "id, plan_active, trial_ends_at, payment_failed_at, promo_expires_at"
-        ).eq("id", request.vendor_id).execute().data
+        _vcols = "id, plan_active, trial_ends_at, payment_failed_at, promo_expires_at"
+        try:
+            vendor = sb.table("vendors").select(_vcols + ", timezone")\
+                .eq("id", request.vendor_id).execute().data
+        except Exception:
+            # timezone column not migrated yet — day logic falls back to the
+            # server default, exactly as it behaved before.
+            vendor = sb.table("vendors").select(_vcols)\
+                .eq("id", request.vendor_id).execute().data
         if not vendor:
             return err("Vendor not found", 404)
         v = vendor[0]
+        # Stash it so handlers can answer "what day is it for THIS truck"
+        # without a second round trip.
+        request.vendor = v
 
         if _vendor_is_active(v):
             return f(*args, **kwargs)
@@ -304,21 +313,92 @@ except Exception:
     _APP_TZ = None
 
 
-def _local_today():
-    """Return the current calendar date in the business timezone."""
-    if _APP_TZ is not None:
-        return datetime.now(_APP_TZ).date()
-    return datetime.utcnow().date()
+# NOTE: there is deliberately no server-wide "what day is it" helper. Every day
+# boundary here belongs to a specific truck — use _vendor_today() and
+# _vendor_day_start_utc(). A single server date silently breaks every truck
+# outside the server's own timezone.
 
 
-def _local_day_start_utc():
-    """UTC timestamp for the start of the current business-local day — use for
-    created_at >= filters (e.g. 'visits today') so evening check-ins count on
-    the right day, not UTC's."""
-    if _APP_TZ is not None:
-        midnight = datetime.now(_APP_TZ).replace(hour=0, minute=0, second=0, microsecond=0)
-        return midnight.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
-    return datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+def _safe_tz_name(name):
+    """Accept an IANA timezone name only if this machine actually knows it.
+    Anything else is dropped rather than stored, so a bad value from a client
+    can never make date logic throw later."""
+    name = (str(name or "")).strip()[:64]
+    if not name:
+        return None
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(name)
+        return name
+    except Exception:
+        return None
+
+
+def _vendor_tz(vendor):
+    """The truck's own timezone, falling back to the server default.
+
+    Every day boundary in this app is a business decision — has this customer
+    already earned today, is the posted location stale, which day of the
+    schedule are we on — and those have to be answered in the truck's local
+    time, not the server's. A Pacific truck on Eastern time loses its posted
+    location at 9pm and shows tomorrow's stop while it is still open.
+    """
+    name = (vendor or {}).get("timezone")
+    if name:
+        try:
+            from zoneinfo import ZoneInfo
+            return ZoneInfo(name)
+        except Exception:
+            pass                     # bad/unknown name — fall back rather than 500
+    return _APP_TZ
+
+
+def _vendor_today(vendor):
+    """Today's date in the truck's timezone."""
+    tz = _vendor_tz(vendor)
+    return datetime.now(tz).date() if tz is not None else datetime.utcnow().date()
+
+
+def _vendor_day_start_utc(vendor):
+    """UTC timestamp for the start of the truck's local day — for
+    created_at >= filters like 'visits today'."""
+    tz = _vendor_tz(vendor)
+    if tz is None:
+        return datetime.utcnow().replace(hour=0, minute=0, second=0,
+                                         microsecond=0).isoformat()
+    midnight = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
+    return midnight.astimezone(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+def _schedule_today_by_vendor(vendors, ids, cols=("*",)):
+    """Map vendor_id -> that truck's schedule row for ITS OWN today.
+
+    A single day_of_week can't serve a list of trucks in different timezones:
+    at 9pm Pacific it is already tomorrow in New York, so an Eastern query
+    would hand a California truck its Tuesday stop while it is still open on
+    Monday. Trucks are grouped by their local weekday, which is at most two
+    or three distinct values, so this stays one small query.
+    """
+    if not ids:
+        return {}
+    dow_by_vendor = {v["id"]: _vendor_today(v).weekday() for v in vendors}
+    wanted = sorted(set(dow_by_vendor.values()))
+    # Column sets are tried richest-first so a database that has not had the
+    # newer migrations still returns something usable.
+    rows = []
+    for c in (cols if isinstance(cols, (list, tuple)) else (cols,)):
+        try:
+            rows = (sb.table("vendor_schedule").select(c)
+                    .in_("vendor_id", ids).in_("day_of_week", wanted).execute().data or [])
+            break
+        except Exception:
+            continue
+    out = {}
+    for row in rows:
+        vid = row.get("vendor_id")
+        if dow_by_vendor.get(vid) == row.get("day_of_week"):
+            out.setdefault(vid, row)
+    return out
 
 
 def _safe_date(v):
@@ -639,7 +719,8 @@ def _purge_vendor(vendor_id: str):
 def _create_vendor_account(*, email, password, truck_name, owner_name, service_states,
                            home_zip=None, phone=None, phone_public=False, email_public=False,
                            stripe_customer_id=None, stripe_sub_id=None,
-                           plan_active=False, promo_expires=None, trial_days=TRIAL_DAYS):
+                           plan_active=False, promo_expires=None, trial_days=TRIAL_DAYS,
+                           tz_name=None):
     """Insert a vendor row (+ defaults, TOS record, verification email) and
     return it. Called only AFTER a subscription is confirmed (paying vendors)
     or from the gated tester path — never on a failed/abandoned payment."""
@@ -664,6 +745,9 @@ def _create_vendor_account(*, email, password, truck_name, owner_name, service_s
         "trial_ends_at":    trial_end,
         "promo_expires_at": promo_expires,
         "plan_active":      plan_active,
+        # Captured from the signing-up device, so day boundaries are right from
+        # the first visit without anyone being asked to pick a timezone.
+        **({"timezone": tz_name} if tz_name else {}),
         "stripe_customer_id": stripe_customer_id,
         "stripe_sub_id":    stripe_sub_id,
         "pts_per_visit":    50,
@@ -1135,15 +1219,30 @@ def reset_locations():
     if not CRON_SECRET or not hmac.compare_digest(str(body.get("secret") or ""), CRON_SECRET):
         return err("Unauthorized", 401)
 
-    today = _local_today().isoformat()
-    result = sb.table("vendors")\
-        .update({"location_today": ""})\
-        .neq("location_updated_date", today)\
-        .neq("location_today", "")\
-        .execute()
-    cleared = len(result.data) if result.data else 0
-    print(f"[DAILY RESET] Cleared location_today for {cleared} vendors")
-    return ok({"cleared": cleared, "date": today})
+    # Clear per truck against ITS OWN date. A single server date would wipe a
+    # Pacific truck's location at 9pm their time, and leave a Hawaii truck's up
+    # for hours after they closed. Safe to run more than once a day — a truck
+    # whose date already matches is skipped.
+    _cols = "id, location_today, location_updated_date"
+    try:
+        rows = sb.table("vendors").select(_cols + ", timezone")\
+            .neq("location_today", "").execute().data or []
+    except Exception:
+        rows = sb.table("vendors").select(_cols)\
+            .neq("location_today", "").execute().data or []
+
+    cleared, stale = 0, []
+    for v in rows:
+        if (v.get("location_updated_date") or "") != _vendor_today(v).isoformat():
+            stale.append(v["id"])
+    for vid in stale:
+        try:
+            sb.table("vendors").update({"location_today": ""}).eq("id", vid).execute()
+            cleared += 1
+        except Exception as e:
+            print(f"[DAILY RESET] {vid}: {e}")
+    print(f"[DAILY RESET] Cleared location_today for {cleared} of {len(rows)} posted")
+    return ok({"cleared": cleared, "checked": len(rows)})
 
 
 @app.route("/api/admin/login", methods=["POST"])
@@ -1918,6 +2017,7 @@ def vendor_complete_signup():
     phone_public   = bool(body.get("phone_public"))
     email_public   = bool(body.get("email_public"))
     promo_code     = (body.get("promo_code") or "").strip().upper()
+    tz_name        = _safe_tz_name(body.get("timezone"))
 
     if len(password) < 8:
         return err("Password must be at least 8 characters")
@@ -2005,7 +2105,7 @@ def vendor_complete_signup():
             stripe_customer_id=stripe_customer_id,
             stripe_sub_id=(subscription.id if subscription else None),
             plan_active=True, promo_expires=promo_expires,
-            trial_days=free_days,
+            trial_days=free_days, tz_name=tz_name,
         )
     except Exception as e:
         print(f"[COMPLETE SIGNUP] account create failed after payment: {e}")
@@ -2082,8 +2182,8 @@ def vendor_me():
     vendor = rows[0]
 
     last_loc_date = vendor.get("location_updated_date", "")
-    if vendor.get("location_today") and last_loc_date and last_loc_date != _local_today().isoformat():
-        sb.table("vendors").update({"location_today": "", "location_updated_date": _local_today().isoformat()})\
+    if vendor.get("location_today") and last_loc_date and last_loc_date != _vendor_today(vendor).isoformat():
+        sb.table("vendors").update({"location_today": "", "location_updated_date": _vendor_today(vendor).isoformat()})\
             .eq("id", request.vendor_id).execute()
         vendor["location_today"] = ""
 
@@ -2350,6 +2450,16 @@ def delete_vendor_account():
 @vendor_active_required
 def update_brand():
     body    = request.json or {}
+    if "timezone" in (request.json or {}):
+        tzv = _safe_tz_name((request.json or {}).get("timezone"))
+        if not tzv:
+            return err("That timezone isn't recognised")
+        try:
+            sb.table("vendors").update({"timezone": tzv}).eq("id", request.vendor_id).execute()
+        except Exception as e:
+            print(f"[BRAND] timezone: {e}")
+            return err("Timezone needs the migration — run VENDOR_TIMEZONE_SCHEMA.sql")
+
     allowed = ["truck_name", "tagline", "emoji", "color_primary",
                "color_secondary", "profile_picture_url", "location_today",
                "location_zip", "home_zip", "service_states",
@@ -2366,7 +2476,7 @@ def update_brand():
                 updates.pop(k, None)
 
     if "location_today" in updates:
-        updates["location_updated_date"] = _local_today().isoformat()
+        updates["location_updated_date"] = _vendor_today(vendor).isoformat()
         # A fresh manual location with no picked coords must not keep stale
         # pins — clear coords unless this same request supplies new ones.
         if "location_lat" not in body:
@@ -2652,7 +2762,7 @@ def _award_order_points(vendor, customer_id, order_total):
     they already earned today). Never raises: points must not block an order."""
     try:
         vendor_id = vendor["id"]
-        today     = _local_today()
+        today     = _vendor_today(vendor)
         today_iso = today.isoformat()
         ct_row = sb.table("customer_trucks").select("*")\
             .eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
@@ -3018,7 +3128,7 @@ def update_tier(tier_id):
 @vendor_active_required
 def vendor_analytics():
     vid   = request.vendor_id
-    today = _local_day_start_utc()
+    today = _vendor_day_start_utc(getattr(request, 'vendor', None))
 
     members      = sb.table("customer_trucks").select("id, points_balance, points_total, visit_count", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
@@ -3088,7 +3198,7 @@ def vendor_members():
 @vendor_active_required
 def vendor_stats():
     vid   = request.vendor_id
-    today = _local_day_start_utc()
+    today = _vendor_day_start_utc(getattr(request, 'vendor', None))
     members      = sb.table("customer_trucks").select("id", count="exact").eq("vendor_id", vid).execute()
     visits_today = sb.table("visits").select("id", count="exact").eq("vendor_id", vid).gte("created_at", today).execute()
     redemptions  = sb.table("redemptions").select("id", count="exact").eq("vendor_id", vid).neq("status", "expired").execute()
@@ -3168,7 +3278,7 @@ def award_points():
     if not customer: return err("Customer not found", 404)
     customer = customer[0]
 
-    today     = _local_today()
+    today     = _vendor_today(vendor)
     today_iso = today.isoformat()
 
     ct_row = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
@@ -3440,7 +3550,7 @@ def get_truck_config(slug):
         return err("This truck's loyalty program is not currently active", 403)
 
     last_loc_date = vendor.get("location_updated_date", "")
-    if vendor.get("location_today") and last_loc_date and last_loc_date != _local_today().isoformat():
+    if vendor.get("location_today") and last_loc_date and last_loc_date != _vendor_today(vendor).isoformat():
         vendor["location_today"] = ""
 
     # Vendor contact is opt-in public (private by default)
@@ -3707,7 +3817,7 @@ def record_visit():
     if not _vendor_is_active(vendor):
         return err("This truck's loyalty program is not currently active", 403)
 
-    today     = _local_today()
+    today     = _vendor_today(vendor)
     today_iso = today.isoformat()
     ct_row    = sb.table("customer_trucks").select("*").eq("customer_id", customer_id).eq("vendor_id", vendor_id).execute().data
 
@@ -4820,7 +4930,6 @@ def save_schedule():
 
 @app.route("/api/trucks/nearby", methods=["GET"])
 def trucks_nearby():
-    dow = _local_today().weekday()
 
     vendors = sb.table("vendors").select(
         "id, truck_name, slug, emoji, color_primary, profile_picture_url, "
@@ -4833,10 +4942,7 @@ def trucks_nearby():
     ids = [v["id"] for v in active]
 
     # Bulk-load schedule + ratings (2 queries total, not 2 per vendor).
-    sched_by = {}
-    for row in (sb.table("vendor_schedule").select("*")
-                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []):
-        sched_by.setdefault(row["vendor_id"], row)
+    sched_by = _schedule_today_by_vendor(active, ids)
 
     ratings_by = {}
     for row in (sb.table("reviews").select("vendor_id, rating")
@@ -5134,7 +5240,6 @@ def vendor_revenue():
 @app.route("/api/discover", methods=["GET"])
 def discover():
     state_filter = request.args.get("state", "").strip().upper()
-    dow = _local_today().weekday()
 
     _dcols = ("id, truck_name, slug, emoji, color_primary, profile_picture_url, "
               "location_today, home_zip, service_states, plan_active, trial_ends_at")
@@ -5160,15 +5265,9 @@ def discover():
 
     # ...then bulk-load schedule, ratings and member counts in 3 queries total
     # instead of 3 per vendor (was an N+1 that got slow past a few hundred trucks).
-    sched_by = {}
-    try:
-        _srows = sb.table("vendor_schedule").select("vendor_id, location, hours, zip_code")\
-            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
-    except Exception:
-        _srows = sb.table("vendor_schedule").select("vendor_id, location, hours")\
-            .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
-    for row in _srows:
-        sched_by.setdefault(row["vendor_id"], row)
+    sched_by = _schedule_today_by_vendor(active, ids, cols=(
+        "vendor_id, day_of_week, location, hours, zip_code",
+        "vendor_id, day_of_week, location, hours"))
 
     ratings_by = {}
     for row in (sb.table("reviews").select("vendor_id, rating")
@@ -5214,7 +5313,6 @@ def trucks_map():
     scheduled stop for today ('scheduled'). Trucks with no location today are
     NOT shown. Returns the address (geocoded precisely by the client) with the
     ZIP as a coarse fallback."""
-    dow = _local_today().weekday()
     base_cols = ("id, truck_name, slug, emoji, color_primary, profile_picture_url, "
                  "location_today, home_zip, service_states, plan_active, trial_ends_at, "
                  "promo_expires_at, payment_failed_at")
@@ -5234,19 +5332,10 @@ def trucks_map():
         return ok([])
     ids = [v["id"] for v in active]
 
-    sched_by = {}
-    sched_rows = []
-    for cols in ("vendor_id, location, hours, zip_code, lat, lng",
-                 "vendor_id, location, hours, zip_code",
-                 "vendor_id, location, hours"):
-        try:
-            sched_rows = sb.table("vendor_schedule").select(cols)\
-                .in_("vendor_id", ids).eq("day_of_week", dow).execute().data or []
-            break
-        except Exception:
-            continue
-    for row in sched_rows:
-        sched_by.setdefault(row["vendor_id"], row)
+    sched_by = _schedule_today_by_vendor(active, ids, cols=(
+        "vendor_id, day_of_week, location, hours, zip_code, lat, lng",
+        "vendor_id, day_of_week, location, hours, zip_code",
+        "vendor_id, day_of_week, location, hours"))
 
     out = []
     for v in active:
