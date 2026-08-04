@@ -138,7 +138,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/download', '/customers', '/welcome', '/start', '/demo.mp4', '/demo.webm', '/demo-poster.jpg', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/tour-5.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
+_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/feedback.js', '/install', '/get', '/download', '/customers', '/welcome', '/start', '/demo.mp4', '/demo.webm', '/demo-poster.jpg', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/tour-5.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -959,6 +959,100 @@ def track_view():
     return ok("ok")
 
 
+# ══════════════════════════════════════════════════════
+#  SITE FEEDBACK  ("we're new — how are we doing?")
+# ══════════════════════════════════════════════════════
+
+_FEEDBACK_ROLES = {"vendor", "customer", "visitor"}
+
+
+@app.route("/api/feedback", methods=["POST"])
+@rate_limit(8, 3600)
+def submit_feedback():
+    """Public. A star rating and/or a note about Food Truck Rewards itself.
+
+    Deliberately NOT best-effort like /api/track. Losing a page view costs a
+    tally mark; losing what somebody took the trouble to type costs the thing
+    the feature exists for. If the insert fails the caller is told so and can
+    fall back to email.
+    """
+    body    = request.json or {}
+    message = (str(body.get("message") or "")).strip()[:2000]
+    name    = (str(body.get("name")    or "")).strip()[:120]
+    email   = (str(body.get("email")   or "")).strip()[:200]
+    page    = (str(body.get("page")    or "")).strip()[:200]
+    role    = (str(body.get("role")    or "")).strip().lower()
+    if role not in _FEEDBACK_ROLES:
+        role = "visitor"
+
+    try:
+        rating = int(body.get("rating") or 0)
+    except (TypeError, ValueError):
+        rating = 0
+    if rating < 1 or rating > 5:
+        rating = 0
+
+    if not rating and not message:
+        return err("Pick a star rating or write us a note")
+
+    try:
+        sb.table("site_feedback").insert({
+            "rating":  rating or None,
+            "message": message or None,
+            "name":    name or None,
+            "email":   email or None,
+            "role":    role,
+            "page":    page or None,
+        }).execute()
+    except Exception as e:
+        print(f"[FEEDBACK] insert failed: {e}")
+        return err("We couldn't save that — please email "
+                   "flavoronwheels26@gmail.com and it'll reach me directly.", 500)
+    return ok("Thanks!")
+
+
+@app.route("/api/admin/feedback", methods=["GET"])
+@admin_required
+def admin_list_feedback():
+    try:
+        rows = (sb.table("site_feedback").select("*")
+                .order("created_at", desc=True).limit(500).execute().data) or []
+    except Exception as e:
+        # Almost always "migration not run yet". Say that, rather than an
+        # empty list that looks identical to "nobody has left feedback".
+        print(f"[FEEDBACK] list failed: {e}")
+        return err("Feedback table not reachable — run SITE_FEEDBACK_SCHEMA.sql "
+                   "in Supabase. (" + str(e)[:120] + ")", 500)
+    rated  = [r["rating"] for r in rows if r.get("rating")]
+    return ok({
+        "items":  rows,
+        "total":  len(rows),
+        "unread": sum(1 for r in rows if not r.get("is_read")),
+        "avg":    round(sum(rated) / len(rated), 2) if rated else None,
+        "rated":  len(rated),
+    })
+
+
+@app.route("/api/admin/feedback/<fb_id>", methods=["PATCH"])
+@admin_required
+def admin_update_feedback(fb_id):
+    body = request.json or {}
+    if "is_read" not in body:
+        return err("Nothing to update")
+    rows = (sb.table("site_feedback").update({"is_read": bool(body["is_read"])})
+            .eq("id", fb_id).execute().data)
+    if not rows:
+        return err("Feedback not found", 404)
+    return ok(rows[0])
+
+
+@app.route("/api/admin/feedback/<fb_id>", methods=["DELETE"])
+@admin_required
+def admin_delete_feedback(fb_id):
+    sb.table("site_feedback").delete().eq("id", fb_id).execute()
+    return ok("Deleted")
+
+
 @app.route("/app")
 @app.route("/app/")
 def serve_app():
@@ -1156,6 +1250,14 @@ def robots_txt():
     )
     resp = Response(body, mimetype="text/plain")
     resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
+@app.route("/feedback.js")
+def serve_feedback_js():
+    resp = send_from_directory('.', 'feedback.js')
+    resp.headers['Content-Type']  = 'application/javascript'
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 
 
