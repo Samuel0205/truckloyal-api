@@ -464,7 +464,7 @@
               <div style="width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--brand),#FF8A50);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;box-shadow:0 3px 10px rgba(255,87,34,.3)">📍</div>
               <div style="flex:1;min-width:0">
                 <div style="font-family:var(--fd);font-size:15px;font-weight:900;color:var(--tx);line-height:1.15">Today's Location</div>
-                <div style="font-size:11px;color:var(--mu);font-weight:600;margin-top:1px">Overrides your schedule today · resets at midnight</div>
+                <div style="font-size:11px;color:var(--mu);font-weight:600;margin-top:1px">Overrides your schedule · stays up until you clear it</div>
               </div>
               <div id="v-loc-status" style="font-size:10px;font-weight:800;letter-spacing:.4px;padding:4px 10px;border-radius:99px;background:var(--s2);color:var(--mu);flex-shrink:0">NOT POSTED</div>
             </div>
@@ -749,6 +749,16 @@
           <button class="btn btn-p" style="width:100%" onclick="goV('s-v-award')">🪟 Open At the Window →</button>
         </div>
 
+        <!-- STEP 4 — the one thing that isn't automatic -->
+        <div style="background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:16px;box-shadow:0 4px 16px rgba(180,100,40,.06);margin-bottom:18px">
+          <div style="display:flex;align-items:center;gap:11px;margin-bottom:9px">
+            <div style="width:34px;height:34px;border-radius:10px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-weight:900;font-size:17px;flex-shrink:0">4</div>
+            <div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx)">📍 Clear your location when you leave</div>
+          </div>
+          <div style="font-size:13.5px;color:var(--mu);line-height:1.6;margin-bottom:13px">Today's Location stays on the map until you take it down — it does not clear itself overnight. When you're done, switch <strong>ordering off</strong> and the app will offer to clear it in one tap, or hit <strong>Clear</strong> next to the address any time.</div>
+          <div class="callout co-gd" style="margin-bottom:0"><div class="co-icon">💡</div><div><div class="co-desc">Leaving yesterday's address up sends someone to an empty parking space. It's the quickest way to lose a customer.</div></div></div>
+        </div>
+
         <!-- HOW CUSTOMERS EARN -->
         <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx);margin:4px 0 10px">⭐ The ways customers earn</div>
         <div style="background:#fff;border:1.5px solid var(--b2);border-radius:16px;padding:6px 16px;box-shadow:0 4px 16px rgba(180,100,40,.06);margin-bottom:18px">
@@ -998,7 +1008,7 @@
       <div class="sh sh-row"><div class="back-btn" onclick="goV('s-v-home')">←</div><div><h1>📅 Weekly Schedule</h1><p>Let customers know where you'll be</p></div></div>
       <div class="bp">
         <div class="callout co-bl"><div class="co-icon">💡</div><div><div class="co-desc">Customers can see your weekly schedule in the app. Fill in the days you operate — leave blank for days you're closed. <strong>Full street addresses + ZIP show up best on Maps</strong> (e.g. "123 Main St, Mansfield").</div></div></div>
-        <div class="callout co-gd" style="margin-top:8px"><div class="co-icon">📍</div><div><div class="co-desc"><strong>Heads up:</strong> posting a <strong>Today's Location</strong> from your dashboard overrides that day's scheduled stop until midnight — customers will see the live location instead.</div></div></div>
+        <div class="callout co-gd" style="margin-top:8px"><div class="co-icon">📍</div><div><div class="co-desc"><strong>Heads up:</strong> posting a <strong>Today's Location</strong> from your dashboard overrides that day's scheduled stop <strong>until you clear it</strong> — customers see the live location instead. Clear it when you leave, or switch ordering off and the app will offer to do it for you.</div></div></div>
         <div id="schedule-days"></div>
         <button class="btn btn-p" onclick="saveSchedule()">💾 Save Schedule</button>
       </div>
@@ -1878,6 +1888,34 @@
     <div id="nr-emoji-palette" style="display:flex;flex-wrap:wrap;gap:6px;max-height:124px;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--s2);border-radius:12px"></div>
     <div class="field"><label>Item Name (from your menu)</label><input type="text" id="nr-n" placeholder="e.g. Free Drink"></div>
     <button class="btn btn-p" onclick="addReward()">Add Reward</button>
+  </div>
+</div>
+
+<!-- Offered when ordering is switched off and an address is still posted.
+     Nothing clears "Today's Location" automatically, so this is the prompt
+     that stops yesterday's address sending people to the wrong corner. -->
+<div class="overlay" id="sh-clearloc" onclick="closeSheet('sh-clearloc')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Done for the day?</div>
+    <div style="font-size:14.5px;color:var(--mu);font-weight:700;line-height:1.65;margin-bottom:14px">
+      ⏸️ Ordering is paused. You still have a location posted:
+    </div>
+    <div style="background:var(--s2);border:1.5px solid var(--b2);border-radius:12px;
+                padding:13px 15px;margin-bottom:14px;font-size:15px;font-weight:800;color:var(--tx)">
+      📍 <span id="clearloc-addr">—</span>
+    </div>
+    <div class="callout co-gd" style="margin-bottom:16px">
+      <div class="co-icon">💡</div>
+      <div><div class="co-desc">Customers see this on the map until you take it down.
+        Clear it so nobody drives to where you were yesterday.</div></div>
+    </div>
+    <button class="btn btn-p" onclick="confirmClearLocation(true)" style="margin-bottom:9px">
+      ✅ Yes, clear my location
+    </button>
+    <button class="btn btn-g" onclick="confirmClearLocation(false)">
+      No, I'm parked here again tomorrow
+    </button>
   </div>
 </div>
 
@@ -3102,7 +3140,37 @@ async function setAcceptingOrders(on){
   if(S.vendor) S.vendor.accepting_orders = !!on;
   const sub = document.getElementById('v-ordering-sub');
   if(sub) sub.textContent = on ? 'Customers can order ahead' : 'Paused — customers can only order at the window';
-  showToast(on?'✅ Taking orders':'⏸️ Ordering paused');
+
+  // Switching ordering off is the closest thing we have to "done for the day",
+  // so it's the natural moment to offer to take the posted address down.
+  // Nothing clears it automatically, and a stale address sends tomorrow's
+  // customers to where the truck was yesterday.
+  const asking = !on && !!(S.vendor?.location_today || '').trim();
+  // The sheet says "ordering paused" better than a toast would, and a toast
+  // sits on top of its buttons for three seconds.
+  if(!asking) showToast(on?'✅ Taking orders':'⏸️ Ordering paused');
+  if(asking)  maybeOfferLocationClear();
+}
+
+/* Ask once, only when there is actually a posted address to take down.
+   The weekly schedule is untouched — this is only the manual "Today's
+   Location" override. */
+function maybeOfferLocationClear(){
+  const posted = (S.vendor?.location_today || '').trim();
+  if(!posted) return;
+  const box = document.getElementById('sh-clearloc');
+  if(!box) return;
+  setText('clearloc-addr', posted);
+  openSheet('sh-clearloc');
+}
+
+async function confirmClearLocation(yes){
+  closeSheet('sh-clearloc');
+  if(!yes){
+    showToast('📍 Location left up');
+    return;
+  }
+  await clearLocation();
 }
 
 /* Badge on the home grid so a new order is visible without opening the queue. */
