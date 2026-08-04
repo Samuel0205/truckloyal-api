@@ -170,6 +170,22 @@
   .b-demo{background:rgba(120,90,200,.14);color:#5b3fa8}
   .b-blocked{background:var(--rd);color:#fff}
 
+  /* Feedback */
+  .tab-badge{display:inline-flex;align-items:center;justify-content:center;min-width:19px;height:19px;
+    margin-left:7px;padding:0 6px;border-radius:99px;background:var(--or);color:#fff;font-size:11px;font-weight:900}
+  .fb-list{display:grid;gap:12px}
+  .fb-card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px 18px}
+  .fb-card.unread{border-color:rgba(255,87,34,.5);box-shadow:0 0 0 3px rgba(255,87,34,.08)}
+  .fb-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+  .fb-stars{font-size:16px;letter-spacing:1px;color:var(--or)}
+  .fb-stars i{color:#dcd3c9;font-style:normal}
+  .fb-when{margin-left:auto;font-size:12px;font-weight:800;color:var(--mu);white-space:nowrap}
+  .fb-msg{font-size:15px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+  .fb-who{font-size:12.5px;font-weight:800;color:var(--mu);margin-top:10px}
+  .fb-who a{color:var(--or)}
+  .fb-acts{display:flex;gap:6px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+  .fb-acts a.btn{text-decoration:none}
+
   /* Modal */
   .modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:40}
   .modal.on{display:flex}
@@ -213,6 +229,7 @@
     <button class="tab" data-tab="vendors" onclick="showTab('vendors')">Vendors</button>
     <button class="tab" data-tab="customers" onclick="showTab('customers')">Customers</button>
     <button class="tab" data-tab="promos" onclick="showTab('promos')">Promo Codes</button>
+    <button class="tab" data-tab="feedback" onclick="showTab('feedback')">Feedback<span id="fb-badge" class="tab-badge" hidden>0</span></button>
   </div>
 
   <main>
@@ -336,6 +353,13 @@
         <tbody id="p-rows"></tbody>
       </table></div></div>
     </div>
+
+    <!-- FEEDBACK -->
+    <div class="page" id="page-feedback">
+      <div id="fb-banner" style="display:none;background:#FDECEA;border:1px solid #F5C6CB;color:#B02A37;border-radius:12px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;font-weight:700;line-height:1.6"></div>
+      <div class="kpis" id="fb-kpis" style="margin-bottom:16px"></div>
+      <div class="fb-list" id="fb-list"></div>
+    </div>
   </main>
 </div>
 
@@ -349,7 +373,7 @@
 <script>
   var API = location.origin;
   var TOKEN = localStorage.getItem('ftr_admin_token') || '';
-  var S = { vendors:[], customers:[], promos:[], vFilter:'all', cFilter:'all' };
+  var S = { vendors:[], customers:[], promos:[], feedback:[], vFilter:'all', cFilter:'all' };
 
   /* ── API helper ── */
   async function api(method, path, body){
@@ -426,6 +450,8 @@
       S.customers = await api('GET','/api/admin/customers') || [];
       renderCustomers();
     }catch(ex){ if(ex.message!=='Session expired') toast('⚠️ Customers: '+ex.message); }
+
+    await loadFeedback();
   }
 
   /* ── Overview ── */
@@ -1052,6 +1078,101 @@
   async function deletePromo(id){
     try{ await api('DELETE','/api/admin/promo-codes/'+id); S.promos=S.promos.filter(function(x){return x.id!==id;}); renderPromos(); toast('🗑️ Deleted'); }
     catch(ex){ toast('⚠️ '+ex.message); }
+  }
+
+  /* ── Feedback ──
+     Site reviews ("we're new, how are we doing?") from the website and the
+     app. Separate from the customer→truck `reviews` table: this is people
+     reviewing Food Truck Rewards itself. */
+  async function loadFeedback(){
+    var banner = document.getElementById('fb-banner');
+    try{
+      var f = await api('GET','/api/admin/feedback');
+      banner.style.display='none';
+      S.feedback = f.items||[];
+      renderFeedback(f);
+    }catch(ex){
+      if(ex.message==='Session expired') return;
+      S.feedback = [];
+      banner.innerHTML = '⚠️ '+esc(ex.message)
+        + '<div style="font-weight:600;font-size:12.5px;margin-top:6px;opacity:.85">'
+        + 'Open Supabase → SQL Editor, paste <b>SITE_FEEDBACK_SCHEMA.sql</b> from the repo, and Run. '
+        + 'It ends with a proof row — if that row comes back, reload this page.</div>';
+      banner.style.display='block';
+      document.getElementById('fb-kpis').innerHTML='';
+      document.getElementById('fb-list').innerHTML='';
+      document.getElementById('fb-badge').hidden=true;
+    }
+  }
+
+  function stars(n){
+    n = n||0;
+    var out='';
+    for(var i=1;i<=5;i++){ out += (i<=n?'★':'<i>★</i>'); }
+    return '<span class="fb-stars" title="'+n+' of 5">'+out+'</span>';
+  }
+  var ROLE_LBL = {vendor:'🚚 Truck owner', customer:'🎁 Customer', visitor:'👀 Site visitor'};
+
+  function renderFeedback(f){
+    var badge = document.getElementById('fb-badge');
+    badge.textContent = f.unread||0;
+    badge.hidden = !f.unread;
+
+    document.getElementById('fb-kpis').innerHTML = [
+      [(f.avg!=null ? f.avg.toFixed(1)+' <span style="color:var(--or)">★</span>' : '—'), 'Average rating',
+       (f.rated ? f.rated+' rating'+(f.rated===1?'':'s') : 'No ratings yet')],
+      [String(f.total||0), 'Reviews received', 'All time'],
+      [String(f.unread||0), 'Unread', f.unread ? 'Waiting on you' : 'All caught up']
+    ].map(function(k){
+      return '<div class="kpi"><div class="v">'+k[0]+'</div><div class="l">'+k[1]+'</div>'
+           + '<div class="d">'+k[2]+'</div></div>';
+    }).join('');
+
+    var list = document.getElementById('fb-list');
+    if(!S.feedback.length){
+      list.innerHTML = '<div class="tbl-wrap"><div class="empty">No feedback yet.<br>'
+        + '<span style="font-weight:700;font-size:13px">The form is on the home page, the /welcome page, '
+        + 'and in Settings inside the app.</span></div></div>';
+      return;
+    }
+    list.innerHTML = S.feedback.map(function(r){
+      var who = [];
+      if(r.name)  who.push(esc(r.name));
+      if(r.email) who.push('<a href="mailto:'+esc(r.email)+'">'+esc(r.email)+'</a>');
+      if(r.page)  who.push('from '+esc(r.page));
+      return '<div class="fb-card'+(r.is_read?'':' unread')+'">'
+        + '<div class="fb-top">'
+          + (r.rating ? stars(r.rating) : '<span class="badge b-inactive">No rating</span>')
+          + '<span class="badge b-promo">'+(ROLE_LBL[r.role]||'👀 Site visitor')+'</span>'
+          + (r.is_read?'':'<span class="badge b-active">New</span>')
+          + '<span class="fb-when">'+fmtDate(r.created_at)+'</span>'
+        + '</div>'
+        + (r.message ? '<div class="fb-msg">'+esc(r.message)+'</div>'
+                     : '<div class="fb-msg" style="color:var(--mu)">(rating only — no note)</div>')
+        + (who.length ? '<div class="fb-who">'+who.join(' · ')+'</div>' : '')
+        + '<div class="fb-acts">'
+          + (r.email ? '<a class="btn btn-sm btn-gh" href="mailto:'+esc(r.email)
+              +'?subject='+encodeURIComponent('Thanks for the feedback on Food Truck Rewards')
+              +'">Reply</a>' : '')
+          + '<button class="btn btn-sm '+(r.is_read?'btn-gh':'btn-gn')+'" onclick="markFeedback(\''+r.id+'\','+(r.is_read?'false':'true')+')">'
+            + (r.is_read?'Mark unread':'Mark read')+'</button>'
+          + '<button class="btn btn-sm btn-rd" onclick="if(confirm(\'Delete this feedback?\'))deleteFeedback(\''+r.id+'\')">Delete</button>'
+        + '</div></div>';
+    }).join('');
+  }
+
+  async function markFeedback(id, read){
+    try{
+      await api('PATCH','/api/admin/feedback/'+id, {is_read:read});
+      await loadFeedback();
+    }catch(ex){ toast('⚠️ '+ex.message); }
+  }
+  async function deleteFeedback(id){
+    try{
+      await api('DELETE','/api/admin/feedback/'+id);
+      await loadFeedback();
+      toast('🗑️ Deleted');
+    }catch(ex){ toast('⚠️ '+ex.message); }
   }
 
   /* ── UI helpers ── */
