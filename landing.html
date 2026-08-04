@@ -105,6 +105,33 @@
   .nav-cta { font-size:14px; padding:11px 22px; border-radius:11px; }
   @media (max-width:860px){ .nav-links a.lnk { display:none; } }
 
+  /* Review button — stays visible at every width. The plain .lnk items
+     drop out under 860px, and this is the one we're actively asking for. */
+  .nav-review { display:inline-flex; align-items:center; gap:6px; text-decoration:none;
+                font-size:14px; font-weight:900; color:var(--gold); white-space:nowrap;
+                padding:9px 15px; border-radius:11px; border:1.5px solid rgba(249,168,37,.45);
+                background:rgba(249,168,37,.1); transition:background .15s, border-color .15s; }
+  .nav-review:hover { background:rgba(249,168,37,.2); border-color:var(--gold); }
+  .nav-review .star { font-size:15px; line-height:1; }
+  /* The header is three items wide now. Below these widths it wrapped the
+     logo and the trial button onto multiple lines — shed text, not buttons. */
+  .nav-cta, .nav-review, .logo .lt1 { white-space:nowrap; }
+  @media (max-width:620px){
+    .nav-links { gap:10px; }
+    .nav-inner { gap:8px; }
+    .nav-review { padding:9px 12px; font-size:13px; }
+    .nav-review .word { display:none; }        /* "★ Review" */
+    .nav-cta { font-size:13px; padding:10px 15px; }
+    .logo .lt1 { font-size:14px; }
+    .logo .truck { width:32px; height:32px; }
+  }
+  @media (max-width:430px){
+    .nav-review .lbl { display:none; }         /* star only — still tappable */
+    .nav-review { padding:9px 11px; }
+    .nav-review .star { font-size:17px; }
+    .logo .lt2 { display:none; }
+  }
+
   /* ── hero ────────────────────────────────────────────── */
   #hero { padding:0; background:var(--ink); color:#fff; overflow:hidden; }
   .hero-bg { position:absolute; inset:0;
@@ -127,6 +154,18 @@
   .hero-ticks { display:flex; gap:20px; flex-wrap:wrap; margin-top:24px;
                 font-size:13.5px; font-weight:800; color:#C7B4A3; }
   .hero-ticks span::before { content:"✓"; color:var(--orange); font-weight:900; margin-right:7px; }
+  /* "New — tell us how we're doing", sat under the hero CTAs */
+  .hero-new { display:inline-flex; align-items:center; gap:11px; margin-top:26px; text-decoration:none;
+              padding:11px 16px 11px 12px; border-radius:14px; max-width:100%;
+              border:1.5px solid rgba(249,168,37,.4); background:rgba(249,168,37,.09);
+              transition:background .15s, border-color .15s, transform .15s; }
+  .hero-new:hover { background:rgba(249,168,37,.17); border-color:var(--gold); transform:translateY(-2px); }
+  .hero-new .nt { flex:0 0 auto; font-size:10.5px; font-weight:900; letter-spacing:.14em;
+                  background:var(--gold); color:var(--ink); padding:4px 8px; border-radius:7px; }
+  .hero-new .nx { font-size:15px; font-weight:800; color:#F3E4D3; line-height:1.4; }
+  .hero-new .nx b { color:var(--gold); font-weight:900; }
+  .hero-new .arw { flex:0 0 auto; color:var(--gold); font-weight:900; font-size:17px; }
+  @media (max-width:420px){ .hero-new .nx { font-size:14px; } }
   .hero-art { position:relative; display:flex; align-items:center; justify-content:center; gap:16px; }
 
   /* phone mockup (hero) */
@@ -172,6 +211,7 @@
     .hero-in { grid-template-columns:1fr; text-align:center; padding-top:54px; }
     .hero-lead { margin-left:auto; margin-right:auto; }
     .hero-ctas, .hero-ticks { justify-content:center; }
+    .hero-new { text-align:left; }
   }
 
   /* ── who chooser ─────────────────────────────────────── */
@@ -346,6 +386,7 @@
       <a class="lnk" href="#how">How it works</a>
       <a class="lnk" href="#features">Features</a>
       <a class="lnk" href="#get-app">Pricing</a>
+      <a class="nav-review" href="#review" aria-label="Leave a review"><span class="star">&#9733;</span><span class="lbl">Review<span class="word"> us</span></span></a>
       <a class="btn btn-primary nav-cta" href="/app">Start Free Trial</a>
     </nav>
   </div>
@@ -367,6 +408,11 @@
       <div class="hero-ticks">
         <span>45-day free trial</span><span>Cancel anytime</span><span>Card required &mdash; not charged for 45 days</span>
       </div>
+      <a class="hero-new" href="#review">
+        <span class="nt">NEW</span>
+        <span class="nx">We&rsquo;re brand new &mdash; <b>tell us how we&rsquo;re doing</b></span>
+        <span class="arw">&rarr;</span>
+      </a>
     </div>
     <div class="hero-art">
       <div class="phone">
