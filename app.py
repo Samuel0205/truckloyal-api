@@ -524,12 +524,31 @@ def _stripe():
 LIFETIME_PROMO_DAYS = 365 * 100
 
 
+# A promo "month" is 31 days — the longest month there is. Rounding a month
+# up rather than down means the vendor is never charged before the month they
+# were promised has fully elapsed, whichever months their promo happens to
+# span. Over a year it hands them twelve extra free days; that is the point.
+PROMO_DAYS_PER_MONTH = 31
+
+
+def _promo_free_days(pc: dict) -> int:
+    """How many days a promo actually leaves someone free of charge.
+
+    The longer of the standard trial and the promo — a one-month code must
+    never shorten a 45-day trial. This drives the Stripe trial as well as the
+    date we show, so the charge lands exactly when we said it would.
+    """
+    if not pc:
+        return TRIAL_DAYS
+    if pc.get("is_lifetime"):
+        return LIFETIME_PROMO_DAYS
+    months = pc.get("free_months") or 1
+    return max(TRIAL_DAYS, PROMO_DAYS_PER_MONTH * months)
+
+
 def _promo_free_until(pc: dict) -> str:
     """ISO timestamp that redeeming this promo grants access until."""
-    if pc.get("is_lifetime"):
-        return (datetime.utcnow() + timedelta(days=LIFETIME_PROMO_DAYS)).isoformat()
-    months = pc.get("free_months") or 1
-    return (datetime.utcnow() + timedelta(days=30 * months)).isoformat()
+    return (datetime.utcnow() + timedelta(days=_promo_free_days(pc))).isoformat()
 
 
 def _lifetime_coupon_id(stripe, pc: dict) -> str:
@@ -1808,12 +1827,18 @@ def vendor_check_promo():
     if max_uses and pc.get("uses", 0) >= max_uses:
         return err("That promo code has been fully claimed")
 
-    lifetime = bool(pc.get("is_lifetime"))
-    months   = pc.get("free_months") or 1
+    lifetime  = bool(pc.get("is_lifetime"))
+    months    = pc.get("free_months") or 1
+    free_days = _promo_free_days(pc)
     return ok({
         "code":        pc["code"],
         "is_lifetime": lifetime,
         "free_months": months,
+        # The screen must show the date the card is really charged, so the
+        # server does this arithmetic once rather than the client guessing.
+        "free_days":   None if lifetime else free_days,
+        "first_charge": None if lifetime else
+                        (datetime.utcnow() + timedelta(days=free_days)).isoformat(),
         "label": "Free for life" if lifetime
                  else f"{months} month{'s' if months != 1 else ''} free",
     })
@@ -1916,7 +1941,10 @@ def vendor_complete_signup():
             return err("This promo code has reached its maximum uses")
         promo_expires = _promo_free_until(pc)
 
-    lifetime = bool(pc and pc.get("is_lifetime"))
+    lifetime  = bool(pc and pc.get("is_lifetime"))
+    # A lifetime code is handled by the 100%-off coupon, so its subscription
+    # keeps the ordinary trial rather than a hundred-year one.
+    free_days = TRIAL_DAYS if lifetime else _promo_free_days(pc)
 
     # A card is only required when there is something to charge. Free-for-life
     # vendors skip it entirely — asking them to authorise $9.99 for a bill that
@@ -1929,10 +1957,13 @@ def vendor_complete_signup():
     subscription = None
     try:
         stripe = _stripe()
+        # The Stripe trial has to match what the promo promised. Telling Stripe
+        # TRIAL_DAYS while granting 60 days of access charged the vendor on
+        # day 45, in the middle of their two free months.
         sub_args = dict(
             customer=stripe_customer_id,
             items=[{"price": STRIPE_PRICE_ID}],
-            trial_period_days=TRIAL_DAYS,
+            trial_period_days=free_days,
             expand=["latest_invoice.payment_intent"],
             collection_method="charge_automatically",
         )
@@ -1964,6 +1995,7 @@ def vendor_complete_signup():
             stripe_customer_id=stripe_customer_id,
             stripe_sub_id=(subscription.id if subscription else None),
             plan_active=True, promo_expires=promo_expires,
+            trial_days=free_days,
         )
     except Exception as e:
         print(f"[COMPLETE SIGNUP] account create failed after payment: {e}")
