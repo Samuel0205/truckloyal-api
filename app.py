@@ -524,6 +524,13 @@ def _stripe():
 LIFETIME_PROMO_DAYS = 365 * 100
 
 
+# A promo "month" is 31 days — the longest month there is. Rounding a month
+# up rather than down means the vendor is never charged before the month they
+# were promised has fully elapsed, whichever months their promo happens to
+# span. Over a year it hands them twelve extra free days; that is the point.
+PROMO_DAYS_PER_MONTH = 31
+
+
 def _promo_free_days(pc: dict) -> int:
     """How many days a promo actually leaves someone free of charge.
 
@@ -536,7 +543,7 @@ def _promo_free_days(pc: dict) -> int:
     if pc.get("is_lifetime"):
         return LIFETIME_PROMO_DAYS
     months = pc.get("free_months") or 1
-    return max(TRIAL_DAYS, 30 * months)
+    return max(TRIAL_DAYS, PROMO_DAYS_PER_MONTH * months)
 
 
 def _promo_free_until(pc: dict) -> str:
