@@ -138,7 +138,7 @@ def rate_limit(max_calls: int, window_seconds: int):
 #  SECURITY HEADERS
 # ══════════════════════════════════════════════════════
 
-_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/download', '/customers', '/demo.mp4', '/demo.webm', '/demo-poster.jpg', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/tour-5.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
+_STATIC_PATHS = {'/', '/manifest.json', '/manifest-customer.json', '/icon-192.png', '/icon-512.png', '/logo.png', '/default-truck.png', '/favicon.ico', '/privacy', '/privacy.html', '/terms', '/terms.html', '/vendor-agreement', '/vendor-agreement.html', '/sw.js', '/install', '/get', '/download', '/customers', '/welcome', '/start', '/demo.mp4', '/demo.webm', '/demo-poster.jpg', '/tour-1.png', '/tour-2.png', '/tour-3.png', '/tour-4.png', '/tour-5.png', '/og-image.png', '/robots.txt', '/sitemap.xml'}
 
 @app.after_request
 def add_security_headers(response):
@@ -746,6 +746,16 @@ def _vendor_email_state(email: str):
 @app.route("/")
 def landing():
     resp = send_from_directory('.', 'landing.html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+
+@app.route("/welcome")
+@app.route("/start")
+def vendor_welcome():
+    """Onboarding page for invited trucks — the link that goes in a DM or email.
+    noindex, because it is handed out personally rather than found."""
+    resp = send_from_directory('.', 'welcome.html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
 

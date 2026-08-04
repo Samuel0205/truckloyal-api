@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>Welcome — Food Truck Rewards</title>
+<meta name="theme-color" content="#14100C">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root{ --or:#FF5722; --or-lt:#FF8A50; --gold:#F9A825; --gn:#1f8f3a;
+         --ink:#14100C; --ink2:#1D1710; --cream:#FFF8F0; --mu:#7a6a5c;
+         --mu-d:#A99383; --line:#f0e4d6; --line-d:rgba(255,255,255,.12); }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:'Nunito',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       font-weight:700;background:var(--cream);color:var(--ink);line-height:1.6;
+       -webkit-font-smoothing:antialiased;overflow-x:hidden}
+  img{max-width:100%;display:block}
+  h1,h2,h3{font-weight:900;line-height:1.1;letter-spacing:-.02em}
+  .wrap{max-width:720px;margin:0 auto;padding:0 20px}
+
+  /* hero */
+  .hero{background:var(--ink);color:#fff;padding:52px 0 46px;position:relative;overflow:hidden}
+  .hero::before{content:"";position:absolute;inset:0;
+    background:radial-gradient(110% 80% at 76% 6%, rgba(255,87,34,.32) 0%, transparent 60%),
+               radial-gradient(90% 70% at 6% 96%, rgba(249,168,37,.16) 0%, transparent 62%)}
+  .hero .wrap{position:relative}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}
+  .brand img{width:46px;height:46px;border-radius:13px}
+  .brand b{font-size:17px;font-weight:900;line-height:1.05;display:block}
+  .brand span{font-size:10px;font-weight:900;letter-spacing:.3em;color:var(--or)}
+  .hero h1{font-size:clamp(30px,7vw,44px);margin-bottom:14px}
+  .hero h1 em{color:var(--or);font-style:normal}
+  .hero p{font-size:18px;color:#D9C8B8;max-width:34em}
+  .pill{display:inline-block;background:var(--gold);color:var(--ink);font-size:14px;
+        font-weight:900;padding:8px 18px;border-radius:999px;margin-bottom:20px;
+        text-transform:uppercase;letter-spacing:.08em}
+
+  section{padding:44px 0}
+  .band{background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  h2{font-size:clamp(23px,5vw,31px);margin-bottom:8px}
+  .lead{color:var(--mu);font-size:17px;margin-bottom:26px}
+
+  /* steps */
+  .step{display:flex;gap:16px;padding:20px 0;border-bottom:1px solid var(--line)}
+  .step:last-child{border-bottom:none}
+  .step .n{flex:0 0 40px;height:40px;border-radius:12px;background:var(--or);color:#fff;
+           display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px}
+  .step h3{font-size:19px;margin-bottom:5px}
+  .step p{font-size:16px;color:var(--mu)}
+  .step .tip{background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:11px;
+             padding:11px 13px;font-size:14.5px;color:#8a4b00;margin-top:11px;line-height:1.55}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;
+       text-decoration:none;font-weight:900;font-size:17px;padding:16px 30px;border-radius:14px;
+       background:var(--or);color:#fff;box-shadow:0 10px 26px rgba(255,87,34,.36)}
+  .btn.big{font-size:19px;padding:19px 40px;width:100%;max-width:340px}
+  .btn.ghost{background:#fff;color:var(--or);border:2px solid var(--or);box-shadow:none}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
+  .card{background:var(--cream);border:1.5px solid var(--line);border-radius:16px;padding:18px}
+  .band .card{background:var(--cream)}
+  .card .e{font-size:28px;margin-bottom:8px}
+  .card h4{font-size:16.5px;font-weight:900;margin-bottom:4px}
+  .card p{font-size:15px;color:var(--mu)}
+
+  /* what customers see */
+  .flow{counter-reset:f}
+  .flow li{list-style:none;display:flex;gap:14px;padding:14px 0;font-size:16.5px}
+  .flow li::before{counter-increment:f;content:counter(f);flex:0 0 30px;height:30px;
+    border-radius:9px;background:var(--gold);color:var(--ink);font-weight:900;font-size:15px;
+    display:flex;align-items:center;justify-content:center}
+
+  .rate{display:flex;justify-content:space-between;gap:12px;padding:12px 0;
+        border-bottom:1px solid var(--line);font-size:16px}
+  .rate:last-child{border-bottom:none}
+  .rate b{font-weight:900;white-space:nowrap}
+
+  .shot{border-radius:18px;border:8px solid #0B0906;overflow:hidden;
+        box-shadow:0 22px 50px rgba(45,27,14,.28);max-width:250px;margin:22px auto 0}
+
+  .ask{background:var(--ink2);color:#F6EDE4}
+  .ask h2{color:#fff}
+  .ask .lead{color:var(--mu-d)}
+  .ask li{list-style:none;padding:9px 0;font-size:16.5px;display:flex;gap:11px}
+  .ask li span{color:var(--or-lt);font-weight:900}
+
+  footer{background:var(--ink);color:#B9A796;padding:32px 0;font-size:14.5px;text-align:center}
+  footer a{color:var(--or-lt)}
+  .cta-wrap{text-align:center;padding:12px 0 4px}
+  .fine{font-size:14.5px;color:var(--mu);margin-top:14px;text-align:center}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="brand">
+      <img src="/logo.png" alt="">
+      <div><b>FOOD TRUCK</b><span>REWARDS</span></div>
+    </div>
+    <div class="pill">2 months free · founding truck</div>
+    <h1>You're getting the whole thing <em>free for 2 months.</em></h1>
+    <p>All I want back is your honest opinion — what's useful, what's clunky, what's missing.
+       Here's how to get set up and what your customers will see.</p>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <h2>1 · Open the app</h2>
+    <p class="lead">There's no app store. It runs in your phone's browser, and installs to your
+       home screen if you want the icon.</p>
+    <div class="cta-wrap">
+      <a class="btn big" href="/app">Open the app →</a>
+      <div class="fine">Works on any iPhone or Android. Nothing to download to start.</div>
+    </div>
+    <div style="margin-top:26px">
+      <div class="step">
+        <div class="n">📱</div>
+        <div>
+          <h3>Want it on your home screen?</h3>
+          <p><b>iPhone:</b> open this page in Safari, tap <b>Share</b> ⬆️, then <b>Add to Home Screen</b>.<br>
+             <b>Android:</b> tap <b>Add to my phone</b> on the site, or the ⋮ menu → <b>Install app</b>.</p>
+          <div class="tip">Optional. Everything works in the browser — the icon just saves you typing the address.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <h2>2 · Sign up with your code</h2>
+    <p class="lead">Tap <b>Vendor</b>, then <b>Start free trial</b>, and fill in your truck details.</p>
+    <div class="step">
+      <div class="n">🎟️</div>
+      <div>
+        <h3>Enter the promo code I sent you</h3>
+        <p>There's a <b>Promo code</b> box on the sign-up form. Type the code in there before you
+           continue — the next screen will confirm it and show you the exact date anything would
+           ever be charged.</p>
+        <div class="tip">Check that date says roughly two months out. If it doesn't, stop and
+          message me — don't finish signing up.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="n">💳</div>
+      <div>
+        <h3>About the card</h3>
+        <p>Stripe asks for a card to hold the account, but <b>nothing is charged during your two
+           free months</b>, and you can cancel any time from Settings with one tap. No contract,
+           no cancellation fee.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>3 · Three things, about five minutes</h2>
+    <p class="lead">Your program is live the moment you sign up. These make it yours.</p>
+
+    <div class="step">
+      <div class="n">1</div>
+      <div>
+        <h3>🎁 Decide what they earn</h3>
+        <p>You start with sensible defaults, so you can skip this and change it later:</p>
+        <div style="margin-top:12px">
+          <div class="rate"><span>🥤 Free Drink</span><b>100 points</b></div>
+          <div class="rate"><span>🍟 Free Side</span><b>200 points</b></div>
+          <div class="rate"><span>🍔 Free Entrée</span><b>350 points</b></div>
+          <div class="rate"><span>Every visit</span><b>50 points</b></div>
+          <div class="rate"><span>Every $1 spent</span><b>10 points</b></div>
+        </div>
+        <div class="tip">So a $18 order on a first visit is 50 + 180 = <b>230 points</b> — most of
+          the way to a free side. Set these to match your margins.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="n">2</div>
+      <div>
+        <h3>🪧 Print your QR poster</h3>
+        <p>In the app: <b>Marketing Tools → Get my QR poster</b>. Print it, tape it in the window.
+           One scan gets a customer the app <em>and</em> joins them to your rewards — no codes to
+           type, no sign-up sheet.</p>
+        <div class="tip">Point at it and say "scan here for free food." That one line does more
+          than anything else on this page.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="n">3</div>
+      <div>
+        <h3>📍 Post where you're parked — and clear it when you leave</h3>
+        <p>Tap <b>Today's Location</b> on your dashboard and put in the address. Customers can see
+           which trucks are out and where, so people looking for food can find you.</p>
+        <p style="margin-top:10px"><b>This one matters:</b> the address stays up until you take it
+           down. When you're done for the day, switch <b>ordering off</b> and the app will ask if
+           you want to clear it — one tap. You can also hit <b>Clear</b> next to the address any
+           time.</p>
+        <div class="tip">If you leave yesterday's address up, someone can drive across town to an
+          empty parking space. That's the fastest way to lose a customer, so it's worth the one tap.</div>
+      </div>
+    </div>
+
+    <img class="shot" src="/tour-1.png" alt="The vendor dashboard on a phone">
+  </div>
+</section>
+
+<section class="band">
+  <div class="wrap">
+    <h2>4 · What your customers get</h2>
+    <p class="lead">This is the part that decides whether they come back. Here's their side of it.</p>
+    <ol class="flow">
+      <li>They scan your window poster — the app opens and they've joined your rewards.</li>
+      <li>They order at the window, or order ahead from their phone and pay you when they pick up.</li>
+      <li>You scan their code and enter the total. Points are added automatically — no punch card to lose or fake.</li>
+      <li>They watch their points climb, keep a visit streak alive, and spin the wheel for bonus points.</li>
+      <li>At 100 points they cash in a free drink. They show a code, you confirm it, done.</li>
+    </ol>
+    <div class="cards" style="margin-top:22px">
+      <div class="card"><div class="e">🧾</div><h4>Order ahead</h4>
+        <p>They order from the back of the line and pay you at the window, exactly like now. We never touch your money.</p></div>
+      <div class="card"><div class="e">🔔</div><h4>You can message them</h4>
+        <p>Send your members a note when you're parked somewhere new or running a special.</p></div>
+      <div class="card"><div class="e">📊</div><h4>You see who's loyal</h4>
+        <p>Visits, members, redemptions and your top regulars — all on one screen.</p></div>
+    </div>
+    <img class="shot" src="/tour-3.png" alt="Awarding points at the window">
+  </div>
+</section>
+
+<section class="ask">
+  <div class="wrap">
+    <h2>What I'm asking for</h2>
+    <p class="lead">Genuinely just honesty. Rough edges are the useful part.</p>
+    <ul>
+      <li><span>1</span> Was anything confusing to set up?</li>
+      <li><span>2</span> Did it slow you down at the window during a rush?</li>
+      <li><span>3</span> What did your customers say — did they actually scan it?</li>
+      <li><span>4</span> What's missing that would make this a yes for you?</li>
+      <li><span>5</span> Anything that broke, no matter how small.</li>
+    </ul>
+    <p style="margin-top:20px;font-size:16.5px;color:var(--mu-d)">
+      Text me, email me, or message me on Facebook — whatever's easiest. A voice note while you're
+      driving is perfect.</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap" style="text-align:center">
+    <h2>Ready?</h2>
+    <p class="lead">Two months free. Cancel any time. Takes about five minutes.</p>
+    <a class="btn big" href="/app">Open the app →</a>
+    <div class="fine">Stuck on anything at all — message me. I'd rather fix it than have you struggle.</div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Food Truck Rewards · operated by Samuel McCune<br>
+    <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a> · <a href="/">foodtruckrewards.com</a>
+  </div>
+</footer>
+
+</body>
+</html>
