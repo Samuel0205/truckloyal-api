@@ -757,6 +757,62 @@ def public_config():
     })
 
 
+# Traffic sources worth naming. Facebook and Instagram each hand out several
+# hostnames (the l./lm. ones are their link shims), and they all mean the same
+# thing to someone deciding where to spend ad money.
+_REFERRER_SOURCES = [
+    ("Facebook",  ("facebook.com", "fb.me", "fb.com", "facebook.net")),
+    ("Instagram", ("instagram.com",)),
+    ("Google",    ("google.", "googleadservices", "googlesyndication")),
+    ("TikTok",    ("tiktok.com",)),
+    ("X / Twitter", ("twitter.com", "x.com", "t.co")),
+    ("YouTube",   ("youtube.com", "youtu.be")),
+    ("Reddit",    ("reddit.com",)),
+    ("Bing",      ("bing.com",)),
+    ("Yelp",      ("yelp.com",)),
+    ("Email",     ("mail.google", "outlook.", "mail.yahoo")),
+]
+
+
+def _referrer_label(ref: str) -> str:
+    """Group a raw referrer into something worth reading on a dashboard."""
+    r = (ref or "").strip().lower()
+    if not r:
+        return "Direct / typed in"
+    host = r.split("//", 1)[-1].split("/", 1)[0].split("?", 1)[0]
+    if host.startswith("www."):
+        host = host[4:]
+    own = SITE_URL.split("//", 1)[-1].split("/", 1)[0].lower()
+    if own and own.replace("www.", "") in host:
+        return "Our own site"
+    for label, needles in _REFERRER_SOURCES:
+        if any(n in host for n in needles):
+            return label
+    return host or "Unknown"
+
+
+def _referrer_breakdown(rows):
+    """Views + unique visitors per traffic source, biggest first."""
+    agg = {}
+    for r in rows:
+        label = _referrer_label(r.get("referrer"))
+        slot = agg.setdefault(label, {"source": label, "views": 0, "visitors": set()})
+        slot["views"] += 1
+        if r.get("visitor"):
+            slot["visitors"].add(r["visitor"])
+    out = [{"source": v["source"], "views": v["views"], "visitors": len(v["visitors"])}
+           for v in agg.values()]
+    out.sort(key=lambda x: -x["views"])
+    # Past ~8 rows a breakdown stops being readable; fold the tail rather than
+    # printing thirty one-view hostnames.
+    if len(out) > 8:
+        tail = out[8:]
+        out = out[:8] + [{"source": f"Other ({len(tail)} sources)",
+                          "views": sum(t["views"] for t in tail),
+                          "visitors": sum(t["visitors"] for t in tail)}]
+    return out
+
+
 # Remembers whether the last page-view insert worked, so the admin dashboard
 # can say "analytics table missing" instead of quietly reporting zero.
 _analytics_state = {"last_error": None}
@@ -1171,15 +1227,17 @@ def admin_stats():
 
     # Website analytics (first-party page views). Tolerant if not migrated yet.
     site_views = site_views_30d = site_visitors_30d = 0
+    referrers = []
     analytics_error = _analytics_state.get("last_error")
     try:
         since30 = (datetime.utcnow() - timedelta(days=30)).isoformat()
         site_views = sb.table("page_views").select("id", count="exact").execute().count or 0
         site_views_30d = sb.table("page_views").select("id", count="exact")\
             .gte("created_at", since30).execute().count or 0
-        vrows = sb.table("page_views").select("visitor")\
+        vrows = sb.table("page_views").select("visitor, referrer")\
             .gte("created_at", since30).limit(20000).execute().data or []
         site_visitors_30d = len({r["visitor"] for r in vrows if r.get("visitor")})
+        referrers = _referrer_breakdown(vrows)
         analytics_error = None          # reads fine, so the table exists
     except Exception as e:
         analytics_error = str(e)[:200]
@@ -1241,6 +1299,7 @@ def admin_stats():
         "site_views":         site_views,
         "site_views_30d":     site_views_30d,
         "site_visitors_30d":  site_visitors_30d,
+        "referrers":          referrers,
         "analytics_error":    analytics_error,
         "mrr":             round(mrr, 2),
         "promo_codes":     promos,
