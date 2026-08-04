@@ -304,7 +304,16 @@
         <button type="button" id="card-back-btn" onclick="backToSignup()" style="align-self:flex-start;background:none;border:none;color:var(--brand);font-weight:800;font-size:15px;padding:4px 0;margin-bottom:4px;cursor:pointer">← Back</button>
         <div class="auth-logo" style="animation:none">💳</div>
         <div class="auth-title">Set Up Payment</div>
-        <div class="auth-sub">Your 45-day free trial starts today. Your first payment of <strong>$9.99</strong> will be charged on <strong id="trial-end-date">—</strong>. You can cancel before then at no charge.</div>
+        <div class="auth-sub">Your <strong id="trial-days-lead">45-day</strong> free trial starts today. Your first payment of <strong>$9.99</strong> will be charged on <strong id="trial-end-date">—</strong>. You can cancel before then at no charge.</div>
+
+        <!-- Proof the code was accepted, and what it bought them. -->
+        <div id="promo-applied" style="display:none;width:100%;background:#E8F5E9;border:2px solid #A5D6A7;border-radius:14px;padding:14px 16px;margin-bottom:16px">
+          <div style="font-size:13.5px;font-weight:900;color:#2E7D32;line-height:1.6">
+            ✅ Promo <span id="promo-applied-code">—</span> applied
+          </div>
+          <div style="font-size:12.5px;font-weight:700;color:#33691E;margin-top:4px;line-height:1.6"
+               id="promo-applied-detail">—</div>
+        </div>
 
         <!-- Trial timeline -->
         <div style="width:100%;background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;margin-bottom:16px;box-shadow:var(--sh1)">
@@ -384,7 +393,7 @@
 
         <!-- Billing summary line — clearly shows what happens -->
         <div style="width:100%;background:white;border:1.5px solid var(--b1);border-radius:10px;padding:12px 14px;margin-top:12px;font-size:12px;color:var(--mu);font-weight:600;line-height:1.8">
-          <div style="display:flex;justify-content:space-between"><span>Trial period</span><span style="color:var(--gn);font-weight:800">FREE — 45 days</span></div>
+          <div style="display:flex;justify-content:space-between"><span>Trial period</span><span style="color:var(--gn);font-weight:800" id="trial-days-summary">FREE — 45 days</span></div>
           <div style="display:flex;justify-content:space-between"><span>First charge</span><span style="font-weight:800" id="trial-end-summary">—</span></div>
           <div style="display:flex;justify-content:space-between"><span>Then every</span><span style="font-weight:800">30 days · $9.99</span></div>
           <div style="display:flex;justify-content:space-between"><span>Invoice sent to</span><span style="font-weight:800" id="billing-email-display">your email</span></div>
@@ -2461,35 +2470,60 @@ async function vendorSignup(){
   // Store signup info — account is NOT created until payment succeeds
   S.pendingSignup = {email, password:pass, truck_name:name, owner_name:owner, phone:vphone, service_states:states, home_zip:zip, phone_public:phonePublic, email_public:emailPublic, accepted_tos:true, ...(promo && {promo_code:promo})};
 
-  // Show trial end date
-  const trialEnd = new Date();
-  trialEnd.setDate(trialEnd.getDate() + TRIAL_DAYS);
-  const trialStr = trialEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
-  ['trial-end-date','trial-end-label','trial-end-consent','trial-end-cancel','trial-end-summary'].forEach(id=>{
-    const el = document.getElementById(id);
-    if(el) el.textContent = trialStr;
-  });
-  const emailDisplay = document.getElementById('billing-email-display');
-  if(emailDisplay) emailDisplay.textContent = email;
-
-  // A free-for-life code means there is nothing to charge, so send them to the
-  // congrats screen instead of a billing authorisation for a bill that will
-  // never arrive. The server re-checks the code — this only picks the screen.
+  // Validate the promo BEFORE working out any dates — a two-month code moves
+  // the first charge, and showing the 45-day date next to it would be a lie.
+  let info = null;
   if(promo){
     const btn = document.getElementById('v-signup-btn');
     const was = btn ? btn.textContent : '';
     if(btn){ btn.disabled = true; btn.textContent = '⏳ Checking your code...'; }
     const chk = await apiPost('/api/vendor/check-promo', {code: promo});
     if(btn){ btn.disabled = false; btn.textContent = was; }
-    if(chk.ok && chk.data.data?.is_lifetime){
-      setText('free-code', chk.data.data.code || promo);
+    if(!chk.ok){
+      showErr(errEl, chk.data?.error || 'That promo code isn\'t valid.');
+      return;
+    }
+    info = chk.data.data || null;
+    // Free for life: nothing to charge, so no card screen at all.
+    if(info?.is_lifetime){
+      setText('free-code', info.code || promo);
       S.vScreen = 's-v-free';
       show('s-v-free'); renderNav([], '');
       return;
     }
-    if(!chk.ok){
-      showErr(errEl, chk.data?.error || 'That promo code isn\'t valid.');
-      return;
+  }
+  S.promoInfo = info;
+
+  // Every date and label on the card screen comes from what the code actually
+  // grants, so the date we promise is the date Stripe charges.
+  const freeDays = (info && info.free_days) || TRIAL_DAYS;
+  const trialEnd = info && info.first_charge
+    ? new Date(info.first_charge)
+    : (function(){ const d = new Date(); d.setDate(d.getDate() + freeDays); return d; })();
+  const trialStr = trialEnd.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  ['trial-end-date','trial-end-label','trial-end-consent','trial-end-cancel','trial-end-summary'].forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.textContent = trialStr;
+  });
+  setText('trial-days-lead', freeDays + '-day');
+  setText('trial-days-summary', 'FREE — ' + freeDays + ' days');
+  const emailDisplay = document.getElementById('billing-email-display');
+  if(emailDisplay) emailDisplay.textContent = email;
+
+  // Show the code was accepted and what it bought — "applied" should be
+  // visible, not something they infer from a changed date.
+  const pa = document.getElementById('promo-applied');
+  if(pa){
+    if(info){
+      setText('promo-applied-code', info.code || promo);
+      const months = info.free_months || 1;
+      const bonus  = freeDays > TRIAL_DAYS
+        ? months + ' month' + (months===1?'':'s') + ' free — ' + freeDays + ' days in total'
+        : 'Your ' + TRIAL_DAYS + '-day trial is already longer than this code, so you keep the ' + TRIAL_DAYS + ' days';
+      setText('promo-applied-detail', bonus + '. First charge ' + trialStr + '.');
+      pa.style.display = 'block';
+    } else {
+      pa.style.display = 'none';
     }
   }
 
@@ -2554,7 +2588,8 @@ function enterCardScreen(mode){
     if(backBtn){ backBtn.textContent = 'Log out'; backBtn.onclick = vendorLogout; }
   } else {
     if(titleEl) titleEl.textContent = 'Set Up Payment';
-    if(btn)     btn.textContent = '🎉 Start My Free 45-Day Trial';
+    var _fd = (S.promoInfo && S.promoInfo.free_days) || TRIAL_DAYS;
+    if(btn)     btn.textContent = '🎉 Start My Free ' + _fd + '-Day Trial';
     if(backBtn){ backBtn.textContent = '← Back'; backBtn.onclick = backToSignup; }
   }
   initStripeCard();
@@ -2701,14 +2736,16 @@ async function submitCardSetup(){
     localStorage.setItem('tl_vendor_token', S.vendorToken);
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
-    showToast('🎉 Welcome! Your 45-day free trial has started!');
+    showToast('🎉 Welcome! Your ' + ((S.promoInfo && S.promoInfo.free_days) || TRIAL_DAYS)
+      + '-day free trial has started!');
 
   } catch(e) {
     // Nothing to roll back — in the new flow no account is created unless the
     // whole payment succeeds. Just surface the error and let them retry.
     showErr(errEl, (e && e.msg) || 'Something went wrong. Please try again.');
     btn.disabled = false;
-    btn.textContent = isReactivate ? 'Reactivate Subscription' : '🎉 Start My Free 45-Day Trial';
+    btn.textContent = isReactivate ? 'Reactivate Subscription'
+      : '🎉 Start My Free ' + ((S.promoInfo && S.promoInfo.free_days) || TRIAL_DAYS) + '-Day Trial';
   }
 }
 
