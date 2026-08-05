@@ -1,0 +1,8 @@
+# Python bytecode — a compiled .pyc slipped into the repo once already
+__pycache__/
+*.py[cod]
+
+# Local environment
+.env
+venv/
+.venv/
