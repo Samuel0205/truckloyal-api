@@ -699,9 +699,10 @@
       <div class="bp">
         <div class="callout co-bl" style="margin-bottom:14px">
           <div class="co-icon">💡</div>
-          <div><div class="co-desc">Add what's on your truck. Customers see this on your page — and tap <strong>Sold out</strong> anytime to hide an item without deleting it.</div></div>
+          <div><div class="co-desc">Add what's on your truck — a photo sells it far better than words. Tap <strong>Sold out</strong> to hide an item without deleting it, or flag one as <strong>Today's Special</strong> to pin it to the top of your page.</div></div>
         </div>
-        <button class="btn btn-s" style="width:100%;margin-bottom:14px" onclick="openSheet('sh-add-menu')">+ Add Menu Item</button>
+        <button class="btn btn-s" style="width:100%;margin-bottom:14px" onclick="openMenuSheet(-1)">+ Add Menu Item</button>
+        <div id="v-menu-specials"></div>
         <div id="v-menu-list"></div>
       </div>
     </div>
@@ -1970,17 +1971,54 @@
 <div class="overlay" id="sh-add-menu" onclick="closeSheet('sh-add-menu')">
   <div class="sheet" onclick="event.stopPropagation()">
     <div class="sheet-handle"></div>
-    <div class="sheet-title">Add Menu Item</div>
+    <div class="sheet-title" id="nm-title">Add Menu Item</div>
+
+    <!-- Photo -->
+    <div style="display:flex;gap:13px;align-items:center;margin-bottom:14px">
+      <div id="nm-photo-tile" onclick="document.getElementById('nm-file').click()"
+           style="width:88px;height:88px;flex:0 0 auto;border-radius:16px;border:2px dashed var(--b2);background:var(--s2);
+                  display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;overflow:hidden">
+        <div style="font-size:24px;line-height:1">📷</div>
+        <div style="font-size:10.5px;font-weight:800;color:var(--mu);margin-top:4px">Add photo</div>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:800;color:var(--tx);margin-bottom:3px">Photo <span style="color:var(--mu);font-weight:600">(optional)</span></div>
+        <div style="font-size:12px;color:var(--mu);line-height:1.5">A real picture of the item. This is the first thing customers see.</div>
+        <div id="nm-photo-acts" style="display:none;gap:8px;margin-top:8px">
+          <button class="btn btn-s btn-sm" onclick="document.getElementById('nm-file').click()">Change</button>
+          <button class="btn btn-s btn-sm" onclick="clearMenuPhoto()">Remove</button>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="nm-file" accept="image/*" style="display:none" onchange="handleMenuPhotoFile(this)">
+
     <div class="two-col">
       <div class="field"><label>Emoji</label><input type="text" id="nm-e" placeholder="🌮" maxlength="4" style="text-align:center;font-size:24px"></div>
       <div class="field"><label>Price ($)</label><input type="number" id="nm-p" placeholder="8.50" min="0" step="0.01" inputmode="decimal"></div>
     </div>
-    <div style="font-size:11px;color:var(--mu);font-weight:700;margin:2px 0 6px">Tap to pick an icon</div>
+    <div style="font-size:11px;color:var(--mu);font-weight:700;margin:2px 0 6px">Used when there's no photo — tap to pick an icon</div>
     <div id="nm-emoji-palette" style="display:flex;flex-wrap:wrap;gap:6px;max-height:124px;overflow-y:auto;margin-bottom:12px;padding:8px;background:var(--s2);border-radius:12px"></div>
     <div class="field"><label>Item Name</label><input type="text" id="nm-n" placeholder="e.g. Carne Asada Taco"></div>
     <div class="field"><label>Description <span style="color:var(--mu);font-weight:600">(optional)</span></label><input type="text" id="nm-d" placeholder="e.g. Grilled steak, onion, cilantro"></div>
     <div class="field"><label>Category <span style="color:var(--mu);font-weight:600">(optional)</span></label><input type="text" id="nm-c" placeholder="e.g. Tacos, Drinks, Sides"></div>
-    <button class="btn btn-p" onclick="addMenuItem()">Add Item</button>
+
+    <!-- Today's special -->
+    <div style="background:linear-gradient(135deg,rgba(249,168,37,.14),rgba(255,87,34,.1));border:1.5px solid rgba(249,168,37,.5);border-radius:14px;padding:13px 14px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:11px;cursor:pointer;margin:0">
+        <input type="checkbox" id="nm-special" onchange="onSpecialToggle()" style="width:19px;height:19px;flex:0 0 auto;accent-color:#F9A825;cursor:pointer">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:900;color:var(--tx)">🔥 Today's Special</div>
+          <div style="font-size:12px;color:var(--mu);line-height:1.45;margin-top:2px">Pins it to the top of your menu with a Special badge.</div>
+        </div>
+      </label>
+      <div id="nm-special-price-box" style="display:none;margin-top:11px">
+        <div class="field" style="margin:0"><label>Special price ($) <span style="color:var(--mu);font-weight:600">(optional)</span></label>
+          <input type="number" id="nm-sp" placeholder="Leave blank to keep the normal price" min="0" step="0.01" inputmode="decimal"></div>
+        <div style="font-size:11.5px;color:var(--mu);font-weight:700;margin-top:6px;line-height:1.5">Set this and customers see the deal price with the old one crossed out.</div>
+      </div>
+    </div>
+
+    <button class="btn btn-p" id="nm-save" onclick="saveMenuItem()">Add Item</button>
   </div>
 </div>
 
@@ -2990,15 +3028,21 @@ function renderTruckMenu(){
   const list = document.getElementById('ct-menu-list');
   if(!list) return;
   const canOrder = S.truckAccepting && !!S.customer;
-  list.innerHTML = (S.truckMenu||[]).map((m,i)=>{
-    const qty = (S.cart||[]).find(c=>c.menu_item_id===m.id)?.qty || 0;
-    return `<div style="display:flex;align-items:center;gap:10px">
-      <div style="font-size:20px;flex-shrink:0;line-height:1.2">${esc(m.emoji||'🍽️')}</div>
+
+  const row = (m, i) => {
+    const qty  = (S.cart||[]).find(c=>c.menu_item_id===m.id)?.qty || 0;
+    const deal = m.is_special && m.special_price != null && m.special_price !== ''
+                 && Number(m.special_price) < Number(m.price);
+    return `<div style="display:flex;align-items:center;gap:11px">
+      ${menuThumb(m, 52, 12)}
       <div style="flex:1;min-width:0">
-        <div style="font-size:14px;font-weight:800;color:var(--tx)">${esc(m.name)}</div>
-        ${m.description ? `<div style="font-size:12px;color:var(--mu);margin-top:1px;line-height:1.45">${esc(m.description)}</div>` : ''}
+        <div style="font-size:14.5px;font-weight:900;color:var(--tx);line-height:1.3">${esc(m.name)}</div>
+        ${m.description ? `<div style="font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.45">${esc(m.description)}</div>` : ''}
       </div>
-      <div style="font-size:14px;font-weight:900;color:var(--brand);flex-shrink:0">${money(m.price)}</div>
+      <div style="flex-shrink:0;text-align:right">
+        <div style="font-size:14.5px;font-weight:900;color:var(--brand);line-height:1.15">${money(menuPrice(m))}</div>
+        ${deal ? `<div style="font-size:11.5px;color:var(--mu);text-decoration:line-through;font-weight:700">${money(m.price)}</div>` : ''}
+      </div>
       ${canOrder ? (qty
         ? `<div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
              <button onclick="cartAdd(${i},-1)" style="width:28px;height:28px;border-radius:8px;border:1.5px solid var(--b2);background:#fff;font-size:16px;font-weight:900;color:var(--tx);cursor:pointer;line-height:1">−</button>
@@ -3007,7 +3051,24 @@ function renderTruckMenu(){
            </div>`
         : `<button onclick="cartAdd(${i},1)" style="flex-shrink:0;width:30px;height:30px;border-radius:9px;border:none;background:var(--brand);color:#fff;font-size:18px;font-weight:900;cursor:pointer;line-height:1">+</button>`) : ''}
     </div>`;
-  }).join('');
+  };
+
+  // Specials float to the top under their own heading. Indices stay tied to
+  // S.truckMenu, because that's what cartAdd() looks up.
+  const withIdx  = (S.truckMenu||[]).map((m,i)=>({m,i}));
+  const specials = withIdx.filter(x=>x.m.is_special);
+  const rest     = withIdx.filter(x=>!x.m.is_special);
+  const heading  = (txt, gold) => `<div style="display:flex;align-items:center;gap:8px;margin:2px 0 2px">
+      <div style="font-size:12.5px;font-weight:900;color:${gold?'#9a6a00':'var(--mu)'};text-transform:uppercase;letter-spacing:.5px">${txt}</div>
+      <div style="flex:1;height:1.5px;background:linear-gradient(90deg,${gold?'rgba(249,168,37,.5)':'var(--b2)'},transparent);border-radius:2px"></div>
+    </div>`;
+
+  list.innerHTML = (specials.length
+      ? heading("🔥 Today's Specials", true) + specials.map(x=>row(x.m,x.i)).join('')
+        // "Menu" would repeat the card's own heading right above it
+        + (rest.length ? heading('Everything Else', false) : '')
+      : '')
+    + rest.map(x=>row(x.m,x.i)).join('');
 
   // Cart summary + place-order button, or a note about why ordering is off.
   const foot = document.getElementById('ct-cart-foot');
@@ -3039,7 +3100,10 @@ function cartAdd(i, delta){
     line.qty += delta;
     if(line.qty<=0) S.cart = S.cart.filter(c=>c.menu_item_id!==m.id);
   } else if(delta>0){
-    S.cart.push({menu_item_id:m.id, name:m.name, price:Number(m.price)||0, emoji:m.emoji||'', qty:1});
+    // menuPrice, not m.price — the server prices specials the same way, and a
+    // cart that quotes one number while the window charges another is worse
+    // than having no specials at all.
+    S.cart.push({menu_item_id:m.id, name:m.name, price:menuPrice(m), emoji:m.emoji||'', qty:1});
   }
   renderTruckMenu();
 }
@@ -3256,53 +3320,189 @@ async function loadVMenu(){
   renderVMenu();
 }
 
-function renderVMenu(){
-  const el = document.getElementById('v-menu-list');
-  if(!el) return;
-  if(!S.menu || !S.menu.length){
-    el.innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--mu)"><div style="font-size:40px;margin-bottom:10px">🍽️</div><div style="font-size:15px;font-weight:700">No menu items yet</div><div style="font-size:13px;margin-top:6px;line-height:1.6">Add what you sell so customers can see it on your truck page.</div></div>';
-    return;
-  }
-  el.innerHTML = S.menu.map((m,i)=>{
-    const out = !m.is_available;
-    return `<div style="background:#fff;border:1.5px solid ${out?'var(--b2)':'var(--b2)'};border-radius:14px;padding:13px 15px;margin-bottom:10px;box-shadow:var(--sh1);${out?'opacity:.6':''}">
-      <div style="display:flex;align-items:center;gap:11px">
-        <div style="font-size:24px;flex-shrink:0">${esc(m.emoji||'🍽️')}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:800;font-size:15px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}${out?' <span style="font-size:11px;color:var(--rd);font-weight:800">· SOLD OUT</span>':''}</div>
-          ${m.description ? `<div style="font-size:12px;color:var(--mu);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.description)}</div>` : ''}
-          ${m.category ? `<div style="font-size:11px;color:var(--mu);margin-top:2px;font-weight:700">${esc(m.category)}</div>` : ''}
-        </div>
-        <div style="font-weight:900;font-size:16px;color:var(--brand);flex-shrink:0">${money(m.price)}</div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:11px">
-        <button class="btn btn-s btn-sm" style="flex:1" onclick="toggleMenuItem(${i})">${out?'✅ Mark available':'🚫 Mark sold out'}</button>
-        <button class="btn btn-s btn-sm" onclick="removeMenuItem(${i})">🗑️</button>
-      </div>
-    </div>`;
-  }).join('');
+/* The price a customer actually pays: the special price when there is one,
+   otherwise the normal price. Used in three places, so it lives here. */
+function menuPrice(m){
+  const sp = (m.is_special && m.special_price != null && m.special_price !== '')
+    ? Number(m.special_price) : null;
+  return (sp != null && !isNaN(sp)) ? sp : Number(m.price)||0;
 }
 
-async function addMenuItem(){
-  const name = document.getElementById('nm-n')?.value.trim();
+/* Photo if there is one, otherwise the emoji on a soft tile. Same thumbnail
+   on both the vendor list and the customer menu so they match. */
+function menuThumb(m, size, radius){
+  const r = radius || 14;
+  if(m.image_url){
+    return `<div style="width:${size}px;height:${size}px;flex:0 0 auto;border-radius:${r}px;overflow:hidden;background:var(--s2)">
+      <img src="${esc(m.image_url)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">
+    </div>`;
+  }
+  return `<div style="width:${size}px;height:${size}px;flex:0 0 auto;border-radius:${r}px;display:flex;align-items:center;justify-content:center;
+    font-size:${Math.round(size*0.44)}px;background:linear-gradient(135deg,rgba(255,87,34,.13),rgba(249,168,37,.16));
+    border:1.5px solid rgba(255,138,80,.28)">${esc(m.emoji||'🍽️')}</div>`;
+}
+
+function vMenuCard(m, i){
+  const out     = !m.is_available;
+  const special = !!m.is_special;
+  const deal    = special && m.special_price != null && m.special_price !== ''
+                  && Number(m.special_price) < Number(m.price);
+  return `<div style="position:relative;background:#fff;border:1.5px solid ${special?'rgba(249,168,37,.55)':'var(--b2)'};
+      border-radius:16px;padding:13px;margin-bottom:10px;box-shadow:${special?'0 4px 18px rgba(249,168,37,.16)':'var(--sh1)'};${out?'opacity:.55':''}">
+    ${special ? `<div style="position:absolute;top:-9px;left:13px;background:linear-gradient(135deg,#F9A825,#FF8A50);color:#fff;
+        font-size:10px;font-weight:900;letter-spacing:.09em;padding:4px 9px;border-radius:99px;box-shadow:0 3px 9px rgba(249,168,37,.4)">🔥 SPECIAL</div>` : ''}
+    <div style="display:flex;align-items:center;gap:12px;${special?'margin-top:5px':''}">
+      ${menuThumb(m, 62)}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:900;font-size:15.5px;color:var(--tx);line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}</div>
+        ${m.description ? `<div style="font-size:12.5px;color:var(--mu);margin-top:2px;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.description)}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:6px">
+          ${m.category ? `<span style="font-size:10.5px;font-weight:800;color:var(--mu);background:var(--s2);border-radius:99px;padding:3px 8px">${esc(m.category)}</span>` : ''}
+          ${out ? '<span style="font-size:10.5px;font-weight:900;color:#B91C1C;background:#FEE2E2;border-radius:99px;padding:3px 8px">SOLD OUT</span>' : ''}
+          ${!m.image_url ? '<span style="font-size:10.5px;font-weight:800;color:#9a6a00;background:rgba(249,168,37,.16);border-radius:99px;padding:3px 8px">No photo</span>' : ''}
+        </div>
+      </div>
+      <div style="flex-shrink:0;text-align:right">
+        <div style="font-weight:900;font-size:17px;color:var(--brand);line-height:1.1">${money(menuPrice(m))}</div>
+        ${deal ? `<div style="font-size:12px;color:var(--mu);text-decoration:line-through;font-weight:700">${money(m.price)}</div>` : ''}
+      </div>
+    </div>
+    <div style="display:flex;gap:7px;margin-top:11px">
+      <button class="btn btn-s btn-sm" style="flex:1" onclick="openMenuSheet(${i})">✏️ Edit</button>
+      <button class="btn btn-s btn-sm" style="flex:1.4" onclick="toggleMenuItem(${i})">${out?'✅ Available':'🚫 Sold out'}</button>
+      <button class="btn btn-s btn-sm" onclick="removeMenuItem(${i})">🗑️</button>
+    </div>
+  </div>`;
+}
+
+function renderVMenu(){
+  const el  = document.getElementById('v-menu-list');
+  const spl = document.getElementById('v-menu-specials');
+  if(!el) return;
+  if(spl) spl.innerHTML = '';
+  if(!S.menu || !S.menu.length){
+    el.innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--mu)"><div style="font-size:40px;margin-bottom:10px">🍽️</div><div style="font-size:15px;font-weight:700">No menu items yet</div><div style="font-size:13px;margin-top:6px;line-height:1.6">Add what you sell so customers can see it on your truck page. Photos work best.</div></div>';
+    return;
+  }
+  // Index by position in S.menu, because every action takes that index.
+  const withIdx  = S.menu.map((m,i)=>({m,i}));
+  const specials = withIdx.filter(x=>x.m.is_special);
+  const rest     = withIdx.filter(x=>!x.m.is_special);
+
+  if(spl && specials.length){
+    spl.innerHTML = `<div style="display:flex;align-items:center;gap:9px;margin:2px 0 12px">
+        <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx)">🔥 Today's Specials</div>
+        <div style="flex:1;height:2px;background:linear-gradient(90deg,rgba(249,168,37,.55),transparent);border-radius:2px"></div>
+        <div style="font-size:11.5px;font-weight:800;color:var(--mu)">${specials.length}</div>
+      </div>`
+      + specials.map(x=>vMenuCard(x.m,x.i)).join('')
+      + (rest.length ? `<div style="display:flex;align-items:center;gap:9px;margin:20px 0 12px">
+          <div style="font-family:var(--fd);font-size:16px;font-weight:900;color:var(--tx)">🍽️ Full Menu</div>
+          <div style="flex:1;height:2px;background:linear-gradient(90deg,var(--b2),transparent);border-radius:2px"></div>
+          <div style="font-size:11.5px;font-weight:800;color:var(--mu)">${rest.length}</div>
+        </div>` : '');
+  }
+  el.innerHTML = rest.map(x=>vMenuCard(x.m,x.i)).join('');
+}
+
+/* ── Add / edit sheet ── */
+/* -1 = adding. Any other index edits S.menu[i]. */
+let MENU_EDIT_IDX = -1;
+let MENU_PHOTO    = '';
+
+function openMenuSheet(i){
+  MENU_EDIT_IDX = (typeof i === 'number') ? i : -1;
+  const m = MENU_EDIT_IDX >= 0 ? (S.menu||[])[MENU_EDIT_IDX] : null;
+  const set = (id,v)=>{ const el=document.getElementById(id); if(el) el.value = v; };
+  set('nm-n', m ? (m.name||'') : '');
+  set('nm-p', m ? (m.price ?? '') : '');
+  set('nm-d', m ? (m.description||'') : '');
+  set('nm-c', m ? (m.category||'') : '');
+  set('nm-e', m ? (m.emoji||'') : '');
+  set('nm-sp', m && m.special_price != null ? m.special_price : '');
+  const sp = document.getElementById('nm-special');
+  if(sp) sp.checked = !!(m && m.is_special);
+  onSpecialToggle();
+  setMenuPhoto(m ? (m.image_url||'') : '');
+  const t = document.getElementById('nm-title'), b = document.getElementById('nm-save');
+  if(t) t.textContent = m ? 'Edit Menu Item' : 'Add Menu Item';
+  if(b) b.textContent = m ? 'Save Changes'   : 'Add Item';
+  openSheet('sh-add-menu');
+}
+
+function onSpecialToggle(){
+  const on  = !!document.getElementById('nm-special')?.checked;
+  const box = document.getElementById('nm-special-price-box');
+  if(box) box.style.display = on ? 'block' : 'none';
+}
+
+function setMenuPhoto(url){
+  MENU_PHOTO = url || '';
+  const tile = document.getElementById('nm-photo-tile');
+  const acts = document.getElementById('nm-photo-acts');
+  if(!tile) return;
+  if(MENU_PHOTO){
+    tile.style.border = '2px solid var(--b2)';
+    tile.innerHTML = `<img src="${esc(MENU_PHOTO)}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`;
+    if(acts) acts.style.display = 'flex';
+  } else {
+    tile.style.border = '2px dashed var(--b2)';
+    tile.innerHTML = '<div style="font-size:24px;line-height:1">📷</div>'
+      + '<div style="font-size:10.5px;font-weight:800;color:var(--mu);margin-top:4px">Add photo</div>';
+    if(acts) acts.style.display = 'none';
+  }
+}
+function clearMenuPhoto(){ setMenuPhoto(''); const f=document.getElementById('nm-file'); if(f) f.value=''; }
+
+async function handleMenuPhotoFile(input){
+  const file = input.files?.[0];
+  if(!file) return;
+  try{
+    // Show it straight away — the upload can take a moment on truck wifi.
+    const b64 = await resizeImageToBase64(file, 640);
+    setMenuPhoto(b64);
+    const r = await apiPost('/api/vendor/menu-photo', { image_b64: b64 });
+    if(r.ok && r.data?.data?.url) setMenuPhoto(r.data.data.url);
+    // If the upload failed we keep the inline copy: it still saves and still
+    // shows, it's just carried in the row instead of in storage.
+  }catch(e){
+    showToast('❌ Could not read that photo');
+  }
+  input.value = '';
+}
+
+async function saveMenuItem(){
+  const name  = document.getElementById('nm-n')?.value.trim();
   const price = document.getElementById('nm-p')?.value;
   if(!name){ showToast('Enter an item name'); return; }
   if(price===''||price===null||isNaN(parseFloat(price))){ showToast('Enter a price'); return; }
-  showLoad('Adding...');
-  const r = await apiPost('/api/vendor/menu', {
+  const specialOn = !!document.getElementById('nm-special')?.checked;
+  const spRaw     = document.getElementById('nm-sp')?.value;
+  const body = {
     name, price: parseFloat(price),
-    description: document.getElementById('nm-d')?.value.trim() || '',
-    category:    document.getElementById('nm-c')?.value.trim() || '',
-    emoji:       document.getElementById('nm-e')?.value.trim() || '🍽️',
-    sort_order:  (S.menu||[]).length,
-  });
+    description:   document.getElementById('nm-d')?.value.trim() || '',
+    category:      document.getElementById('nm-c')?.value.trim() || '',
+    emoji:         document.getElementById('nm-e')?.value.trim() || '🍽️',
+    image_url:     MENU_PHOTO || '',
+    is_special:    specialOn,
+    special_price: (specialOn && spRaw !== '' && spRaw != null && !isNaN(parseFloat(spRaw)))
+                     ? parseFloat(spRaw) : null,
+  };
+  const editing = MENU_EDIT_IDX >= 0 && (S.menu||[])[MENU_EDIT_IDX];
+  showLoad(editing ? 'Saving...' : 'Adding...');
+  const r = editing
+    ? await apiPatch('/api/vendor/menu/'+S.menu[MENU_EDIT_IDX].id, body)
+    : await apiPost('/api/vendor/menu', {...body, sort_order:(S.menu||[]).length});
   hideLoad();
   if(r.ok){
     closeSheet('sh-add-menu');
-    ['nm-n','nm-p','nm-d','nm-c','nm-e'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+    MENU_EDIT_IDX = -1;
+    setMenuPhoto('');
+    ['nm-n','nm-p','nm-d','nm-c','nm-e','nm-sp'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+    const sp=document.getElementById('nm-special'); if(sp) sp.checked=false; onSpecialToggle();
     await loadVMenu();
-    showToast('✅ Item added!');
-  } else showToast('❌ '+(r.data?.error||'Could not add item'));
+    showToast(editing ? '✅ Item updated!' : '✅ Item added!');
+  } else showToast('❌ '+(r.data?.error||'Could not save item'));
 }
 
 async function toggleMenuItem(i){

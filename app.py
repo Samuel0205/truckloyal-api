@@ -2712,6 +2712,68 @@ def update_points_config():
 # keeps working before the migration is run (see MENU_SCHEMA.sql).
 
 MENU_COLS = "id, vendor_id, name, description, price, category, emoji, is_available, sort_order, created_at"
+# Photos and specials arrived later (MENU_PHOTOS_SPECIALS_SCHEMA.sql). Ask for
+# them first and fall back to the original list, so a truck whose database
+# hasn't been migrated still sees its menu instead of a 500.
+MENU_EXTRA_COLS = "image_url, is_special, special_price"
+MENU_COLS_FULL  = MENU_COLS + ", " + MENU_EXTRA_COLS
+
+
+def _is_missing_extra_col(e) -> bool:
+    """Is this error 'the photo/special migration hasn't been run'?
+
+    Checks for ANY of the three column names, not just the ones this request
+    happened to touch — Postgres reports whichever column it noticed first, so
+    an update of is_special can come back complaining about image_url.
+    """
+    msg = str(e)
+    return any(c in msg for c in ("image_url", "is_special", "special_price"))
+
+
+def _menu_select(query_fn):
+    """Run the same query with the new columns, then without them."""
+    try:
+        return query_fn(MENU_COLS_FULL)
+    except Exception as e:
+        if not _is_missing_extra_col(e):
+            raise
+        print("[MENU] photo/special columns missing — run MENU_PHOTOS_SPECIALS_SCHEMA.sql")
+        return query_fn(MENU_COLS)
+
+
+def _effective_price(m: dict) -> float:
+    """What the customer actually pays: the special price when one is set on a
+    flagged special, otherwise the normal price. Orders are priced from OUR
+    menu, so this has to agree with what the app shows or the quote and the
+    charge drift apart."""
+    if m.get("is_special") and m.get("special_price") not in (None, ""):
+        try:
+            sp = float(m["special_price"])
+            if sp >= 0:
+                return sp
+        except (TypeError, ValueError):
+            pass
+    try:
+        return float(m.get("price") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _menu_extras(body: dict) -> dict:
+    """The photo/special fields, validated. Separated from the core fields so a
+    missing migration can be retried without them."""
+    out = {}
+    if "image_url" in body:
+        url = (str(body.get("image_url") or "")).strip()
+        # A data: URI for a 640px JPEG is ~60-90 KB; the cap is generous but
+        # stops someone pasting a multi-megabyte string into the column.
+        out["image_url"] = url[:1_500_000] or None
+    if "is_special" in body:
+        out["is_special"] = bool(body["is_special"])
+    if "special_price" in body:
+        raw = body["special_price"]
+        out["special_price"] = None if raw in (None, "") else _money(raw)
+    return out
 
 
 def _money(v):
@@ -2729,9 +2791,9 @@ def _money(v):
 @vendor_active_required
 def get_menu():
     try:
-        rows = sb.table("menu_items").select(MENU_COLS)\
-            .eq("vendor_id", request.vendor_id)\
-            .order("sort_order").execute().data or []
+        rows = _menu_select(lambda cols: sb.table("menu_items").select(cols)
+                            .eq("vendor_id", request.vendor_id)
+                            .order("sort_order").execute().data or [])
     except Exception as e:
         print(f"[MENU] table unavailable (run the migration): {e}")
         return ok([])
@@ -2759,11 +2821,23 @@ def add_menu_item():
         "is_available": True,
         "sort_order":  int(body.get("sort_order") or 0),
     }
+    extras = _menu_extras(body)
     try:
-        created = sb.table("menu_items").insert(row).execute().data
+        created = sb.table("menu_items").insert({**row, **extras}).execute().data
     except Exception as e:
-        print(f"[MENU] insert failed: {e}")
-        return err("Menu isn't set up yet — run the menu migration in Supabase.", 503)
+        # The photo/special columns may not exist yet. Save the item anyway —
+        # losing the picture is better than refusing to add the taco.
+        if extras and _is_missing_extra_col(e):
+            print("[MENU] insert without photo/special columns — run "
+                  "MENU_PHOTOS_SPECIALS_SCHEMA.sql")
+            try:
+                created = sb.table("menu_items").insert(row).execute().data
+            except Exception as e2:
+                print(f"[MENU] insert failed: {e2}")
+                return err("Menu isn't set up yet — run the menu migration in Supabase.", 503)
+        else:
+            print(f"[MENU] insert failed: {e}")
+            return err("Menu isn't set up yet — run the menu migration in Supabase.", 503)
     return ok(created[0] if created else row), 201
 
 
@@ -2792,15 +2866,38 @@ def update_menu_item(item_id):
             updates["sort_order"] = int(body["sort_order"])
         except (TypeError, ValueError):
             pass
+    extras = _menu_extras(body)
+    updates.update(extras)
     if not updates:
         return err("Nothing to update")
-    try:
+
+    def _do(patch):
         # Scope by vendor_id so a vendor can only touch their own items.
-        rows = sb.table("menu_items").update(updates)\
+        return sb.table("menu_items").update(patch)\
             .eq("id", item_id).eq("vendor_id", request.vendor_id).execute().data
+
+    try:
+        rows = _do(updates)
     except Exception as e:
-        print(f"[MENU] update failed: {e}")
-        return err("Could not update that item", 503)
+        core = {k: v for k, v in updates.items() if k not in extras}
+        if extras and core and _is_missing_extra_col(e):
+            # Save what we can — a rename shouldn't fail because the photo
+            # column doesn't exist yet.
+            print("[MENU] update without photo/special columns — run "
+                  "MENU_PHOTOS_SPECIALS_SCHEMA.sql")
+            try:
+                rows = _do(core)
+            except Exception as e2:
+                print(f"[MENU] update failed: {e2}")
+                return err("Could not update that item", 503)
+        elif extras and _is_missing_extra_col(e):
+            # Nothing left to save, so say plainly what's missing rather than
+            # "could not update" — which reads like a bug, not a missing step.
+            return err("Photos and specials need one more migration — run "
+                       "MENU_PHOTOS_SPECIALS_SCHEMA.sql in Supabase.", 503)
+        else:
+            print(f"[MENU] update failed: {e}")
+            return err("Could not update that item", 503)
     if not rows:
         return err("Item not found", 404)
     return ok(rows[0])
@@ -2828,14 +2925,60 @@ def get_public_menu(slug):
         return err("Truck not found", 404)
     if not _vendor_is_active(row[0]):
         return ok([])
+    base = "id, name, description, price, category, emoji"
     try:
         items = sb.table("menu_items")\
-            .select("id, name, description, price, category, emoji")\
+            .select(base + ", " + MENU_EXTRA_COLS)\
             .eq("vendor_id", row[0]["id"]).eq("is_available", True)\
             .order("sort_order").execute().data or []
     except Exception:
-        return ok([])
+        try:
+            items = sb.table("menu_items").select(base)\
+                .eq("vendor_id", row[0]["id"]).eq("is_available", True)\
+                .order("sort_order").execute().data or []
+        except Exception:
+            return ok([])
     return ok(items)
+
+
+@app.route("/api/vendor/menu-photo", methods=["POST"])
+@vendor_active_required
+@rate_limit(60, 3600)
+def vendor_upload_menu_photo():
+    """Upload a photo for a menu item and hand back its URL.
+
+    Deliberately not tied to an item id — the vendor picks the photo while
+    they're still typing the name, before the item exists. The caller sends
+    the returned URL along with the create/update.
+
+    Reuses the profile-pictures bucket under a menu/ prefix so there's no new
+    bucket to create in Supabase.
+    """
+    body = request.json or {}
+    b64  = body.get("image_b64", "")
+    if not b64:
+        return err("image_b64 required")
+    if len(b64) > MAX_IMAGE_B64:
+        return err("Photo too large — please use one under 5 MB", 413)
+
+    try:
+        import base64, uuid
+        raw = b64.split(",", 1)[1] if "," in b64 else b64
+        img_bytes = base64.b64decode(raw)
+        filename  = f"menu/{request.vendor_id}/{uuid.uuid4()}.jpg"
+        sb.storage.from_("profile-pictures").upload(
+            filename, img_bytes,
+            {"content-type": "image/jpeg", "upsert": "true"}
+        )
+        public_url = (f"{os.environ['SUPABASE_URL']}"
+                      f"/storage/v1/object/public/profile-pictures/{filename}")
+    except Exception as e:
+        # Same fallback as the profile picture: keep the image inline rather
+        # than lose it because storage is unreachable.
+        print(f"[MENU] photo upload fell back to a data URI: {e}")
+        public_url = b64 if b64.startswith("data:") else "data:image/jpeg;base64," + b64
+
+    return ok({"url": public_url})
 
 
 # ══════════════════════════════════════════════════════
@@ -2961,12 +3104,16 @@ def place_order():
 
     # Price from OUR menu, never from the client — a tampered cart can't
     # invent prices or order something that's sold out.
+    base = "id, name, price, emoji, is_available"
     try:
-        menu = sb.table("menu_items")\
-            .select("id, name, price, emoji, is_available")\
+        menu = sb.table("menu_items").select(base + ", is_special, special_price")\
             .eq("vendor_id", vendor_id).execute().data or []
     except Exception:
-        return err("This truck hasn't set up a menu yet", 409)
+        try:
+            menu = sb.table("menu_items").select(base)\
+                .eq("vendor_id", vendor_id).execute().data or []
+        except Exception:
+            return err("This truck hasn't set up a menu yet", 409)
     by_id = {m["id"]: m for m in menu}
 
     line_items, subtotal = [], 0.0
@@ -2981,7 +3128,7 @@ def place_order():
         except (TypeError, ValueError):
             qty = 1
         qty = max(1, min(qty, 20))
-        price = float(m.get("price") or 0)
+        price = _effective_price(m)
         subtotal += price * qty
         line_items.append({
             "menu_item_id": m["id"], "name": m["name"],
