@@ -1513,6 +1513,12 @@
 
         </div><!-- end white card -->
         </div><!-- /c-member-home -->
+
+        <!-- The app opens on the customer side now, so this is how a truck
+             owner gets to their own login without knowing about ?v=1. -->
+        <div style="text-align:center;padding:22px 0 4px">
+          <span onclick="goVendorSide()" style="font-size:13px;font-weight:800;color:var(--mu);cursor:pointer;border-bottom:1.5px solid var(--b2);padding-bottom:2px">🚚 Run a food truck? Sign in here</span>
+        </div>
       </div>
     </div>
 
@@ -1866,22 +1872,39 @@
 
     <!-- CUSTOMER: TRUCK MAP -->
     <div class="screen" id="s-c-map">
-      <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-discover')">←</div><div><h1>📍 Truck Map</h1><p>Food trucks near you</p></div></div>
-      <div class="bp">
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <input id="map-search" type="text" placeholder="Search a city, ZIP, or address" inputmode="search" enterkeyhint="search" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();mapSearch();}" style="flex:1;min-width:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:11px 14px;font-size:14px;font-family:var(--fb);color:var(--tx);outline:none">
-          <button onclick="mapSearch()" style="background:var(--brand);color:#fff;border:none;border-radius:12px;padding:11px 16px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">🔎</button>
+      <div class="bp" style="padding-top:0">
+
+        <!-- Same torn charcoal band as Home, so the two screens are a set -->
+        <div class="c-band" style="margin-bottom:28px">
+          <div class="c-band-top">
+            <div style="display:flex;align-items:center;gap:11px;flex:1;min-width:0">
+              <div class="mk-back" onclick="goC('s-c-home')">←</div>
+              <div style="flex:1;min-width:0">
+                <div class="c-band-eyebrow">Parked right now</div>
+                <div class="c-band-title">Who&rsquo;s <em>out today</em>.</div>
+              </div>
+            </div>
+          </div>
+          <div class="mk-search">
+            <input id="map-search" type="text" placeholder="City, ZIP or address" inputmode="search" enterkeyhint="search" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();mapSearch();}">
+            <button onclick="mapSearch()" aria-label="Search">🔎</button>
+          </div>
+          <div class="c-band-row" style="margin-bottom:0">
+            <button class="mk-pill" onclick="locateOnMap()">📍 My location</button>
+            <button class="mk-pill" onclick="openTruckMap()">↻ Refresh</button>
+            <span class="mk-key"><span class="dot live"></span>Here now</span>
+            <span class="mk-key"><span class="dot sched"></span>Scheduled</span>
+          </div>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <button onclick="locateOnMap()" style="flex:1;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">📍 My location</button>
-          <button onclick="openTruckMap()" style="background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px 15px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">↻ Refresh</button>
+
+        <div id="truck-map"></div>
+        <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px;font-weight:700"></div>
+
+        <div class="sec-head" style="margin-top:20px">
+          <div class="bar"></div>
+          <div class="t">Out Today</div>
         </div>
-        <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--mu);margin-bottom:10px">
-          <span>🟢 Here now</span><span>🟡 Scheduled today</span>
-        </div>
-        <div id="truck-map" style="width:100%;height:52vh;min-height:320px;border-radius:16px;overflow:hidden;background:#e9eef2;border:1.5px solid var(--b2)"></div>
-        <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px"></div>
-        <div id="truck-map-cards" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
+        <div id="truck-map-cards" style="display:flex;flex-direction:column;gap:12px"></div>
       </div>
 
       <!-- Location permission pop-up -->
@@ -2445,6 +2468,12 @@ function updateTopbarAuth(id){
   if(btn) btn.style.display = (guest && !AUTH_SCREENS.has(screen)) ? 'block' : 'none';
 }
 
+/* /app opens on the customer side, so vendors need a door of their own. */
+function goVendorSide(){
+  S.vScreen = 's-v-login';
+  setMode('vendor');
+}
+
 /* Guests can look at everything. This is only for the handful of actions that
    genuinely need an account — ordering, joining, earning, reviewing. */
 function requireLogin(why){
@@ -2607,6 +2636,7 @@ async function vendorLogin(){
   // Store token first so subsequent API calls work
   S.vendorToken=r.data.data.token;
   localStorage.setItem('tl_vendor_token',S.vendorToken);
+  localStorage.setItem('tl_last_side','vendor');   // this phone belongs to a truck
 
   // Fetch full vendor object (includes vendor_number and all new fields)
   const me=await apiGet('/api/vendor/me');
@@ -2796,6 +2826,7 @@ async function completeFreeSignup(){
     S.vendorToken = doneRes.data.data.token;
     S.vendor      = doneRes.data.data.vendor;
     localStorage.setItem('tl_vendor_token', S.vendorToken);
+    localStorage.setItem('tl_last_side','vendor');
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 You\'re in — your account is free for life!');
@@ -2970,6 +3001,7 @@ async function submitCardSetup(){
     S.vendorToken = doneRes.data.data.token;
     S.vendor      = doneRes.data.data.vendor;
     localStorage.setItem('tl_vendor_token', S.vendorToken);
+    localStorage.setItem('tl_last_side','vendor');
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 Welcome! Your ' + ((S.promoInfo && S.promoInfo.free_days) || TRIAL_DAYS)
@@ -4260,6 +4292,7 @@ async function customerSignup(){
   S.customer={...r.data.data.customer, token: ctoken};
   localStorage.setItem('tl_customer', JSON.stringify(S.customer));
   localStorage.setItem('tl_ctoken', ctoken);
+  localStorage.setItem('tl_last_side','customer');
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
   requestPushPermission();
@@ -4284,6 +4317,7 @@ async function customerLogin(){
   S.customer={...r.data.data.customer, token: ctoken};
   localStorage.setItem('tl_customer', JSON.stringify(S.customer));
   localStorage.setItem('tl_ctoken', ctoken);
+  localStorage.setItem('tl_last_side','customer');
   S.myTrucks=r.data.data.trucks||[];
   localStorage.setItem('tl_my_trucks',JSON.stringify(S.myTrucks));
   if(document.getElementById('c-remember-me')?.checked){
@@ -4786,13 +4820,43 @@ async function handleCustomerQRScanFile(input){
   }
 }
 
+/* Remembers how each script actually turned out.
+   The old version resolved whenever a <script> with that src existed — but a
+   FAILED load leaves the tag in the DOM too. So the first attempt showed
+   "couldn't load", and every attempt after that resolved instantly while the
+   library was still missing, leaving a blank grey box and no error. */
+const _scriptState = new Map();   // src -> 'ok' | 'fail'
+
 function loadScript(src){
+  if(_scriptState.get(src) === 'ok') return Promise.resolve();
   return new Promise((resolve, reject) => {
-    if(document.querySelector(`script[src="${src}"]`)){resolve();return;}
+    // Drop a previously failed tag so the retry is a real retry.
+    if(_scriptState.get(src) === 'fail'){
+      document.querySelectorAll(`script[src="${src}"]`).forEach(el=>el.remove());
+      _scriptState.delete(src);
+    }
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if(existing){   // in flight from another call — wait on that one
+      existing.addEventListener('load', ()=>{ _scriptState.set(src,'ok'); resolve(); });
+      existing.addEventListener('error',()=>{ _scriptState.set(src,'fail'); reject(new Error(src)); });
+      return;
+    }
     const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = reject;
+    s.src = src;
+    s.onload  = ()=>{ _scriptState.set(src,'ok');   resolve(); };
+    s.onerror = ()=>{ _scriptState.set(src,'fail'); reject(new Error(src)); };
     document.head.appendChild(s);
   });
+}
+
+/* Try each source in turn; succeed on the first that actually works. One CDN
+   being blocked on a phone's network shouldn't take the map down. */
+async function loadScriptAny(sources){
+  let last;
+  for(const src of sources){
+    try { await loadScript(src); return src; } catch(e){ last = e; }
+  }
+  throw last || new Error('no sources');
 }
 function loadCss(href){
   return new Promise((resolve) => {
@@ -5002,78 +5066,131 @@ function locateOnMap(){
   showLocModal();
 }
 
+/* The truck list under the map. Rendered from the API alone, so it survives
+   any map failure — and it's the part people actually act on. */
+function renderMapCards(trucks){
+  const el = document.getElementById('truck-map-cards');
+  if(!el) return;
+  if(!trucks.length){
+    el.innerHTML = `<div style="text-align:center;padding:30px 20px;color:var(--mu)">
+        <div style="font-size:36px;margin-bottom:9px">🚚</div>
+        <div style="font-size:14.5px;font-weight:800;line-height:1.55">No truck has posted a spot for today yet.</div>
+      </div>`;
+    return;
+  }
+  el.innerHTML = trucks.map(t=>{
+    const live    = t.status === 'live';
+    const badge   = live ? 'Here now' : 'Scheduled today';
+    const dirAddr = (t.location || '') + (t.location && t.region ? ', ' + t.region : '');
+    return `<div class="mk">
+      <div class="mk-top">
+        <div class="mk-emoji">${esc(t.emoji||'🚚')}</div>
+        <div style="flex:1;min-width:0">
+          <div class="mk-name">${esc(t.truck_name)}</div>
+          <div class="mk-badge ${live?'live':'sched'}"><span class="dot"></span>${badge}</div>
+        </div>
+      </div>
+      ${t.location ? `<div class="mk-loc">📍 ${esc(t.location)}</div>` : ''}
+      ${t.hours ? `<div class="mk-hrs">🕒 ${esc(t.hours)}</div>` : ''}
+      <div class="mk-acts">
+        <button class="mk-btn primary" onclick="openTruckFromDiscover('${escJs(t.slug)}')">View truck</button>
+        ${dirAddr ? `<button class="mk-btn ghost" onclick="openInMaps('${escJs(dirAddr)}')">🗺️ Directions</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* Draws the "map is unavailable" state. The list of trucks underneath is the
+   part that actually matters, so we say so instead of leaving a grey void. */
+function _mapFailed(mapEl, msg){
+  if(!mapEl) return;
+  mapEl.style.height = 'auto';
+  mapEl.style.minHeight = '0';
+  mapEl.innerHTML = `<div style="padding:26px 22px;text-align:center">
+      <div style="font-size:34px;margin-bottom:8px">🗺️</div>
+      <div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px">Map couldn't load</div>
+      <div style="font-size:13px;color:var(--mu);font-weight:700;line-height:1.55;margin-bottom:14px">${esc(msg)}</div>
+      <button onclick="openTruckMap()" style="background:var(--brand);color:#fff;border:none;border-radius:12px;padding:11px 20px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer">Try again</button>
+      <div style="font-size:12.5px;color:var(--mu);font-weight:700;margin-top:12px">Every truck out today is still listed below.</div>
+    </div>`;
+}
+
 async function openTruckMap(){
   goC('s-c-map');
   const mapEl = document.getElementById('truck-map');
   const noteEl = document.getElementById('truck-map-note');
   if(noteEl) noteEl.textContent = '';
+  if(!mapEl) return;
+  mapEl.style.height = '';
+  mapEl.style.minHeight = '';
   mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8a8a8a;font-weight:700">Loading map…</div>';
 
+  // The truck list never depends on Leaflet — load and draw it first so a CDN
+  // problem costs pins, not the whole screen.
+  const r      = await apiGet('/api/trucks/map');
+  const trucks = (r.ok && r.data?.data) || [];
+  renderMapCards(trucks);
+  // No mention of pins yet — the map may not come up, and telling someone to
+  // tap a pin that isn't there is worse than saying nothing.
+  if(noteEl){
+    noteEl.textContent = trucks.length
+      ? 'Every truck operating today.'
+      : 'No trucks have posted a location for today yet.';
+  }
+
+  loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
   try {
-    await loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-    await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+    await loadScriptAny([
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
+    ]);
   } catch(e){
-    mapEl.innerHTML = '<div style="padding:28px;text-align:center;color:#8a8a8a;font-weight:700">Map couldn\'t load — check your connection and try again.</div>';
+    _mapFailed(mapEl, "We couldn't reach the map service from this connection.");
+    return;
+  }
+  // Belt and braces: a script can load from cache yet still not define L.
+  if(typeof L === 'undefined' || !L.map){
+    _mapFailed(mapEl, 'The map library loaded but did not start up.');
     return;
   }
 
-  if(_truckMap){ try { _truckMap.remove(); } catch(e){} _truckMap = null; }
-  mapEl.innerHTML = '';
-  _truckMap = L.map('truck-map', { zoomControl: true }).setView([39.5, -98.35], 4); // US
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
-  }).addTo(_truckMap);
+  try {
+    if(_truckMap){ try { _truckMap.remove(); } catch(e){} _truckMap = null; }
+    mapEl.innerHTML = '';
+    _truckMap = L.map('truck-map', { zoomControl: true }).setView([39.5, -98.35], 4); // US
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+    }).addTo(_truckMap);
+  } catch(e){
+    console.error('[MAP] init failed', e);
+    _mapFailed(mapEl, 'Something went wrong starting the map.');
+    return;
+  }
+  // The container is sized by CSS after this runs; without it Leaflet renders
+  // into a zero-size box and you get grey.
   setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
+  setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 900);
+  if(noteEl && trucks.length) noteEl.textContent = 'Tap a pin or a card for details.';
 
-  const r = await apiGet('/api/trucks/map');
-  const trucks = (r.ok && r.data?.data) || [];
   const pts = [];
-  const cards = [];
   for(const t of trucks){
     const color = t.status === 'live' ? '#22c55e' : '#f59e0b';
     const badge = t.status === 'live' ? '🟢 Here now' : '🟡 Scheduled today';
     const coords = await geocodeTruck(t);
-    if(coords){
-      const html = `<div style="min-width:150px">
-        <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
-        <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
-        ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
-        ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
-        <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
-      </div>`;
-      L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
-        .addTo(_truckMap).bindPopup(html);
-      pts.push([coords.lat, coords.lng]);
-    }
-    // Card for every operating truck — reliable even if a pin can't geocode.
-    const dirAddr = (t.location || '') + (t.location && t.region ? ', ' + t.region : '');
-    cards.push(`<div style="background:#fff;border:1.5px solid var(--b2);border-radius:14px;padding:13px 15px;box-shadow:var(--sh1)">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-size:24px;flex-shrink:0">${esc(t.emoji)}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:800;font-size:15px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.truck_name)}</div>
-          <div style="font-size:12px;color:var(--mu);margin-top:1px">${badge}</div>
-        </div>
-      </div>
-      ${t.location ? `<div style="font-size:12.5px;color:var(--tx);margin-top:8px">📍 ${esc(t.location)}</div>` : ''}
-      ${t.hours ? `<div style="font-size:12px;color:var(--mu);margin-top:3px">🕒 ${esc(t.hours)}</div>` : ''}
-      <div style="display:flex;gap:8px;margin-top:11px">
-        <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="flex:1;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:10px;padding:9px;font-size:13px;font-weight:800;font-family:var(--fb);cursor:pointer">View truck</button>
-        ${dirAddr ? `<button onclick="openInMaps('${escJs(dirAddr)}')" style="background:#E3F2FD;color:#1565C0;border:1.5px solid #90CAF9;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;font-family:var(--fb);cursor:pointer">🗺️ Directions</button>` : ''}
-      </div>
-    </div>`);
+    if(!coords) continue;                 // no pin, but the card below still shows
+    const html = `<div style="min-width:150px">
+      <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
+      <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
+      ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
+      ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
+      <button onclick="openTruckFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
+    </div>`;
+    L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+      .addTo(_truckMap).bindPopup(html);
+    pts.push([coords.lat, coords.lng]);
   }
 
-  const cardsEl = document.getElementById('truck-map-cards');
-  if(cardsEl){
-    cardsEl.innerHTML = cards.length ? cards.join('') : '';
-  }
-
-  if(noteEl){
-    noteEl.textContent = trucks.length
-      ? 'Showing trucks operating today. Tap a pin or card for details.'
-      : 'No trucks have posted a location for today yet.';
-  }
   // Center on the user if we already have a precise fix this session; otherwise
   // frame the trucks and prompt for location (once per session). We no longer
   // guess from IP — that was landing people in the wrong state.
@@ -6283,15 +6400,26 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
 (function init(){
   S.prizes=[...DEFAULT_PRIZES];
   S.rewards=[...DEFAULT_REWARDS];
-  // Customers arriving from the "Get the App" page carry ?c=1 — they must land
-  // on the customer side, NEVER the vendor login. A truck's poster QR also
-  // carries ?truck=<slug>, which auto-joins that truck once they're signed in.
-  let wantCustomer = false;
+  // The app opens on the CUSTOMER side. Most people arriving here are hungry,
+  // not signing up a food truck, and a login screen was turning them away.
+  // Vendors come in via ?v=1 (every "Start Free Trial" link on the website)
+  // or the "Food truck owner" link at the bottom of the browse screen — and a
+  // vendor with a saved session is restored straight to their dashboard.
+  let wantVendor = false;
   try {
     const p = new URLSearchParams(location.search);
     const tp = p.get('truck');
     if(tp) S._pendingJoin = tp.toLowerCase();
-    wantCustomer = p.get('c')==='1' || p.get('mode')==='customer' || !!tp;
+    wantVendor = p.get('v')==='1' || p.get('mode')==='vendor';
+    // A vendor session is never restored from storage on purpose — a truck
+    // owner logs in fresh every time. But their phone shouldn't forget WHICH
+    // app it is: if they've ever signed in as a vendor here, open on their
+    // login instead of a customer browse screen they have no use for.
+    if(!wantVendor && !S.customer && localStorage.getItem('tl_last_side')==='vendor'){
+      wantVendor = true;
+    }
+    // ?c=1 (the customer landing page) always wins, and so does a poster QR.
+    if(p.get('c')==='1' || p.get('mode')==='customer' || tp) wantVendor = false;
   } catch(e){}
 
   if(S.vendorToken&&S.vendor){
@@ -6304,20 +6432,17 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
     requestPushPermission();
     updateNotifBell();
     if(S._pendingJoin) maybeJoinPendingTruck();
-  } else if(wantCustomer){
-    // New visitor from the customer landing page. They get the app, not a
-    // signup wall — finding good food nearby costs nothing. A poster QR
-    // (?truck=slug) opens that truck's page; joining it is their call.
-    if(S._pendingJoin){
-      S.cScreen='s-c-truck'; setMode('customer');
-      previewTruckBySlug(S._pendingJoin);
-    } else {
-      S.cScreen='s-c-home'; setMode('customer');
-    }
-  } else {
-    // Default (vendor) entry.
+  } else if(wantVendor){
+    // Came from a "for food trucks" link.
     S.mode='vendor';
     show('s-v-login');renderNav([],'' );
+  } else if(S._pendingJoin){
+    // Scanned a truck's poster QR — open that truck. Joining is their call.
+    S.cScreen='s-c-truck'; setMode('customer');
+    previewTruckBySlug(S._pendingJoin);
+  } else {
+    // Everyone else: straight to the trucks. No account, no wall.
+    S.cScreen='s-c-home'; setMode('customer');
   }
   drawWheel(0);
   // Keep the bell badge fresh while the app stays open. updateNotifBell()
