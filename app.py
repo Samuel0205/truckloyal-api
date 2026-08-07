@@ -2719,6 +2719,11 @@ MENU_EXTRA_COLS = "image_url, is_special, special_price"
 MENU_COLS_FULL  = MENU_COLS + ", " + MENU_EXTRA_COLS
 
 
+# Set whenever a query has to fall back to the pre-migration column list.
+# Read by GET /api/vendor/menu so the Menu screen can explain itself.
+_menu_state = {"extras_ok": True}
+
+
 def _is_missing_extra_col(e) -> bool:
     """Is this error 'the photo/special migration hasn't been run'?
 
@@ -2737,6 +2742,7 @@ def _menu_select(query_fn):
     except Exception as e:
         if not _is_missing_extra_col(e):
             raise
+        _menu_state["extras_ok"] = False
         print("[MENU] photo/special columns missing — run MENU_PHOTOS_SPECIALS_SCHEMA.sql")
         return query_fn(MENU_COLS)
 
@@ -2797,7 +2803,7 @@ def get_menu():
     except Exception as e:
         print(f"[MENU] table unavailable (run the migration): {e}")
         return ok([])
-    return ok(rows)
+    return ok(rows, photos_enabled=_menu_state["extras_ok"])
 
 
 @app.route("/api/vendor/menu", methods=["POST"])
@@ -2822,12 +2828,15 @@ def add_menu_item():
         "sort_order":  int(body.get("sort_order") or 0),
     }
     extras = _menu_extras(body)
+    dropped_extras = False
     try:
         created = sb.table("menu_items").insert({**row, **extras}).execute().data
     except Exception as e:
         # The photo/special columns may not exist yet. Save the item anyway —
         # losing the picture is better than refusing to add the taco.
         if extras and _is_missing_extra_col(e):
+            _menu_state["extras_ok"] = False
+            dropped_extras = True
             print("[MENU] insert without photo/special columns — run "
                   "MENU_PHOTOS_SPECIALS_SCHEMA.sql")
             try:
@@ -2838,7 +2847,7 @@ def add_menu_item():
         else:
             print(f"[MENU] insert failed: {e}")
             return err("Menu isn't set up yet — run the menu migration in Supabase.", 503)
-    return ok(created[0] if created else row), 201
+    return ok(created[0] if created else row, extras_dropped=dropped_extras), 201
 
 
 @app.route("/api/vendor/menu/<item_id>", methods=["PATCH"])
@@ -2871,6 +2880,8 @@ def update_menu_item(item_id):
     if not updates:
         return err("Nothing to update")
 
+    dropped_extras = False
+
     def _do(patch):
         # Scope by vendor_id so a vendor can only touch their own items.
         return sb.table("menu_items").update(patch)\
@@ -2882,7 +2893,11 @@ def update_menu_item(item_id):
         core = {k: v for k, v in updates.items() if k not in extras}
         if extras and core and _is_missing_extra_col(e):
             # Save what we can — a rename shouldn't fail because the photo
-            # column doesn't exist yet.
+            # column doesn't exist yet. But SAY that the photo was dropped;
+            # a plain "saved!" while the picture vanishes is the worst of
+            # both worlds.
+            _menu_state["extras_ok"] = False
+            dropped_extras = True
             print("[MENU] update without photo/special columns — run "
                   "MENU_PHOTOS_SPECIALS_SCHEMA.sql")
             try:
@@ -2900,7 +2915,7 @@ def update_menu_item(item_id):
             return err("Could not update that item", 503)
     if not rows:
         return err("Item not found", 404)
-    return ok(rows[0])
+    return ok(rows[0], extras_dropped=dropped_extras)
 
 
 @app.route("/api/vendor/menu/<item_id>", methods=["DELETE"])
