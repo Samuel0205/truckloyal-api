@@ -50,6 +50,9 @@
   <div class="topbar">
     <div class="tl-logo">Food Truck Rewards</div>
     <button id="c-notif-bell" onclick="openNotifs()" aria-label="Notifications" style="display:none;position:relative;background:none;border:none;font-size:20px;cursor:pointer;padding:4px 6px;margin-right:2px;line-height:1">🔔<span id="c-notif-badge" style="display:none;position:absolute;top:0;right:-2px;background:#E53935;color:#fff;font-size:9px;font-weight:800;border-radius:99px;min-width:15px;height:15px;line-height:15px;text-align:center;padding:0 3px;font-family:var(--fb)">0</span></button>
+    <!-- Guests browse without an account; this is their way in. Shown only in
+         customer mode when signed out (see updateTopbarAuth). -->
+    <button id="tb-login" onclick="goC('s-c-login')" style="display:none">Log in</button>
     <button class="tb-menu" onclick="openMenu()" aria-label="Menu">
       <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
     </button>
@@ -1254,6 +1257,7 @@
             <button class="btn btn-p" id="c-signup-btn" onclick="customerSignup()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Create My Account</button>
             <label style="display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:var(--mu);margin-top:14px;line-height:1.5;text-align:left;cursor:pointer"><input type="checkbox" id="c-agree-tos" style="margin-top:2px;width:16px;height:16px;accent-color:var(--brand);flex-shrink:0"><span>I'm at least 13 years old and I agree to the <a href="/terms" target="_blank" style="color:var(--brand);font-weight:800">Terms of Service</a> and <a href="/privacy" target="_blank" style="color:var(--brand);font-weight:800">Privacy Policy</a> (including the arbitration agreement and class-action waiver).</span></label>
             <div class="auth-switch">Already have an account? <span onclick="goC('s-c-login')">Sign in</span></div>
+            <div class="auth-switch" style="margin-top:9px">Just looking for food? <span onclick="goC('s-c-discover');loadDiscover()">Browse trucks &rarr;</span></div>
           </div>
         </div>
       </div>
@@ -1296,6 +1300,7 @@
             </div>
             <button class="btn btn-p" id="c-login-btn" onclick="customerLogin()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Sign In</button>
             <div class="auth-switch" style="margin-top:20px">No account? <span onclick="goC('s-c-signup')">Create one free</span></div>
+            <div class="auth-switch" style="margin-top:9px">Just looking for food? <span onclick="goC('s-c-discover');loadDiscover()">Browse trucks &rarr;</span></div>
           </div>
         </div>
       </div>
@@ -1536,8 +1541,16 @@
         </div>
         <!-- Your open order at this truck -->
         <div id="ct-myorder" style="display:none;margin-bottom:12px"></div>
+        <!-- Guests see this instead of their points. One tap to join. -->
+        <div id="ct-guest-join" style="display:none;background:linear-gradient(135deg,rgba(255,87,34,.1),rgba(249,168,37,.12));border:1.5px solid rgba(255,87,34,.35);border-radius:16px;padding:16px">
+          <div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx);margin-bottom:5px">🎁 Earn points here</div>
+          <div style="font-size:13px;color:var(--mu);line-height:1.55;margin-bottom:12px">You're just browsing — that's fine, look around all you like. Join <strong id="ct-guest-truck">this truck</strong> free to collect points on every visit, order ahead, and cash in for free food.</div>
+          <button class="btn btn-p" style="width:100%" onclick="joinActiveTruck()">Join free &amp; start earning →</button>
+          <div style="font-size:11.5px;color:var(--mu);text-align:center;margin-top:8px;font-weight:700">Free forever · takes about 20 seconds</div>
+        </div>
+
         <!-- Points hero card -->
-        <div style="background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;display:flex;align-items:center;gap:0;box-shadow:var(--sh1)">
+        <div id="ct-member-stats" style="background:white;border:2px solid var(--b2);border-radius:16px;padding:16px;display:flex;align-items:center;gap:0;box-shadow:var(--sh1)">
           <div style="flex:1;text-align:center;border-right:1.5px solid var(--b1)">
             <div style="font-family:var(--fd);font-size:36px;font-weight:900;color:var(--brand);line-height:1" id="ct-pts">0</div>
             <div style="font-size:10px;color:var(--mu);font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-top:3px">Points Here</div>
@@ -1553,6 +1566,20 @@
         </div>
       </div>
       <div style="padding:14px 20px 80px">
+        <!-- Everything below is per-member, so guests get a preview instead -->
+        <div id="ct-guest-body" style="display:none">
+          <div class="card">
+            <div style="font-family:var(--fd);font-size:15px;font-weight:900;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px">What you get when you join</div>
+            <div class="tr"><div class="tr-info"><div class="tt">⚡ Points every visit</div><div class="td">Scan or give your number at the window</div></div></div>
+            <div class="tr"><div class="tr-info"><div class="tt">🎁 Free food</div><div class="td">Cash points in for drinks, sides and entrées</div></div></div>
+            <div class="tr"><div class="tr-info"><div class="tt">🎡 Spin the wheel</div><div class="td">Bonus points once a day</div></div></div>
+            <div class="tr"><div class="tr-info"><div class="tt">🧾 Order ahead</div><div class="td">Skip the line, pay at the window</div></div></div>
+            <div class="tr" style="border-bottom:none"><div class="tr-info"><div class="tt">🔔 Know where they're parked</div><div class="td">Get a note when they post a new spot</div></div></div>
+            <button class="btn btn-p" style="width:100%;margin-top:12px" onclick="joinActiveTruck()">Join free &amp; start earning →</button>
+          </div>
+        </div>
+
+        <div id="ct-member-body">
         <!-- Tier badge & progress -->
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -1590,6 +1617,7 @@
         <div style="font-family:var(--fd);font-size:15px;font-weight:900;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">🎁 Redeem Points</div>
         <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5;font-weight:600">Show the code to the cashier before ordering.</div>
         <div id="ct-rewards-list"></div>
+        </div><!-- /ct-member-body -->
       </div>
     </div>
 
@@ -1727,7 +1755,7 @@
 
     <!-- CUSTOMER: DISCOVER TRUCKS -->
     <div class="screen" id="s-c-discover">
-      <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-home')">←</div><div><h1>🗺️ Discover Trucks</h1><p>Active food trucks using Food Truck Rewards</p></div></div>
+      <div class="sh sh-row"><div class="back-btn" id="disc-back" onclick="goC('s-c-home')">←</div><div><h1>🗺️ Discover Trucks</h1><p>Find food trucks near you — no account needed</p></div></div>
       <div class="bp">
         <button onclick="openTruckMap()" style="width:100%;background:linear-gradient(135deg,#FF5722,#ff7d4d);color:#fff;border:none;border-radius:12px;padding:13px;font-weight:800;font-size:15px;cursor:pointer;font-family:var(--fb);margin-bottom:14px;box-shadow:0 6px 16px rgba(255,87,34,.28)">📍 View Trucks on Map</button>
         <select id="discover-state-filter" onchange="loadDiscover()" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--b2);background:white;font-family:var(--fb);font-size:14px;color:var(--tx);margin-bottom:14px;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23FF5722%22 stroke-width=%222.5%22><polyline points=%226 9 12 15 18 9%22/></svg>');background-repeat:no-repeat;background-position:right 14px center;padding-right:36px">
@@ -1965,6 +1993,23 @@
       <div><div class="co-desc"><strong>You'll pay at the window</strong> when you pick up — nothing is charged now. You'll earn your points automatically.</div></div>
     </div>
     <button class="btn btn-p" onclick="placeOrder()">Place Order</button>
+  </div>
+</div>
+
+<!-- Shown when a guest taps something that genuinely needs an account.
+     Browsing never triggers this — only ordering, joining and earning do. -->
+<div class="overlay" id="sh-signin" onclick="closeSheet('sh-signin')">
+  <div class="sheet" onclick="event.stopPropagation()">
+    <div class="sheet-handle"></div>
+    <div style="text-align:center;padding:4px 0 2px">
+      <div style="font-size:44px;line-height:1;margin-bottom:8px">🎁</div>
+      <div class="sheet-title" style="text-align:center;margin-bottom:6px">Free account needed</div>
+      <div style="font-size:14px;color:var(--mu);line-height:1.6;margin-bottom:18px" id="signin-why">Create a free account to start earning points.</div>
+    </div>
+    <button class="btn btn-p" style="width:100%;margin-bottom:9px" onclick="closeSheet('sh-signin');goC('s-c-signup')">Create free account</button>
+    <button class="btn btn-s" style="width:100%;margin-bottom:9px" onclick="closeSheet('sh-signin');goC('s-c-login')">I already have one — log in</button>
+    <button class="btn btn-g" style="width:100%" onclick="closeSheet('sh-signin')">Keep browsing</button>
+    <div style="font-size:11.5px;color:var(--mu);text-align:center;margin-top:11px;font-weight:700;line-height:1.5">Always free for customers. No card, ever.</div>
   </div>
 </div>
 
@@ -2264,6 +2309,12 @@ const VNAV = [
   {id:'s-v-settings',icon:'⚙️',label:'Settings'}
 ];
 const CNAV = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-feed',icon:'📰',label:'Feed'},{id:'s-c-discover',icon:'🗺️',label:'Discover'},{id:'s-c-history',icon:'📋',label:'History'},{id:'s-c-profile',icon:'👤',label:'Profile'}];
+/* Guests get the two tabs that work without an account, plus a way in.
+   Home/Feed/History are all "your trucks", which a guest doesn't have. */
+const CNAV_GUEST = [{id:'s-c-discover',icon:'🗺️',label:'Discover'},{id:'s-c-map',icon:'📍',label:'Map'},{id:'s-c-login',icon:'👤',label:'Log in'}];
+const cnav = () => S.customer ? CNAV : CNAV_GUEST;
+/* Customer screens a signed-out visitor is allowed to sit on. */
+const GUEST_SCREENS = new Set(['s-c-discover','s-c-map','s-c-truck','s-c-login','s-c-signup','s-c-forgot','s-c-reset']);
 
 /* ════════════════════════════════════
    API HELPERS
@@ -2332,13 +2383,40 @@ function show(id){
   if(el) el.classList.add('on');
   document.getElementById('scroll').scrollTop=0;
   document.querySelector('.topbar').classList.toggle('auth-mode',AUTH_SCREENS.has(id));
+  updateTopbarAuth(id);
+}
+
+/* The Log in button belongs to exactly one situation: browsing the customer
+   side without an account. Not in vendor mode (they have their own login
+   screen), and not on the auth screens themselves. */
+function updateTopbarAuth(id){
+  const screen = id || S.cScreen;
+  const guest  = S.mode==='customer' && !S.customer;
+  const btn = document.getElementById('tb-login');
+  if(btn) btn.style.display = (guest && !AUTH_SCREENS.has(screen)) ? 'block' : 'none';
+  // Discover is a guest's first screen, so there's nothing behind it. Lives
+  // here rather than in goC() because setMode() shows screens directly too.
+  const bk = document.getElementById('disc-back');
+  if(bk) bk.style.display = guest ? 'none' : 'flex';
+}
+
+/* Guests can look at everything. This is only for the handful of actions that
+   genuinely need an account — ordering, joining, earning, reviewing. */
+function requireLogin(why){
+  if(S.customer) return true;
+  const el = document.getElementById('signin-why');
+  if(el) el.textContent = why || 'Create a free account to start earning points.';
+  openSheet('sh-signin');
+  return false;
 }
 
 function openMenu(){
   if(S.mode==='vendor'){
     if(S.vendorToken&&S.vendor) goV('s-v-settings');
+  } else if(S.customer){
+    goC('s-c-profile');
   } else {
-    if(S.customer) goC('s-c-profile');
+    requireLogin('Log in to see your points, your trucks and your order history.');
   }
 }
 
@@ -2390,12 +2468,12 @@ function setMode(mode){
       S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
       renderMyTrucks();
     } else {
-      const allowedUnauth=['s-c-signup','s-c-login','s-c-forgot','s-c-reset'];
-      if(allowedUnauth.includes(S.cScreen)){
-        show(S.cScreen); renderNav([],'' );
-      } else {
-        show('s-c-login'); S.cScreen='s-c-login'; renderNav([],'' );
-      }
+      // Signed out is a first-class way to use the customer side. Land on
+      // Discover — finding food shouldn't cost you an account — and let the
+      // Log in button in the corner be the only nudge.
+      // goC handles the redirect, the nav, the per-screen loader and the
+      // refresh button — no reason to repeat any of it here.
+      goC(GUEST_SCREENS.has(S.cScreen) ? S.cScreen : 's-c-discover');
     }
   }
 }
@@ -2428,7 +2506,10 @@ function goV(id){
 }
 
 function goC(id){
-  S.cScreen=id; show(id); renderNav(CNAV,id);
+  // A signed-out visitor who somehow lands on a members-only screen goes to
+  // Discover rather than a dead end.
+  if(!S.customer && !GUEST_SCREENS.has(id)) id = 's-c-discover';
+  S.cScreen=id; show(id); renderNav(cnav(),id);
   if(id==='s-c-home')      updateNotifBell();
   if(id==='s-c-notifs')    loadCustomerNotifs();
   if(id==='s-c-feed')      loadCustomerFeed();
@@ -4187,7 +4268,8 @@ function customerLogout(){
   setTimeout(updateNotifBell, 0);
   S.customer=null; S.myTrucks=[]; S.activeTruck=null;
   ['tl_customer','tl_my_trucks','tl_active_truck','tl_active_truck_pts','tl_ctoken','tl_cpic','tl_c_remember','tl_c_remember_email'].forEach(k=>localStorage.removeItem(k));
-  S.cScreen='s-c-login'; show('s-c-login'); renderNav([],'' );
+  // Signing out drops you back to browsing, not onto a login wall.
+  goC('s-c-discover'); loadDiscover();
   showToast('Signed out');
 }
 
@@ -4443,7 +4525,7 @@ async function openTruck(i){
 async function joinTruckByCode(){
   let code = document.getElementById('c-truck-code-input')?.value.trim();
   if(!code){showToast('Enter a truck code or number');return}
-  if(!S.customer){showToast('Please sign in first');return}
+  if(!requireLogin('Join this truck free to start collecting points.')) return;
 
   // If it's a 4-digit number, resolve to the slug via vendor_number first
   const isNumber = /^\d{3,5}$/.test(code.replace('#',''));
@@ -4890,6 +4972,17 @@ async function renderTruckDash(){
     } catch(e){}
   }
 
+  // Not a member of this truck (guest, or signed in but hasn't joined) → show
+  // the join card instead of a row of zeros pretending to be their points.
+  const isMember = !!(S.customer && (S.myTrucks||[]).some(x=>x.slug===t.slug));
+  const gj=document.getElementById('ct-guest-join'), ms=document.getElementById('ct-member-stats');
+  const gb=document.getElementById('ct-guest-body'), mb=document.getElementById('ct-member-body');
+  if(gj) gj.style.display = isMember ? 'none'  : 'block';
+  if(ms) ms.style.display = isMember ? 'flex'  : 'none';
+  if(gb) gb.style.display = isMember ? 'none'  : 'block';
+  if(mb) mb.style.display = isMember ? 'block' : 'none';
+  setText('ct-guest-truck', t.truck_name || 'this truck');
+
   const p=t.color_primary||'#FF5A1F';
   const pts=S.activeTruck.points_balance||0;
 
@@ -5065,7 +5158,7 @@ function renderTruckRewards(){
 }
 
 async function checkInAtTruck(){
-  if(!S.customer){showToast('Please sign in first');return}
+  if(!requireLogin('Create a free account to check in and spin for bonus points.')) return;
   if(!S.activeTruck){showToast('No truck selected');return}
 
   const todayKey='spin_used_'+S.activeTruck.id+'_'+new Date().toDateString();
@@ -6063,8 +6156,15 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
     updateNotifBell();
     if(S._pendingJoin) maybeJoinPendingTruck();
   } else if(wantCustomer){
-    // New visitor from the customer landing page → customer sign-up.
-    S.cScreen='s-c-signup'; setMode('customer');
+    // New visitor from the customer landing page. They get the app, not a
+    // signup wall — finding good food nearby costs nothing. A poster QR
+    // (?truck=slug) opens that truck's page; joining it is their call.
+    if(S._pendingJoin){
+      S.cScreen='s-c-truck'; setMode('customer');
+      previewTruckBySlug(S._pendingJoin);
+    } else {
+      S.cScreen='s-c-discover'; setMode('customer');
+    }
   } else {
     // Default (vendor) entry.
     S.mode='vendor';
@@ -6809,7 +6909,9 @@ async function loadDiscover(){
     const mapsAddr = (displayLoc || displayHrs) + (displayLoc && t.display_zip ? ', ' + t.display_zip : '');
     const states = t.service_states ? `<span style="font-size:10px;background:rgba(255,87,34,.1);color:var(--brand);border-radius:8px;padding:2px 7px;font-weight:700">${esc(t.service_states)}</span>` : '';
     const alreadyJoined = joinedSlugs.has(t.slug);
-    const actionBtn = alreadyJoined
+    // A guest gets "View", not "Join" — the truck's own page makes the case for
+    // joining far better than a sign-in prompt fired off a list.
+    const actionBtn = (alreadyJoined || !S.customer)
       ? `<button onclick="openTruckFromDiscover('${escJs(t.slug)}')" style="background:rgba(255,87,34,.12);color:var(--brand);border:1.5px solid var(--brand);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">View</button>`
       : `<button onclick="joinFromDiscover('${escJs(t.slug)}')" style="background:var(--brand);color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">Join</button>`;
 
@@ -6836,7 +6938,10 @@ async function loadDiscover(){
 }
 
 async function joinFromDiscover(slug){
-  if(!S.customer){ goC('s-c-login'); return; }
+  if(!requireLogin('Join this truck free to earn points on every visit.')){
+    S._pendingJoin = String(slug).toLowerCase();
+    return;
+  }
   showLoad('Joining...');
   const r = await apiPost('/api/customer/join-truck', {customer_id:S.customer.id, slug});
   hideLoad();
@@ -6854,7 +6959,42 @@ async function joinFromDiscover(slug){
 function openTruckFromDiscover(slug){
   const truck = (S.myTrucks||[]).find(t=>t.slug===slug);
   if(truck){ S.activeTruck=truck; localStorage.setItem('tl_active_truck',JSON.stringify(truck)); renderTruckDash(); goC('s-c-truck'); }
-  else goC('s-c-home');
+  else previewTruckBySlug(slug);
+}
+
+/* Open a truck's page for someone who hasn't joined it — including someone
+   with no account at all. Everything public (location, schedule, menu, hours,
+   contact) comes from /api/truck/<slug>, which needs no token. */
+async function previewTruckBySlug(slug){
+  if(!slug) return;
+  showLoad('Loading truck...');
+  const r = await apiGet('/api/truck/'+encodeURIComponent(String(slug).toLowerCase()));
+  hideLoad();
+  if(!r.ok || !r.data?.data?.vendor){
+    showToast('❌ '+(r.data?.error||"Couldn't find that truck"));
+    goC('s-c-discover');
+    return;
+  }
+  const v = r.data.data.vendor;
+  // Shape it like a joined truck so renderTruckDash works unchanged — the
+  // per-member numbers are simply zero because there's no membership.
+  S.activeTruck = {...v, points_balance:0, visit_count:0, points_total:0,
+                   current_streak:0, is_preview:true};
+  S.truckRewards = r.data.data.rewards || [];
+  renderTruckDash();
+  goC('s-c-truck');
+}
+
+/* The join button on a previewed truck. Signed out → the sign-in sheet. */
+function joinActiveTruck(){
+  const slug = S.activeTruck?.slug;
+  if(!slug) return;
+  if(!requireLogin('Join ' + (S.activeTruck.truck_name || 'this truck')
+      + ' free to earn points on every visit and order ahead.')){
+    S._pendingJoin = String(slug).toLowerCase();   // joined the moment they sign in
+    return;
+  }
+  joinTruckBySlug(slug);
 }
 
 /* ════════════════════════════════════
