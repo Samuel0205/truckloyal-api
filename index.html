@@ -1257,7 +1257,7 @@
             <button class="btn btn-p" id="c-signup-btn" onclick="customerSignup()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Create My Account</button>
             <label style="display:flex;gap:9px;align-items:flex-start;font-size:11.5px;color:var(--mu);margin-top:14px;line-height:1.5;text-align:left;cursor:pointer"><input type="checkbox" id="c-agree-tos" style="margin-top:2px;width:16px;height:16px;accent-color:var(--brand);flex-shrink:0"><span>I'm at least 13 years old and I agree to the <a href="/terms" target="_blank" style="color:var(--brand);font-weight:800">Terms of Service</a> and <a href="/privacy" target="_blank" style="color:var(--brand);font-weight:800">Privacy Policy</a> (including the arbitration agreement and class-action waiver).</span></label>
             <div class="auth-switch">Already have an account? <span onclick="goC('s-c-login')">Sign in</span></div>
-            <div class="auth-switch" style="margin-top:9px">Just looking for food? <span onclick="goC('s-c-discover');loadDiscover()">Browse trucks &rarr;</span></div>
+            <div class="auth-switch" style="margin-top:9px">Just looking for food? <span onclick="goC('s-c-home')">Browse trucks &rarr;</span></div>
           </div>
         </div>
       </div>
@@ -1300,7 +1300,7 @@
             </div>
             <button class="btn btn-p" id="c-login-btn" onclick="customerLogin()" style="border-radius:50px;height:52px;font-size:15px;letter-spacing:.3px">Sign In</button>
             <div class="auth-switch" style="margin-top:20px">No account? <span onclick="goC('s-c-signup')">Create one free</span></div>
-            <div class="auth-switch" style="margin-top:9px">Just looking for food? <span onclick="goC('s-c-discover');loadDiscover()">Browse trucks &rarr;</span></div>
+            <div class="auth-switch" style="margin-top:9px">Just looking for food? <span onclick="goC('s-c-home')">Browse trucks &rarr;</span></div>
           </div>
         </div>
       </div>
@@ -1376,18 +1376,68 @@
       </div>
     </div>
 
-    <!-- CUSTOMER HOME — my trucks list -->
+    <!-- CUSTOMER HOME — every truck first, yours underneath -->
     <div class="screen" id="s-c-home">
-      <div class="bp" style="padding-top:12px">
+      <div class="bp" style="padding-top:0">
 
-        <!-- Greeting row -->
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div>
-            <div style="font-family:var(--fd);font-size:20px;font-weight:900;color:var(--tx);line-height:1.1" id="c-home-greeting">My Trucks</div>
-            <div style="font-size:12px;color:var(--mu);font-weight:600;margin-top:2px" id="c-home-sub">Join a truck to start earning</div>
+        <!-- ── Dark band: the only black on the screen, torn along the
+             bottom with the same brushstroke as the nav bar ── -->
+        <div class="c-band">
+          <div class="c-band-top">
+            <div style="flex:1;min-width:0">
+              <div class="c-band-eyebrow" id="c-band-eyebrow">Street food near you</div>
+              <div class="c-band-title" id="c-band-title">Find your next <em>favorite</em>.</div>
+              <div class="c-band-sub" id="c-band-sub">Every truck on Food Truck Rewards, wherever they're parked today.</div>
+            </div>
+            <div id="c-home-avatar" onclick="goC('s-c-profile')" style="display:none;width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#FF8A50);align-items:center;justify-content:center;font-family:var(--fd);font-size:18px;font-weight:900;color:white;cursor:pointer;flex-shrink:0;overflow:hidden;box-shadow:0 3px 12px rgba(255,87,34,.45)">?</div>
           </div>
-          <div id="c-home-avatar" onclick="goC('s-c-profile')" style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--brand),#FF8A50);display:flex;align-items:center;justify-content:center;font-family:var(--fd);font-size:20px;font-weight:900;color:white;cursor:pointer;flex-shrink:0;overflow:hidden;box-shadow:0 3px 12px rgba(255,87,34,.35)">?</div>
+          <div class="c-band-row">
+            <span id="c-band-stats" style="display:contents"></span>
+            <button class="c-band-map" onclick="openTruckMap()">🗺️ Map</button>
+          </div>
+          <div class="c-chips" id="c-browse-chips">
+            <div class="c-chip on" onclick="filterBrowse('all',this)">All Trucks</div>
+            <div class="c-chip" onclick="filterBrowse('live',this)">🟢 Out Today</div>
+            <div class="c-chip" onclick="filterBrowse('top',this)">⭐ Top Rated</div>
+            <div class="c-chip" onclick="filterBrowse('new',this)">✨ New</div>
+          </div>
         </div>
+
+        <!-- ── Every truck, first thing you see ── -->
+        <div class="sec-head">
+          <div class="bar"></div>
+          <div class="t" id="c-browse-title">All Trucks</div>
+          <div class="n" id="c-browse-count"></div>
+        </div>
+        <div id="c-browse-list">
+          <div style="text-align:center;padding:34px 20px;color:var(--mu)">
+            <div style="font-size:38px;margin-bottom:10px">🚚</div>
+            <div style="font-size:14px;font-weight:800">Loading trucks…</div>
+          </div>
+        </div>
+
+        <!-- ── Guests: this is the pitch, and it comes after the food ── -->
+        <div class="c-join" id="c-home-join" style="display:none">
+          <h3>Save your favorites.<br>Earn free food.</h3>
+          <p>Browsing is always free. An account keeps track of the trucks you love and the points you've racked up at each one.</p>
+          <div class="c-join-perks">
+            <div class="c-join-perk"><i>⭐</i><span>Favorite trucks, saved on every device</span></div>
+            <div class="c-join-perk"><i>⚡</i><span>Points every visit — at every truck</span></div>
+            <div class="c-join-perk"><i>🎁</i><span>Cash them in for free drinks &amp; meals</span></div>
+            <div class="c-join-perk"><i>🧾</i><span>Order ahead and skip the line</span></div>
+          </div>
+          <button class="btn btn-p" onclick="goC('s-c-signup')">Create my free account →</button>
+          <div class="c-join-fine">Free forever · no card, ever · <span onclick="goC('s-c-login')">already have one?</span></div>
+        </div>
+
+        <!-- ── Members only: rewards card + the trucks they've joined ── -->
+        <div id="c-member-home">
+
+        <div class="sec-head" style="margin-top:22px">
+          <div class="bar"></div>
+          <div class="t" id="c-home-greeting">My Trucks</div>
+        </div>
+        <div style="font-size:12.5px;color:var(--mu);font-weight:700;margin:-6px 0 13px" id="c-home-sub">Join a truck to start earning</div>
 
         <!-- MY CARD hero button -->
         <div class="c-hero-card" onclick="goC('s-c-qr')">
@@ -1437,12 +1487,10 @@
           <div class="c-chip" onclick="filterTrucks('most',this)">🔥 Most Visited</div>
         </div>
 
-        <!-- Section header -->
+        <!-- The heading itself lives above the rewards card now; this row is
+             just the filter's current state plus the add button. -->
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-          <div style="display:flex;align-items:center;gap:9px">
-            <div style="width:4px;height:18px;border-radius:99px;background:linear-gradient(180deg,var(--brand),#FF8A50)"></div>
-            <div style="font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx);text-transform:uppercase;letter-spacing:.4px" id="c-trucks-section-title">My Trucks</div>
-          </div>
+          <div style="font-size:12px;font-weight:900;color:var(--mu);text-transform:uppercase;letter-spacing:.5px" id="c-trucks-section-title">My Trucks</div>
           <div style="font-size:11px;color:var(--brand);font-weight:800;cursor:pointer;background:#fff;padding:7px 14px;border-radius:99px;border:1.5px solid rgba(255,87,34,.45);text-transform:uppercase;letter-spacing:.3px" onclick="goC('s-c-scan')">+ Add Truck</div>
         </div>
 
@@ -1452,7 +1500,7 @@
           <div style="font-family:var(--fd);font-size:20px;font-weight:800;margin-bottom:8px">No trucks yet</div>
           <div style="font-size:14px;color:var(--mu);margin-bottom:24px;line-height:1.6">Scan a food truck's QR code to join their loyalty program and start earning points.</div>
           <button class="btn btn-p" onclick="goC('s-c-scan')">📷 Scan a Truck QR Code</button>
-          <div style="margin-top:12px"><span style="font-size:13px;color:var(--brand);font-weight:700;cursor:pointer" onclick="goC('s-c-discover')">Or browse nearby trucks 🗺️</span></div>
+          <div style="margin-top:12px"><span style="font-size:13px;color:var(--brand);font-weight:700;cursor:pointer" onclick="document.getElementById('c-browse-list')?.scrollIntoView({behavior:'smooth',block:'start'})">Or pick one from the list above ↑</span></div>
         </div>
 
         <!-- Trucks list -->
@@ -1464,6 +1512,13 @@
         </div>
 
         </div><!-- end white card -->
+        </div><!-- /c-member-home -->
+
+        <!-- The app opens on the customer side now, so this is how a truck
+             owner gets to their own login without knowing about ?v=1. -->
+        <div style="text-align:center;padding:22px 0 4px">
+          <span onclick="goVendorSide()" style="font-size:13px;font-weight:800;color:var(--mu);cursor:pointer;border-bottom:1.5px solid var(--b2);padding-bottom:2px">🚚 Run a food truck? Sign in here</span>
+        </div>
       </div>
     </div>
 
@@ -1817,22 +1872,39 @@
 
     <!-- CUSTOMER: TRUCK MAP -->
     <div class="screen" id="s-c-map">
-      <div class="sh sh-row"><div class="back-btn" onclick="goC('s-c-discover')">←</div><div><h1>📍 Truck Map</h1><p>Food trucks near you</p></div></div>
-      <div class="bp">
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <input id="map-search" type="text" placeholder="Search a city, ZIP, or address" inputmode="search" enterkeyhint="search" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();mapSearch();}" style="flex:1;min-width:0;background:#fff;border:1.5px solid var(--b2);border-radius:12px;padding:11px 14px;font-size:14px;font-family:var(--fb);color:var(--tx);outline:none">
-          <button onclick="mapSearch()" style="background:var(--brand);color:#fff;border:none;border-radius:12px;padding:11px 16px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">🔎</button>
+      <div class="bp" style="padding-top:0">
+
+        <!-- Same torn charcoal band as Home, so the two screens are a set -->
+        <div class="c-band" style="margin-bottom:28px">
+          <div class="c-band-top">
+            <div style="display:flex;align-items:center;gap:11px;flex:1;min-width:0">
+              <div class="mk-back" onclick="goC('s-c-home')">←</div>
+              <div style="flex:1;min-width:0">
+                <div class="c-band-eyebrow">Parked right now</div>
+                <div class="c-band-title">Who&rsquo;s <em>out today</em>.</div>
+              </div>
+            </div>
+          </div>
+          <div class="mk-search">
+            <input id="map-search" type="text" placeholder="City, ZIP or address" inputmode="search" enterkeyhint="search" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();mapSearch();}">
+            <button onclick="mapSearch()" aria-label="Search">🔎</button>
+          </div>
+          <div class="c-band-row" style="margin-bottom:0">
+            <button class="mk-pill" onclick="locateOnMap()">📍 My location</button>
+            <button class="mk-pill" onclick="openTruckMap()">↻ Refresh</button>
+            <span class="mk-key"><span class="dot live"></span>Here now</span>
+            <span class="mk-key"><span class="dot sched"></span>Scheduled</span>
+          </div>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:10px">
-          <button onclick="locateOnMap()" style="flex:1;background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">📍 My location</button>
-          <button onclick="openTruckMap()" style="background:#fff;color:var(--brand);border:1.5px solid var(--brand);border-radius:12px;padding:11px 15px;font-weight:800;font-size:14px;cursor:pointer;font-family:var(--fb)">↻ Refresh</button>
+
+        <div id="truck-map"></div>
+        <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px;font-weight:700"></div>
+
+        <div class="sec-head" style="margin-top:20px">
+          <div class="bar"></div>
+          <div class="t">Out Today</div>
         </div>
-        <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--mu);margin-bottom:10px">
-          <span>🟢 Here now</span><span>🟡 Scheduled today</span>
-        </div>
-        <div id="truck-map" style="width:100%;height:52vh;min-height:320px;border-radius:16px;overflow:hidden;background:#e9eef2;border:1.5px solid var(--b2)"></div>
-        <div id="truck-map-note" style="text-align:center;font-size:12px;color:var(--mu);margin-top:10px"></div>
-        <div id="truck-map-cards" style="margin-top:12px;display:flex;flex-direction:column;gap:10px"></div>
+        <div id="truck-map-cards" style="display:flex;flex-direction:column;gap:12px"></div>
       </div>
 
       <!-- Location permission pop-up -->
@@ -2311,10 +2383,10 @@ const VNAV = [
 const CNAV = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-feed',icon:'📰',label:'Feed'},{id:'s-c-discover',icon:'🗺️',label:'Discover'},{id:'s-c-history',icon:'📋',label:'History'},{id:'s-c-profile',icon:'👤',label:'Profile'}];
 /* Guests get the two tabs that work without an account, plus a way in.
    Home/Feed/History are all "your trucks", which a guest doesn't have. */
-const CNAV_GUEST = [{id:'s-c-discover',icon:'🗺️',label:'Discover'},{id:'s-c-map',icon:'📍',label:'Map'},{id:'s-c-login',icon:'👤',label:'Log in'}];
+const CNAV_GUEST = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-discover',icon:'🗺️',label:'Discover'},{id:'s-c-map',icon:'📍',label:'Map'},{id:'s-c-login',icon:'👤',label:'Log in'}];
 const cnav = () => S.customer ? CNAV : CNAV_GUEST;
 /* Customer screens a signed-out visitor is allowed to sit on. */
-const GUEST_SCREENS = new Set(['s-c-discover','s-c-map','s-c-truck','s-c-login','s-c-signup','s-c-forgot','s-c-reset']);
+const GUEST_SCREENS = new Set(['s-c-home','s-c-discover','s-c-map','s-c-truck','s-c-login','s-c-signup','s-c-forgot','s-c-reset']);
 
 /* ════════════════════════════════════
    API HELPERS
@@ -2394,10 +2466,12 @@ function updateTopbarAuth(id){
   const guest  = S.mode==='customer' && !S.customer;
   const btn = document.getElementById('tb-login');
   if(btn) btn.style.display = (guest && !AUTH_SCREENS.has(screen)) ? 'block' : 'none';
-  // Discover is a guest's first screen, so there's nothing behind it. Lives
-  // here rather than in goC() because setMode() shows screens directly too.
-  const bk = document.getElementById('disc-back');
-  if(bk) bk.style.display = guest ? 'none' : 'flex';
+}
+
+/* /app opens on the customer side, so vendors need a door of their own. */
+function goVendorSide(){
+  S.vScreen = 's-v-login';
+  setMode('vendor');
 }
 
 /* Guests can look at everything. This is only for the handful of actions that
@@ -2466,14 +2540,14 @@ function setMode(mode){
       const authScreens=['s-c-signup','s-c-login','s-c-forgot','s-c-reset'];
       // Always land on home (truck list) — don't auto-open a specific truck
       S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
-      renderMyTrucks();
+      renderMyTrucks(); loadHomeBrowse();
     } else {
       // Signed out is a first-class way to use the customer side. Land on
       // Discover — finding food shouldn't cost you an account — and let the
       // Log in button in the corner be the only nudge.
       // goC handles the redirect, the nav, the per-screen loader and the
       // refresh button — no reason to repeat any of it here.
-      goC(GUEST_SCREENS.has(S.cScreen) ? S.cScreen : 's-c-discover');
+      goC(GUEST_SCREENS.has(S.cScreen) ? S.cScreen : 's-c-home');
     }
   }
 }
@@ -2508,9 +2582,9 @@ function goV(id){
 function goC(id){
   // A signed-out visitor who somehow lands on a members-only screen goes to
   // Discover rather than a dead end.
-  if(!S.customer && !GUEST_SCREENS.has(id)) id = 's-c-discover';
+  if(!S.customer && !GUEST_SCREENS.has(id)) id = 's-c-home';
   S.cScreen=id; show(id); renderNav(cnav(),id);
-  if(id==='s-c-home')      updateNotifBell();
+  if(id==='s-c-home'){     updateNotifBell(); loadHomeBrowse(); }
   if(id==='s-c-notifs')    loadCustomerNotifs();
   if(id==='s-c-feed')      loadCustomerFeed();
   if(id==='s-c-discover')  loadDiscover();
@@ -2562,6 +2636,7 @@ async function vendorLogin(){
   // Store token first so subsequent API calls work
   S.vendorToken=r.data.data.token;
   localStorage.setItem('tl_vendor_token',S.vendorToken);
+  localStorage.setItem('tl_last_side','vendor');   // this phone belongs to a truck
 
   // Fetch full vendor object (includes vendor_number and all new fields)
   const me=await apiGet('/api/vendor/me');
@@ -2751,6 +2826,7 @@ async function completeFreeSignup(){
     S.vendorToken = doneRes.data.data.token;
     S.vendor      = doneRes.data.data.vendor;
     localStorage.setItem('tl_vendor_token', S.vendorToken);
+    localStorage.setItem('tl_last_side','vendor');
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 You\'re in — your account is free for life!');
@@ -2925,6 +3001,7 @@ async function submitCardSetup(){
     S.vendorToken = doneRes.data.data.token;
     S.vendor      = doneRes.data.data.vendor;
     localStorage.setItem('tl_vendor_token', S.vendorToken);
+    localStorage.setItem('tl_last_side','vendor');
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 Welcome! Your ' + ((S.promoInfo && S.promoInfo.free_days) || TRIAL_DAYS)
@@ -4215,6 +4292,7 @@ async function customerSignup(){
   S.customer={...r.data.data.customer, token: ctoken};
   localStorage.setItem('tl_customer', JSON.stringify(S.customer));
   localStorage.setItem('tl_ctoken', ctoken);
+  localStorage.setItem('tl_last_side','customer');
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
   requestPushPermission();
@@ -4239,6 +4317,7 @@ async function customerLogin(){
   S.customer={...r.data.data.customer, token: ctoken};
   localStorage.setItem('tl_customer', JSON.stringify(S.customer));
   localStorage.setItem('tl_ctoken', ctoken);
+  localStorage.setItem('tl_last_side','customer');
   S.myTrucks=r.data.data.trucks||[];
   localStorage.setItem('tl_my_trucks',JSON.stringify(S.myTrucks));
   if(document.getElementById('c-remember-me')?.checked){
@@ -4269,7 +4348,7 @@ function customerLogout(){
   S.customer=null; S.myTrucks=[]; S.activeTruck=null;
   ['tl_customer','tl_my_trucks','tl_active_truck','tl_active_truck_pts','tl_ctoken','tl_cpic','tl_c_remember','tl_c_remember_email'].forEach(k=>localStorage.removeItem(k));
   // Signing out drops you back to browsing, not onto a login wall.
-  goC('s-c-discover'); loadDiscover();
+  goC('s-c-home');
   showToast('Signed out');
 }
 
@@ -4359,8 +4438,112 @@ function updateRefreshBtn(){
   btn.classList.toggle('show', !!visibleScreen && !noRefresh.has(visibleScreen));
 }
 
+/* ════════════════════════════════════
+   CUSTOMER HOME — the browse feed
+   Every active truck, above your own. Signed in or not, this is the
+   first thing on the screen: people come here for food, not for an
+   account. Reads /api/discover, which needs no token.
+════════════════════════════════════ */
+let BROWSE_FILTER = 'all';
+
+async function loadHomeBrowse(){
+  const list = document.getElementById('c-browse-list');
+  if(!list) return;
+  const r = await apiGet('/api/discover');
+  S.browseTrucks = (r.ok && r.data.data) || [];
+  renderHomeBrowse();
+  // The member half only makes sense with an account.
+  const mine = document.getElementById('c-member-home');
+  const join = document.getElementById('c-home-join');
+  const av   = document.getElementById('c-home-avatar');
+  if(mine) mine.style.display = S.customer ? 'block' : 'none';
+  if(join) join.style.display = S.customer ? 'none'  : 'block';
+  if(av)   av.style.display   = S.customer ? 'flex'  : 'none';
+}
+
+function filterBrowse(type, el){
+  BROWSE_FILTER = type;
+  document.querySelectorAll('#c-browse-chips .c-chip').forEach(c=>c.classList.remove('on'));
+  if(el) el.classList.add('on');
+  renderHomeBrowse();
+}
+
+/* Posted a location today, or has one on today's schedule. */
+const truckIsOut = t => !!(t.display_location || t.display_hours);
+
+function renderHomeBrowse(){
+  const list = document.getElementById('c-browse-list');
+  if(!list) return;
+  const all  = S.browseTrucks || [];
+  const out  = all.filter(truckIsOut).length;
+
+  // Band stats — real counts only. No invented "trucks near you" numbers.
+  const stats = document.getElementById('c-band-stats');
+  if(stats){
+    stats.innerHTML = all.length
+      ? `<span class="c-stat"><b>${all.length}</b> truck${all.length!==1?'s':''}</span>`
+        + (out ? `<span class="c-stat"><span class="dot"></span><b>${out}</b> out today</span>` : '')
+      : '';
+  }
+
+  let rows = [...all];
+  if(BROWSE_FILTER==='live') rows = rows.filter(truckIsOut);
+  if(BROWSE_FILTER==='top')  rows = rows.filter(t=>t.avg_rating).sort((a,b)=>(b.avg_rating||0)-(a.avg_rating||0));
+  if(BROWSE_FILTER==='new')  rows = rows.filter(t=>(t.member_count||0) < 10);
+  // Out today first — that's what someone hungry right now is looking for.
+  if(BROWSE_FILTER==='all')  rows.sort((a,b)=>(truckIsOut(b)?1:0)-(truckIsOut(a)?1:0));
+
+  setText('c-browse-title', BROWSE_FILTER==='live' ? 'Out Today'
+                          : BROWSE_FILTER==='top'  ? 'Top Rated'
+                          : BROWSE_FILTER==='new'  ? 'New Trucks' : 'All Trucks');
+  setText('c-browse-count', rows.length ? rows.length+'' : '');
+
+  if(!rows.length){
+    const msg = all.length
+      ? (BROWSE_FILTER==='live' ? 'No truck has posted a spot yet today.'
+        : BROWSE_FILTER==='top' ? 'No ratings yet — be the first to leave one.'
+        : 'Nothing new right now.')
+      : 'No trucks yet. Check back soon — new ones join every week.';
+    list.innerHTML = `<div style="text-align:center;padding:38px 20px;color:var(--mu)">
+        <div style="font-size:40px;margin-bottom:10px">🌮</div>
+        <div style="font-size:14.5px;font-weight:800;line-height:1.55">${esc(msg)}</div>
+      </div>`;
+    return;
+  }
+
+  const joined = new Set((S.myTrucks||[]).map(t=>t.slug));
+  list.innerHTML = rows.map((t,i)=>{
+    const isOut = truckIsOut(t);
+    const loc   = t.display_location
+      ? `📍 ${esc(t.display_location)}${t.display_hours?' · '+esc(t.display_hours):''}`
+      : t.display_hours ? `🕐 ${esc(t.display_hours)}` : 'No spot posted today';
+    const img = t.profile_picture_url
+      ? `<img src="${escAttr(t.profile_picture_url)}" alt="" loading="lazy">`
+      : `<span class="bk-emoji">${esc(t.emoji||'🚚')}</span>`;
+    return `<div class="bk" style="animation-delay:${Math.min(i,8)*0.04}s" onclick="openTruckFromDiscover('${escJs(t.slug)}')">
+      <div class="bk-img">
+        ${img}
+        ${isOut ? '<div class="bk-live"><span class="dot"></span>Out today</div>' : ''}
+        ${joined.has(t.slug) ? '<div class="bk-tag">★ Yours</div>' : ''}
+        <div class="bk-name">${esc(t.truck_name)}</div>
+      </div>
+      <div class="bk-body">
+        <div class="bk-loc${isOut?'':' off'}">${loc}</div>
+        <div class="bk-meta">
+          ${t.avg_rating ? `<span class="bk-chip star">★ ${t.avg_rating}</span>` : ''}
+          <span class="bk-chip">👥 ${t.member_count||0}</span>
+          ${t.service_states ? `<span class="bk-chip">${esc(t.service_states)}</span>` : ''}
+          <span class="bk-go">View →</span>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 function filterTrucks(type, el){
-  document.querySelectorAll('.c-chip').forEach(c=>c.classList.remove('on'));
+  // Scoped to this chip row — there are two on the home screen now, and a
+  // global querySelectorAll would clear the browse chips as a side effect.
+  document.querySelectorAll('#c-filter-chips .c-chip').forEach(c=>c.classList.remove('on'));
   if(el) el.classList.add('on');
   renderMyTrucks(type);
 }
@@ -4637,13 +4820,43 @@ async function handleCustomerQRScanFile(input){
   }
 }
 
+/* Remembers how each script actually turned out.
+   The old version resolved whenever a <script> with that src existed — but a
+   FAILED load leaves the tag in the DOM too. So the first attempt showed
+   "couldn't load", and every attempt after that resolved instantly while the
+   library was still missing, leaving a blank grey box and no error. */
+const _scriptState = new Map();   // src -> 'ok' | 'fail'
+
 function loadScript(src){
+  if(_scriptState.get(src) === 'ok') return Promise.resolve();
   return new Promise((resolve, reject) => {
-    if(document.querySelector(`script[src="${src}"]`)){resolve();return;}
+    // Drop a previously failed tag so the retry is a real retry.
+    if(_scriptState.get(src) === 'fail'){
+      document.querySelectorAll(`script[src="${src}"]`).forEach(el=>el.remove());
+      _scriptState.delete(src);
+    }
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if(existing){   // in flight from another call — wait on that one
+      existing.addEventListener('load', ()=>{ _scriptState.set(src,'ok'); resolve(); });
+      existing.addEventListener('error',()=>{ _scriptState.set(src,'fail'); reject(new Error(src)); });
+      return;
+    }
     const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = reject;
+    s.src = src;
+    s.onload  = ()=>{ _scriptState.set(src,'ok');   resolve(); };
+    s.onerror = ()=>{ _scriptState.set(src,'fail'); reject(new Error(src)); };
     document.head.appendChild(s);
   });
+}
+
+/* Try each source in turn; succeed on the first that actually works. One CDN
+   being blocked on a phone's network shouldn't take the map down. */
+async function loadScriptAny(sources){
+  let last;
+  for(const src of sources){
+    try { await loadScript(src); return src; } catch(e){ last = e; }
+  }
+  throw last || new Error('no sources');
 }
 function loadCss(href){
   return new Promise((resolve) => {
@@ -4853,78 +5066,131 @@ function locateOnMap(){
   showLocModal();
 }
 
+/* The truck list under the map. Rendered from the API alone, so it survives
+   any map failure — and it's the part people actually act on. */
+function renderMapCards(trucks){
+  const el = document.getElementById('truck-map-cards');
+  if(!el) return;
+  if(!trucks.length){
+    el.innerHTML = `<div style="text-align:center;padding:30px 20px;color:var(--mu)">
+        <div style="font-size:36px;margin-bottom:9px">🚚</div>
+        <div style="font-size:14.5px;font-weight:800;line-height:1.55">No truck has posted a spot for today yet.</div>
+      </div>`;
+    return;
+  }
+  el.innerHTML = trucks.map(t=>{
+    const live    = t.status === 'live';
+    const badge   = live ? 'Here now' : 'Scheduled today';
+    const dirAddr = (t.location || '') + (t.location && t.region ? ', ' + t.region : '');
+    return `<div class="mk">
+      <div class="mk-top">
+        <div class="mk-emoji">${esc(t.emoji||'🚚')}</div>
+        <div style="flex:1;min-width:0">
+          <div class="mk-name">${esc(t.truck_name)}</div>
+          <div class="mk-badge ${live?'live':'sched'}"><span class="dot"></span>${badge}</div>
+        </div>
+      </div>
+      ${t.location ? `<div class="mk-loc">📍 ${esc(t.location)}</div>` : ''}
+      ${t.hours ? `<div class="mk-hrs">🕒 ${esc(t.hours)}</div>` : ''}
+      <div class="mk-acts">
+        <button class="mk-btn primary" onclick="openTruckFromDiscover('${escJs(t.slug)}')">View truck</button>
+        ${dirAddr ? `<button class="mk-btn ghost" onclick="openInMaps('${escJs(dirAddr)}')">🗺️ Directions</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* Draws the "map is unavailable" state. The list of trucks underneath is the
+   part that actually matters, so we say so instead of leaving a grey void. */
+function _mapFailed(mapEl, msg){
+  if(!mapEl) return;
+  mapEl.style.height = 'auto';
+  mapEl.style.minHeight = '0';
+  mapEl.innerHTML = `<div style="padding:26px 22px;text-align:center">
+      <div style="font-size:34px;margin-bottom:8px">🗺️</div>
+      <div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px">Map couldn't load</div>
+      <div style="font-size:13px;color:var(--mu);font-weight:700;line-height:1.55;margin-bottom:14px">${esc(msg)}</div>
+      <button onclick="openTruckMap()" style="background:var(--brand);color:#fff;border:none;border-radius:12px;padding:11px 20px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer">Try again</button>
+      <div style="font-size:12.5px;color:var(--mu);font-weight:700;margin-top:12px">Every truck out today is still listed below.</div>
+    </div>`;
+}
+
 async function openTruckMap(){
   goC('s-c-map');
   const mapEl = document.getElementById('truck-map');
   const noteEl = document.getElementById('truck-map-note');
   if(noteEl) noteEl.textContent = '';
+  if(!mapEl) return;
+  mapEl.style.height = '';
+  mapEl.style.minHeight = '';
   mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#8a8a8a;font-weight:700">Loading map…</div>';
 
+  // The truck list never depends on Leaflet — load and draw it first so a CDN
+  // problem costs pins, not the whole screen.
+  const r      = await apiGet('/api/trucks/map');
+  const trucks = (r.ok && r.data?.data) || [];
+  renderMapCards(trucks);
+  // No mention of pins yet — the map may not come up, and telling someone to
+  // tap a pin that isn't there is worse than saying nothing.
+  if(noteEl){
+    noteEl.textContent = trucks.length
+      ? 'Every truck operating today.'
+      : 'No trucks have posted a location for today yet.';
+  }
+
+  loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
   try {
-    await loadCss('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-    await loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js');
+    await loadScriptAny([
+      'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js',
+      'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
+    ]);
   } catch(e){
-    mapEl.innerHTML = '<div style="padding:28px;text-align:center;color:#8a8a8a;font-weight:700">Map couldn\'t load — check your connection and try again.</div>';
+    _mapFailed(mapEl, "We couldn't reach the map service from this connection.");
+    return;
+  }
+  // Belt and braces: a script can load from cache yet still not define L.
+  if(typeof L === 'undefined' || !L.map){
+    _mapFailed(mapEl, 'The map library loaded but did not start up.');
     return;
   }
 
-  if(_truckMap){ try { _truckMap.remove(); } catch(e){} _truckMap = null; }
-  mapEl.innerHTML = '';
-  _truckMap = L.map('truck-map', { zoomControl: true }).setView([39.5, -98.35], 4); // US
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
-  }).addTo(_truckMap);
+  try {
+    if(_truckMap){ try { _truckMap.remove(); } catch(e){} _truckMap = null; }
+    mapEl.innerHTML = '';
+    _truckMap = L.map('truck-map', { zoomControl: true }).setView([39.5, -98.35], 4); // US
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
+    }).addTo(_truckMap);
+  } catch(e){
+    console.error('[MAP] init failed', e);
+    _mapFailed(mapEl, 'Something went wrong starting the map.');
+    return;
+  }
+  // The container is sized by CSS after this runs; without it Leaflet renders
+  // into a zero-size box and you get grey.
   setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
+  setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 900);
+  if(noteEl && trucks.length) noteEl.textContent = 'Tap a pin or a card for details.';
 
-  const r = await apiGet('/api/trucks/map');
-  const trucks = (r.ok && r.data?.data) || [];
   const pts = [];
-  const cards = [];
   for(const t of trucks){
     const color = t.status === 'live' ? '#22c55e' : '#f59e0b';
     const badge = t.status === 'live' ? '🟢 Here now' : '🟡 Scheduled today';
     const coords = await geocodeTruck(t);
-    if(coords){
-      const html = `<div style="min-width:150px">
-        <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
-        <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
-        ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
-        ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
-        <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
-      </div>`;
-      L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
-        .addTo(_truckMap).bindPopup(html);
-      pts.push([coords.lat, coords.lng]);
-    }
-    // Card for every operating truck — reliable even if a pin can't geocode.
-    const dirAddr = (t.location || '') + (t.location && t.region ? ', ' + t.region : '');
-    cards.push(`<div style="background:#fff;border:1.5px solid var(--b2);border-radius:14px;padding:13px 15px;box-shadow:var(--sh1)">
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-size:24px;flex-shrink:0">${esc(t.emoji)}</div>
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:800;font-size:15px;color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.truck_name)}</div>
-          <div style="font-size:12px;color:var(--mu);margin-top:1px">${badge}</div>
-        </div>
-      </div>
-      ${t.location ? `<div style="font-size:12.5px;color:var(--tx);margin-top:8px">📍 ${esc(t.location)}</div>` : ''}
-      ${t.hours ? `<div style="font-size:12px;color:var(--mu);margin-top:3px">🕒 ${esc(t.hours)}</div>` : ''}
-      <div style="display:flex;gap:8px;margin-top:11px">
-        <button onclick="joinFromDiscover('${escJs(t.slug)}')" style="flex:1;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;border:none;border-radius:10px;padding:9px;font-size:13px;font-weight:800;font-family:var(--fb);cursor:pointer">View truck</button>
-        ${dirAddr ? `<button onclick="openInMaps('${escJs(dirAddr)}')" style="background:#E3F2FD;color:#1565C0;border:1.5px solid #90CAF9;border-radius:10px;padding:9px 14px;font-size:13px;font-weight:800;font-family:var(--fb);cursor:pointer">🗺️ Directions</button>` : ''}
-      </div>
-    </div>`);
+    if(!coords) continue;                 // no pin, but the card below still shows
+    const html = `<div style="min-width:150px">
+      <div style="font-weight:800;font-size:14px">${esc(t.emoji)} ${esc(t.truck_name)}</div>
+      <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
+      ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
+      ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
+      <button onclick="openTruckFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
+    </div>`;
+    L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
+      .addTo(_truckMap).bindPopup(html);
+    pts.push([coords.lat, coords.lng]);
   }
 
-  const cardsEl = document.getElementById('truck-map-cards');
-  if(cardsEl){
-    cardsEl.innerHTML = cards.length ? cards.join('') : '';
-  }
-
-  if(noteEl){
-    noteEl.textContent = trucks.length
-      ? 'Showing trucks operating today. Tap a pin or card for details.'
-      : 'No trucks have posted a location for today yet.';
-  }
   // Center on the user if we already have a precise fix this session; otherwise
   // frame the trucks and prompt for location (once per session). We no longer
   // guess from IP — that was landing people in the wrong state.
@@ -6134,15 +6400,26 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
 (function init(){
   S.prizes=[...DEFAULT_PRIZES];
   S.rewards=[...DEFAULT_REWARDS];
-  // Customers arriving from the "Get the App" page carry ?c=1 — they must land
-  // on the customer side, NEVER the vendor login. A truck's poster QR also
-  // carries ?truck=<slug>, which auto-joins that truck once they're signed in.
-  let wantCustomer = false;
+  // The app opens on the CUSTOMER side. Most people arriving here are hungry,
+  // not signing up a food truck, and a login screen was turning them away.
+  // Vendors come in via ?v=1 (every "Start Free Trial" link on the website)
+  // or the "Food truck owner" link at the bottom of the browse screen — and a
+  // vendor with a saved session is restored straight to their dashboard.
+  let wantVendor = false;
   try {
     const p = new URLSearchParams(location.search);
     const tp = p.get('truck');
     if(tp) S._pendingJoin = tp.toLowerCase();
-    wantCustomer = p.get('c')==='1' || p.get('mode')==='customer' || !!tp;
+    wantVendor = p.get('v')==='1' || p.get('mode')==='vendor';
+    // A vendor session is never restored from storage on purpose — a truck
+    // owner logs in fresh every time. But their phone shouldn't forget WHICH
+    // app it is: if they've ever signed in as a vendor here, open on their
+    // login instead of a customer browse screen they have no use for.
+    if(!wantVendor && !S.customer && localStorage.getItem('tl_last_side')==='vendor'){
+      wantVendor = true;
+    }
+    // ?c=1 (the customer landing page) always wins, and so does a poster QR.
+    if(p.get('c')==='1' || p.get('mode')==='customer' || tp) wantVendor = false;
   } catch(e){}
 
   if(S.vendorToken&&S.vendor){
@@ -6155,20 +6432,17 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
     requestPushPermission();
     updateNotifBell();
     if(S._pendingJoin) maybeJoinPendingTruck();
-  } else if(wantCustomer){
-    // New visitor from the customer landing page. They get the app, not a
-    // signup wall — finding good food nearby costs nothing. A poster QR
-    // (?truck=slug) opens that truck's page; joining it is their call.
-    if(S._pendingJoin){
-      S.cScreen='s-c-truck'; setMode('customer');
-      previewTruckBySlug(S._pendingJoin);
-    } else {
-      S.cScreen='s-c-discover'; setMode('customer');
-    }
-  } else {
-    // Default (vendor) entry.
+  } else if(wantVendor){
+    // Came from a "for food trucks" link.
     S.mode='vendor';
     show('s-v-login');renderNav([],'' );
+  } else if(S._pendingJoin){
+    // Scanned a truck's poster QR — open that truck. Joining is their call.
+    S.cScreen='s-c-truck'; setMode('customer');
+    previewTruckBySlug(S._pendingJoin);
+  } else {
+    // Everyone else: straight to the trucks. No account, no wall.
+    S.cScreen='s-c-home'; setMode('customer');
   }
   drawWheel(0);
   // Keep the bell badge fresh while the app stays open. updateNotifBell()

@@ -258,6 +258,134 @@ body:has(.overlay.open) .rfsh-btn{display:none}
 .c-chip:active{transform:scale(.95)}
 .c-chip.on{background:linear-gradient(135deg,var(--brand) 0%,#FF8A50 100%);border-color:transparent;color:white;box-shadow:0 3px 12px rgba(255,87,34,.32)}
 
+/* ── CUSTOMER HOME — browse-first header ──────────────────────
+   One dark band at the top, torn along the bottom with the same
+   brushstroke as the nav bar, and everything below it stays warm.
+   Deliberately the only black on the screen. */
+.c-band{position:relative;background:#1A1A1A;color:#fff;margin:0 -20px 30px;padding:20px 20px 16px;z-index:1}
+.c-band::after{content:'';position:absolute;top:100%;left:-2px;right:-2px;height:26px;z-index:2;
+  background:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 434 30' preserveAspectRatio='none'><rect x='0' y='16' width='434' height='14' fill='%231A1A1A'/><path d='M0,30 L0,14 C30,12 62,16 94,13 C126,10 158,15 190,12 C222,9 254,14 286,11 C318,8 350,13 382,10 C402,8 420,12 434,10 L434,30 Z' fill='%231A1A1A'/><path d='M-2,16 C26,13 54,18 82,14 C108,10 134,16 160,13' stroke='%231A1A1A' stroke-width='11' fill='none' stroke-linecap='round'/><path d='M110,14 C140,10 168,16 196,12 C222,8 248,14 274,11' stroke='%231A1A1A' stroke-width='10' fill='none' stroke-linecap='round'/><path d='M230,15 C260,11 290,17 320,13 C348,9 375,14 434,11' stroke='%231A1A1A' stroke-width='11' fill='none' stroke-linecap='round'/><path d='M40,11 C72,7 104,13 132,10 C155,7 174,11 194,9' stroke='%231A1A1A' stroke-width='7' fill='none' stroke-linecap='round'/><path d='M290,10 C318,6 348,12 376,9 C400,6 420,10 434,8' stroke='%231A1A1A' stroke-width='7' fill='none' stroke-linecap='round'/></svg>") no-repeat;
+  background-size:100% 100%;transform:scaleY(-1)}
+/* warm glow so the band reads as charcoal, not a black hole */
+.c-band::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 90% at 88% 8%,rgba(255,87,34,.34) 0%,transparent 60%),
+             radial-gradient(80% 70% at 4% 96%,rgba(249,168,37,.16) 0%,transparent 62%)}
+.c-band>*{position:relative;z-index:1}
+.c-band-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}
+.c-band-eyebrow{font-size:10.5px;font-weight:900;letter-spacing:.18em;text-transform:uppercase;color:var(--brand2);margin-bottom:5px}
+.c-band-title{font-family:var(--fd);font-weight:900;font-size:26px;line-height:1.05;color:#fff;letter-spacing:-.4px}
+.c-band-title em{font-style:normal;color:var(--brand)}
+.c-band-sub{font-size:12.5px;font-weight:700;color:rgba(255,255,255,.62);margin-top:6px;line-height:1.45}
+.c-band-row{display:flex;gap:8px;align-items:center;margin-bottom:13px;flex-wrap:wrap}
+.c-stat{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);
+  border-radius:99px;padding:6px 12px;font-size:11.5px;font-weight:800;color:rgba(255,255,255,.9);white-space:nowrap}
+.c-stat b{color:#fff;font-weight:900}
+.c-stat .dot{width:7px;height:7px;border-radius:50%;background:#4ADE80;box-shadow:0 0 0 3px rgba(74,222,128,.22);flex-shrink:0}
+.c-band-map{margin-left:auto;display:inline-flex;align-items:center;gap:6px;background:var(--brand);color:#fff;border:none;
+  border-radius:99px;padding:8px 14px;font-family:var(--fb);font-size:12px;font-weight:900;cursor:pointer;white-space:nowrap;
+  box-shadow:0 4px 14px rgba(255,87,34,.42)}
+.c-band-map:active{transform:scale(.95)}
+/* chips sitting on the dark band */
+.c-band .c-chips{margin-bottom:0}
+.c-band .c-chip{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16);color:rgba(255,255,255,.66);box-shadow:none}
+.c-band .c-chip.on{background:linear-gradient(135deg,var(--brand) 0%,#FF8A50 100%);border-color:transparent;color:#fff;box-shadow:0 3px 12px rgba(255,87,34,.4)}
+
+/* section heading with the orange tick */
+.sec-head{display:flex;align-items:center;gap:9px;margin:0 0 13px}
+.sec-head .bar{width:4px;height:18px;border-radius:99px;background:linear-gradient(180deg,var(--brand),#FF8A50);flex-shrink:0}
+.sec-head .t{font-family:var(--fd);font-size:17px;font-weight:900;color:var(--tx);text-transform:uppercase;letter-spacing:.4px}
+.sec-head .n{margin-left:auto;font-size:11px;font-weight:900;color:var(--mu)}
+
+/* ── browse card — the all-trucks feed ── */
+.bk{position:relative;background:#fff;border:1.5px solid var(--b2);border-radius:20px;overflow:hidden;margin-bottom:14px;
+  cursor:pointer;box-shadow:0 3px 18px rgba(180,100,40,.09);transition:transform .15s;animation:fadeUp .35s ease both}
+.bk:active{transform:scale(.985)}
+/* No photo yet? A warm wash still reads as appetising, where flat grey
+   reads as broken. Trucks with a real photo cover it entirely. */
+.bk-img{position:relative;height:136px;display:flex;align-items:center;justify-content:center;overflow:hidden;
+  background:linear-gradient(140deg,#FFD9A8 0%,#FFB067 42%,#FF8A50 100%)}
+.bk-img img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.bk-emoji{font-size:60px;position:relative;z-index:1;filter:drop-shadow(0 6px 14px rgba(0,0,0,.22))}
+/* dark wash so white type stays legible over any photo */
+.bk-img::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(26,26,26,0) 34%,rgba(26,26,26,.82) 100%)}
+.bk-name{position:absolute;left:14px;right:14px;bottom:11px;z-index:2;font-family:var(--fd);font-weight:900;font-size:19px;
+  color:#fff;line-height:1.15;text-shadow:0 2px 10px rgba(0,0,0,.5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bk-live{position:absolute;top:11px;left:11px;z-index:2;display:inline-flex;align-items:center;gap:6px;
+  background:rgba(26,26,26,.82);border:1px solid rgba(255,255,255,.2);border-radius:99px;padding:5px 11px;
+  font-size:10px;font-weight:900;letter-spacing:.09em;color:#fff;text-transform:uppercase;backdrop-filter:blur(4px)}
+.bk-live .dot{width:7px;height:7px;border-radius:50%;background:#4ADE80;box-shadow:0 0 0 3px rgba(74,222,128,.3)}
+.bk-tag{position:absolute;top:11px;right:11px;z-index:2;background:rgba(249,168,37,.95);color:#1A1A1A;border-radius:99px;
+  padding:5px 10px;font-size:10.5px;font-weight:900;letter-spacing:.05em}
+.bk-body{padding:12px 14px 13px}
+.bk-loc{font-size:13px;font-weight:800;color:var(--tx);line-height:1.4;margin-bottom:8px}
+.bk-loc.off{color:var(--mu);font-weight:700}
+.bk-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bk-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;color:var(--mu);
+  background:var(--s2);border-radius:99px;padding:4px 10px}
+.bk-chip.star{color:#B26A00;background:rgba(249,168,37,.16)}
+.bk-go{margin-left:auto;font-size:11.5px;font-weight:900;color:var(--brand);text-transform:uppercase;letter-spacing:.05em}
+
+/* ── guest sign-up card ── */
+.c-join{position:relative;overflow:hidden;background:#1A1A1A;color:#fff;border-radius:22px;padding:20px;margin-bottom:16px;
+  box-shadow:0 8px 26px rgba(26,26,26,.24)}
+.c-join::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 100% at 92% 0%,rgba(255,87,34,.42) 0%,transparent 62%)}
+.c-join>*{position:relative;z-index:1}
+.c-join h3{font-family:var(--fd);font-size:20px;font-weight:900;line-height:1.15;margin-bottom:7px}
+.c-join p{font-size:13.5px;line-height:1.55;color:rgba(255,255,255,.72);font-weight:700;margin-bottom:14px}
+.c-join-perks{display:grid;gap:9px;margin-bottom:16px}
+.c-join-perk{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:800;color:rgba(255,255,255,.94)}
+.c-join-perk i{font-style:normal;width:30px;height:30px;flex-shrink:0;border-radius:9px;background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-size:15px}
+.c-join .btn{width:100%}
+.c-join-fine{font-size:11.5px;font-weight:800;color:rgba(255,255,255,.5);text-align:center;margin-top:10px}
+.c-join-fine span{color:var(--brand2);cursor:pointer;text-decoration:underline}
+
+/* ── TRUCK MAP ────────────────────────────────────────────── */
+.mk-back{width:36px;height:36px;flex-shrink:0;border-radius:11px;background:rgba(255,255,255,.1);
+  border:1px solid rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:#fff;cursor:pointer}
+.mk-back:active{background:rgba(255,255,255,.2)}
+.mk-search{display:flex;gap:8px;margin-bottom:13px}
+.mk-search input{flex:1;min-width:0;background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.2);
+  border-radius:13px;padding:12px 14px;font-size:16px;font-family:var(--fb);font-weight:700;color:#fff;outline:none}
+.mk-search input::placeholder{color:rgba(255,255,255,.45)}
+.mk-search input:focus{border-color:var(--brand);background:rgba(255,255,255,.14)}
+.mk-search button{flex-shrink:0;background:var(--brand);color:#fff;border:none;border-radius:13px;padding:12px 16px;
+  font-size:16px;cursor:pointer;box-shadow:0 4px 14px rgba(255,87,34,.42)}
+.mk-search button:active{transform:scale(.95)}
+.mk-pill{background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:99px;
+  padding:7px 13px;font-family:var(--fb);font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap}
+.mk-pill:active{background:rgba(255,255,255,.2)}
+.mk-key{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:800;color:rgba(255,255,255,.62);white-space:nowrap}
+.mk-key .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.mk-key .dot.live{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.25)}
+.mk-key .dot.sched{background:#f59e0b;box-shadow:0 0 0 3px rgba(245,158,11,.25)}
+#truck-map{width:100%;height:52vh;min-height:320px;border-radius:20px;overflow:hidden;background:#e9eef2;
+  border:1.5px solid var(--b2);box-shadow:0 4px 20px rgba(180,100,40,.1)}
+
+/* truck cards under the map */
+.mk{background:#fff;border:1.5px solid var(--b2);border-radius:18px;padding:14px 16px;box-shadow:0 3px 16px rgba(180,100,40,.08)}
+.mk-top{display:flex;align-items:center;gap:12px}
+.mk-emoji{width:48px;height:48px;flex-shrink:0;border-radius:14px;font-size:26px;display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(140deg,#FFD9A8,#FF8A50)}
+.mk-name{font-family:var(--fd);font-weight:900;font-size:16px;color:var(--tx);line-height:1.2;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mk-badge{display:inline-flex;align-items:center;gap:6px;margin-top:4px;font-size:11px;font-weight:900;
+  text-transform:uppercase;letter-spacing:.05em;border-radius:99px;padding:3px 9px}
+.mk-badge .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.mk-badge.live{background:rgba(34,197,94,.14);color:#15803D}
+.mk-badge.live .dot{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.22)}
+.mk-badge.sched{background:rgba(245,158,11,.16);color:#B26A00}
+.mk-badge.sched .dot{background:#f59e0b}
+.mk-loc{font-size:13.5px;font-weight:800;color:var(--tx);margin-top:11px;line-height:1.45}
+.mk-hrs{font-size:12.5px;font-weight:700;color:var(--mu);margin-top:3px}
+.mk-acts{display:flex;gap:8px;margin-top:12px}
+.mk-btn{border:none;border-radius:12px;padding:11px 14px;font-family:var(--fb);font-size:13.5px;font-weight:900;cursor:pointer}
+.mk-btn:active{transform:scale(.96)}
+.mk-btn.primary{flex:1;background:linear-gradient(135deg,var(--brand),#FF7040);color:#fff;box-shadow:0 4px 14px rgba(255,87,34,.32)}
+.mk-btn.ghost{background:var(--s2);color:var(--tx);border:1.5px solid var(--b2)}
+
 /* CUSTOMER QR */
 .my-qr-wrap{background:white;border-radius:20px;padding:20px;display:inline-flex;flex-direction:column;align-items:center;gap:10px;border:3px solid var(--b2);box-shadow:var(--sh3)}
 .my-qr-id{font-size:14px;color:var(--tx);font-weight:800;letter-spacing:2px;font-family:monospace}
