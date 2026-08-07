@@ -34,6 +34,12 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .topbar:not(.auth-mode) .mode-tog{display:none}
 .topbar.auth-mode{flex-direction:column;align-items:center;justify-content:center;padding:calc(3px + env(safe-area-inset-top,0px)) 18px 3px;gap:0;box-shadow:none;background:var(--brand)}
 .topbar.auth-mode .tl-logo,.topbar.auth-mode .tb-menu{display:none}
+/* Log in — the only account prompt a browsing guest sees. Sits next to the
+   hamburger; JS decides when it's visible. Never on the auth screens, which
+   already ARE the login screen. */
+#tb-login{margin-left:auto;background:var(--brand);color:#fff;border:none;border-radius:99px;padding:8px 16px;font-family:var(--fb);font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;flex-shrink:0;-webkit-tap-highlight-color:transparent;box-shadow:0 3px 10px rgba(255,87,34,.28)}
+#tb-login:active{transform:scale(.96)}
+.topbar.auth-mode #tb-login{display:none !important}
 .mode-tog{display:flex;background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);border-radius:99px;padding:3px;gap:2px}
 .mb{padding:4px 14px;border-radius:99px;font-size:11px;font-weight:700;border:none;cursor:pointer;font-family:var(--fb);transition:all .2s;background:transparent;color:rgba(255,255,255,.8);white-space:nowrap}
 .mb.on{background:white;color:var(--brand);box-shadow:var(--sh1)}
@@ -139,6 +145,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--tx);font-
 .rfsh-btn{position:fixed;bottom:calc(var(--nav) + 16px);right:16px;width:48px;height:48px;background:var(--brand);color:white;border:none;border-radius:50%;font-size:22px;cursor:pointer;box-shadow:0 4px 20px rgba(255,87,34,.5);z-index:400;display:none;align-items:center;justify-content:center;transition:transform .15s}
 .rfsh-btn:active{transform:scale(.88)}
 .rfsh-btn.show{display:flex}
+/* The refresh button sits above the sheets (z 400 vs 200), so it floated over
+   every bottom sheet in the app. Where :has() isn't supported this simply
+   behaves as it did before. */
+body:has(.overlay.open) .rfsh-btn{display:none}
 
 /* CONFETTI */
 .cc-wrap{position:fixed;inset:0;pointer-events:none;z-index:400;overflow:hidden}
