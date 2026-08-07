@@ -1833,7 +1833,7 @@
           </div>
           <div class="c-band-row" style="margin-bottom:0">
             <button class="mk-pill" onclick="locateOnMap()">📍 My location</button>
-            <button class="mk-pill" onclick="openTruckMap()">↻ Refresh</button>
+            <button class="mk-pill" onclick="loadTruckMap()">↻ Refresh</button>
             <span class="mk-key"><span class="dot live"></span>Here now</span>
             <span class="mk-key"><span class="dot sched"></span>Scheduled</span>
           </div>
@@ -2527,6 +2527,7 @@ function goC(id){
   if(!S.customer && !GUEST_SCREENS.has(id)) id = 's-c-home';
   S.cScreen=id; show(id); renderNav(cnav(),id);
   if(id==='s-c-home'){     updateNotifBell(); loadHomeBrowse(); }
+  if(id==='s-c-map')       loadTruckMap();
   if(id==='s-c-notifs')    loadCustomerNotifs();
   if(id==='s-c-feed')      loadCustomerFeed();
   if(id==='s-c-leaderboard') loadLeaderboard();
@@ -2577,7 +2578,6 @@ async function vendorLogin(){
   // Store token first so subsequent API calls work
   S.vendorToken=r.data.data.token;
   localStorage.setItem('tl_vendor_token',S.vendorToken);
-  localStorage.setItem('tl_last_side','vendor');   // this phone belongs to a truck
 
   // Fetch full vendor object (includes vendor_number and all new fields)
   const me=await apiGet('/api/vendor/me');
@@ -2767,7 +2767,6 @@ async function completeFreeSignup(){
     S.vendorToken = doneRes.data.data.token;
     S.vendor      = doneRes.data.data.vendor;
     localStorage.setItem('tl_vendor_token', S.vendorToken);
-    localStorage.setItem('tl_last_side','vendor');
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 You\'re in — your account is free for life!');
@@ -2942,7 +2941,6 @@ async function submitCardSetup(){
     S.vendorToken = doneRes.data.data.token;
     S.vendor      = doneRes.data.data.vendor;
     localStorage.setItem('tl_vendor_token', S.vendorToken);
-    localStorage.setItem('tl_last_side','vendor');
     localStorage.setItem('tl_vendor', JSON.stringify(S.vendor));
     landOnDashboard();
     showToast('🎉 Welcome! Your ' + ((S.promoInfo && S.promoInfo.free_days) || TRIAL_DAYS)
@@ -4242,7 +4240,6 @@ async function customerSignup(){
   S.customer={...r.data.data.customer, token: ctoken};
   localStorage.setItem('tl_customer', JSON.stringify(S.customer));
   localStorage.setItem('tl_ctoken', ctoken);
-  localStorage.setItem('tl_last_side','customer');
   S.cScreen='s-c-home'; show('s-c-home'); renderNav(CNAV,'s-c-home');
   renderMyTrucks();
   requestPushPermission();
@@ -4267,7 +4264,6 @@ async function customerLogin(){
   S.customer={...r.data.data.customer, token: ctoken};
   localStorage.setItem('tl_customer', JSON.stringify(S.customer));
   localStorage.setItem('tl_ctoken', ctoken);
-  localStorage.setItem('tl_last_side','customer');
   S.myTrucks=r.data.data.trucks||[];
   localStorage.setItem('tl_my_trucks',JSON.stringify(S.myTrucks));
   if(document.getElementById('c-remember-me')?.checked){
@@ -5139,13 +5135,19 @@ function _mapFailed(mapEl, msg){
       <div style="font-size:34px;margin-bottom:8px">🗺️</div>
       <div style="font-size:15px;font-weight:900;color:var(--tx);margin-bottom:6px">Map couldn't load</div>
       <div style="font-size:13px;color:var(--mu);font-weight:700;line-height:1.55;margin-bottom:14px">${esc(msg)}</div>
-      <button onclick="openTruckMap()" style="background:var(--brand);color:#fff;border:none;border-radius:12px;padding:11px 20px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer">Try again</button>
+      <button onclick="loadTruckMap()" style="background:var(--brand);color:#fff;border:none;border-radius:12px;padding:11px 20px;font-size:14px;font-weight:800;font-family:var(--fb);cursor:pointer">Try again</button>
       <div style="font-size:12.5px;color:var(--mu);font-weight:700;margin-top:12px">Every truck out today is still listed below.</div>
     </div>`;
 }
 
-async function openTruckMap(){
-  goC('s-c-map');
+/* Navigate to the map screen. goC() then starts it — which is what the
+   bottom-nav Map tab was missing: it showed the screen and never loaded
+   anything, so you got a grey box until you hit Refresh. */
+function openTruckMap(){ goC('s-c-map'); }
+
+/* Actually build the map. Called by goC on arrival, and by Refresh / Try
+   again to rebuild it in place. */
+async function loadTruckMap(){
   const mapEl = document.getElementById('truck-map');
   const noteEl = document.getElementById('truck-map-note');
   if(noteEl) noteEl.textContent = '';
@@ -6447,16 +6449,12 @@ document.addEventListener('message', onNativeMessage); // iOS WebView
     const p = new URLSearchParams(location.search);
     const tp = p.get('truck');
     if(tp) S._pendingJoin = tp.toLowerCase();
+    // ONLY an explicit ?v=1 opens the vendor login. The app previously also
+    // remembered that a phone had signed in as a vendor and reopened there,
+    // which meant /app landed on a login screen — the exact thing this was
+    // meant to stop. Vendors come in through ?v=1 (every website CTA) or the
+    // "Run a food truck? Sign in here" link at the bottom of the browse page.
     wantVendor = p.get('v')==='1' || p.get('mode')==='vendor';
-    // A vendor session is never restored from storage on purpose — a truck
-    // owner logs in fresh every time. But their phone shouldn't forget WHICH
-    // app it is: if they've ever signed in as a vendor here, open on their
-    // login instead of a customer browse screen they have no use for.
-    if(!wantVendor && !S.customer && localStorage.getItem('tl_last_side')==='vendor'){
-      wantVendor = true;
-    }
-    // ?c=1 (the customer landing page) always wins, and so does a poster QR.
-    if(p.get('c')==='1' || p.get('mode')==='customer' || tp) wantVendor = false;
   } catch(e){}
 
   if(S.vendorToken&&S.vendor){
