@@ -1808,68 +1808,6 @@
       </div>
     </div>
 
-    <!-- CUSTOMER: DISCOVER TRUCKS -->
-    <div class="screen" id="s-c-discover">
-      <div class="sh sh-row"><div class="back-btn" id="disc-back" onclick="goC('s-c-home')">←</div><div><h1>🗺️ Discover Trucks</h1><p>Find food trucks near you — no account needed</p></div></div>
-      <div class="bp">
-        <button onclick="openTruckMap()" style="width:100%;background:linear-gradient(135deg,#FF5722,#ff7d4d);color:#fff;border:none;border-radius:12px;padding:13px;font-weight:800;font-size:15px;cursor:pointer;font-family:var(--fb);margin-bottom:14px;box-shadow:0 6px 16px rgba(255,87,34,.28)">📍 View Trucks on Map</button>
-        <select id="discover-state-filter" onchange="loadDiscover()" style="width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid var(--b2);background:white;font-family:var(--fb);font-size:14px;color:var(--tx);margin-bottom:14px;-webkit-appearance:none;appearance:none;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23FF5722%22 stroke-width=%222.5%22><polyline points=%226 9 12 15 18 9%22/></svg>');background-repeat:no-repeat;background-position:right 14px center;padding-right:36px">
-          <option value="">🗺️ All States</option>
-          <option value="AL">Alabama</option>
-          <option value="AK">Alaska</option>
-          <option value="AZ">Arizona</option>
-          <option value="AR">Arkansas</option>
-          <option value="CA">California</option>
-          <option value="CO">Colorado</option>
-          <option value="CT">Connecticut</option>
-          <option value="DE">Delaware</option>
-          <option value="FL">Florida</option>
-          <option value="GA">Georgia</option>
-          <option value="HI">Hawaii</option>
-          <option value="ID">Idaho</option>
-          <option value="IL">Illinois</option>
-          <option value="IN">Indiana</option>
-          <option value="IA">Iowa</option>
-          <option value="KS">Kansas</option>
-          <option value="KY">Kentucky</option>
-          <option value="LA">Louisiana</option>
-          <option value="ME">Maine</option>
-          <option value="MD">Maryland</option>
-          <option value="MA">Massachusetts</option>
-          <option value="MI">Michigan</option>
-          <option value="MN">Minnesota</option>
-          <option value="MS">Mississippi</option>
-          <option value="MO">Missouri</option>
-          <option value="MT">Montana</option>
-          <option value="NE">Nebraska</option>
-          <option value="NV">Nevada</option>
-          <option value="NH">New Hampshire</option>
-          <option value="NJ">New Jersey</option>
-          <option value="NM">New Mexico</option>
-          <option value="NY">New York</option>
-          <option value="NC">North Carolina</option>
-          <option value="ND">North Dakota</option>
-          <option value="OH">Ohio</option>
-          <option value="OK">Oklahoma</option>
-          <option value="OR">Oregon</option>
-          <option value="PA">Pennsylvania</option>
-          <option value="RI">Rhode Island</option>
-          <option value="SC">South Carolina</option>
-          <option value="SD">South Dakota</option>
-          <option value="TN">Tennessee</option>
-          <option value="TX">Texas</option>
-          <option value="UT">Utah</option>
-          <option value="VT">Vermont</option>
-          <option value="VA">Virginia</option>
-          <option value="WA">Washington</option>
-          <option value="WV">West Virginia</option>
-          <option value="WI">Wisconsin</option>
-          <option value="WY">Wyoming</option>
-        </select>
-        <div id="discover-list"><div style="text-align:center;padding:40px;color:var(--mu)"><div style="font-size:40px;margin-bottom:12px">🔍</div><div style="font-size:15px;font-weight:700">Loading trucks...</div></div></div>
-      </div>
-    </div>
-
     <!-- CUSTOMER: TRUCK MAP -->
     <div class="screen" id="s-c-map">
       <div class="bp" style="padding-top:0">
@@ -2380,13 +2318,13 @@ const VNAV = [
   {id:'s-v-customers',icon:'👥',label:'Members'},
   {id:'s-v-settings',icon:'⚙️',label:'Settings'}
 ];
-const CNAV = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-feed',icon:'📰',label:'Feed'},{id:'s-c-discover',icon:'🗺️',label:'Discover'},{id:'s-c-history',icon:'📋',label:'History'},{id:'s-c-profile',icon:'👤',label:'Profile'}];
+const CNAV = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-feed',icon:'📰',label:'Feed'},{id:'s-c-history',icon:'📋',label:'History'},{id:'s-c-profile',icon:'👤',label:'Profile'}];
 /* Guests get the two tabs that work without an account, plus a way in.
    Home/Feed/History are all "your trucks", which a guest doesn't have. */
-const CNAV_GUEST = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-discover',icon:'🗺️',label:'Discover'},{id:'s-c-map',icon:'📍',label:'Map'},{id:'s-c-login',icon:'👤',label:'Log in'}];
+const CNAV_GUEST = [{id:'s-c-home',icon:'🏠',label:'Home'},{id:'s-c-map',icon:'📍',label:'Map'},{id:'s-c-login',icon:'👤',label:'Log in'}];
 const cnav = () => S.customer ? CNAV : CNAV_GUEST;
 /* Customer screens a signed-out visitor is allowed to sit on. */
-const GUEST_SCREENS = new Set(['s-c-home','s-c-discover','s-c-map','s-c-truck','s-c-login','s-c-signup','s-c-forgot','s-c-reset']);
+const GUEST_SCREENS = new Set(['s-c-home','s-c-map','s-c-truck','s-c-login','s-c-signup','s-c-forgot','s-c-reset']);
 
 /* ════════════════════════════════════
    API HELPERS
@@ -2543,7 +2481,7 @@ function setMode(mode){
       renderMyTrucks(); loadHomeBrowse();
     } else {
       // Signed out is a first-class way to use the customer side. Land on
-      // Discover — finding food shouldn't cost you an account — and let the
+      // Home — finding food shouldn't cost you an account — and let the
       // Log in button in the corner be the only nudge.
       // goC handles the redirect, the nav, the per-screen loader and the
       // refresh button — no reason to repeat any of it here.
@@ -2581,13 +2519,12 @@ function goV(id){
 
 function goC(id){
   // A signed-out visitor who somehow lands on a members-only screen goes to
-  // Discover rather than a dead end.
+  // Home rather than a dead end.
   if(!S.customer && !GUEST_SCREENS.has(id)) id = 's-c-home';
   S.cScreen=id; show(id); renderNav(cnav(),id);
   if(id==='s-c-home'){     updateNotifBell(); loadHomeBrowse(); }
   if(id==='s-c-notifs')    loadCustomerNotifs();
   if(id==='s-c-feed')      loadCustomerFeed();
-  if(id==='s-c-discover')  loadDiscover();
   if(id==='s-c-leaderboard') loadLeaderboard();
   if(id==='s-c-review')    renderReviewScreen();
   if(id==='s-c-truck')   renderTruckDash();
@@ -4415,7 +4352,6 @@ function refreshCurrentScreen(){
       's-c-truck':       ()=>renderTruckDash(),
       's-c-feed':        ()=>loadCustomerFeed(),
       's-c-notifs':      ()=>{S._notifs=null;loadCustomerNotifs();},
-      's-c-discover':    ()=>loadDiscover(),
       's-c-leaderboard': ()=>loadLeaderboard(),
       's-c-history':     ()=>renderHistory(),
       's-c-profile':     ()=>renderProfile(),
@@ -4520,7 +4456,7 @@ function renderHomeBrowse(){
     const img = t.profile_picture_url
       ? `<img src="${escAttr(t.profile_picture_url)}" alt="" loading="lazy">`
       : `<span class="bk-emoji">${esc(t.emoji||'🚚')}</span>`;
-    return `<div class="bk" style="animation-delay:${Math.min(i,8)*0.04}s" onclick="openTruckFromDiscover('${escJs(t.slug)}')">
+    return `<div class="bk" style="animation-delay:${Math.min(i,8)*0.04}s" onclick="openTruckBySlug('${escJs(t.slug)}')">
       <div class="bk-img">
         ${img}
         ${isOut ? '<div class="bk-live"><span class="dot"></span>Out today</div>' : ''}
@@ -5173,7 +5109,7 @@ function renderMapCards(trucks){
       ${t.location ? `<div class="mk-loc">📍 ${esc(t.location)}</div>` : ''}
       ${t.hours ? `<div class="mk-hrs">🕒 ${esc(t.hours)}</div>` : ''}
       <div class="mk-acts">
-        <button class="mk-btn primary" onclick="openTruckFromDiscover('${escJs(t.slug)}')">View truck</button>
+        <button class="mk-btn primary" onclick="openTruckBySlug('${escJs(t.slug)}')">View truck</button>
         ${dirAddr ? `<button class="mk-btn ghost" onclick="openInMaps('${escJs(dirAddr)}')">🗺️ Directions</button>` : ''}
       </div>
     </div>`;
@@ -5265,7 +5201,7 @@ async function openTruckMap(){
       <div style="font-size:12px;color:#666;margin:3px 0">${badge}</div>
       ${t.location ? `<div style="font-size:12px">📍 ${esc(t.location)}</div>` : ''}
       ${t.hours ? `<div style="font-size:12px">🕒 ${esc(t.hours)}</div>` : ''}
-      <button onclick="openTruckFromDiscover('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
+      <button onclick="openTruckBySlug('${escJs(t.slug)}')" style="margin-top:7px;background:#FF5722;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-weight:700;cursor:pointer">View truck</button>
     </div>`;
     L.circleMarker([coords.lat, coords.lng], { radius: 10, color: '#fff', weight: 2, fillColor: color, fillOpacity: 1 })
       .addTo(_truckMap).bindPopup(html);
@@ -7243,82 +7179,7 @@ async function loadCustomerFeed(){
 /* ════════════════════════════════════
    CUSTOMER: DISCOVER
 ════════════════════════════════════ */
-async function loadDiscover(){
-  const stateFilter = (document.getElementById('discover-state-filter')?.value||'').trim().toUpperCase();
-  const url = '/api/discover' + (stateFilter ? '?state='+stateFilter : '');
-  const r = await apiGet(url);
-  const el = document.getElementById('discover-list');
-  if(!el) return;
-  const trucks = r.ok ? (r.data.data||[]) : [];
-  if(!trucks.length){
-    const msg = stateFilter ? `No trucks found in ${stateFilter}` : 'No trucks found yet';
-    el.innerHTML=`<div style="text-align:center;padding:40px 20px;color:var(--mu)"><div style="font-size:48px;margin-bottom:12px">🔍</div><div style="font-size:15px;font-weight:700;margin-bottom:8px">${msg}</div><div style="font-size:13px;line-height:1.6">Try a different state or check back later as more vendors join.</div></div>`;
-    return;
-  }
-
-  const joinedSlugs = new Set((S.myTrucks||[]).map(tr=>tr.slug));
-  el.innerHTML = trucks.map(t=>{
-    const pic = t.profile_picture_url;
-    const av = pic ? `<img src="${escAttr(pic)}" style="width:100%;height:100%;object-fit:cover;border-radius:14px">` : `<span style="font-size:28px">${t.emoji||'🚚'}</span>`;
-    const stars = t.avg_rating ? '★'.repeat(Math.round(t.avg_rating)) : '';
-    const displayLoc = t.display_location || '';
-    const displayHrs = t.display_hours || '';
-    // Escape vendor free-text before it hits innerHTML (schedule location/hours
-    // and service states are attacker-controllable across every customer).
-    const locLine = displayLoc ? `📍 ${esc(displayLoc)}${displayHrs?' · 🕐 '+esc(displayHrs):''}` : displayHrs ? `🕐 ${esc(displayHrs)}` : 'Location not posted today';
-    const hasLoc = !!(displayLoc || displayHrs);
-    // Include the ZIP so Google geocodes the right town ("10 main st, 44906").
-    const mapsAddr = (displayLoc || displayHrs) + (displayLoc && t.display_zip ? ', ' + t.display_zip : '');
-    const states = t.service_states ? `<span style="font-size:10px;background:rgba(255,87,34,.1);color:var(--brand);border-radius:8px;padding:2px 7px;font-weight:700">${esc(t.service_states)}</span>` : '';
-    const alreadyJoined = joinedSlugs.has(t.slug);
-    // A guest gets "View", not "Join" — the truck's own page makes the case for
-    // joining far better than a sign-in prompt fired off a list.
-    const actionBtn = (alreadyJoined || !S.customer)
-      ? `<button onclick="openTruckFromDiscover('${escJs(t.slug)}')" style="background:rgba(255,87,34,.12);color:var(--brand);border:1.5px solid var(--brand);border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">View</button>`
-      : `<button onclick="joinFromDiscover('${escJs(t.slug)}')" style="background:var(--brand);color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;font-family:var(--fb)">Join</button>`;
-
-    return `
-    <div class="card" style="margin-bottom:12px">
-      <div style="display:flex;gap:14px;align-items:flex-start">
-        <div style="width:56px;height:56px;border-radius:14px;background:rgba(255,87,34,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden">${av}</div>
-        <div style="flex:1;min-width:0">
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px">
-            <div style="font-weight:900;font-size:16px">${esc(t.truck_name)}</div>
-            ${states}
-          </div>
-          <div style="font-size:12px;color:${hasLoc?'var(--tx)':'var(--mu)'};margin-top:2px;font-weight:${hasLoc?'600':'400'}">${locLine}</div>
-          <div style="display:flex;gap:8px;margin-top:6px;align-items:center;flex-wrap:wrap">
-            ${stars ? `<span style="font-size:12px;color:var(--gd);font-weight:700">${stars} ${t.avg_rating}</span>` : ''}
-            <span style="font-size:12px;color:var(--mu);font-weight:600">👥 ${t.member_count||0} members</span>
-            ${hasLoc ? `<button onclick="openInMaps('${escJs(mapsAddr)}')" style="background:#E3F2FD;color:#1565C0;border:1.5px solid #90CAF9;border-radius:8px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">🗺️ Maps</button>` : ''}
-          </div>
-        </div>
-        ${actionBtn}
-      </div>
-    </div>`;
-  }).join('');
-}
-
-async function joinFromDiscover(slug){
-  if(!requireLogin('Join this truck free to earn points on every visit.')){
-    S._pendingJoin = String(slug).toLowerCase();
-    return;
-  }
-  showLoad('Joining...');
-  const r = await apiPost('/api/customer/join-truck', {customer_id:S.customer.id, slug});
-  hideLoad();
-  if(r.ok){
-    showToast('✅ Joined!');
-    const trucks = await apiGet('/api/customer/'+S.customer.id+'/trucks');
-    if(trucks.ok){ S.myTrucks=trucks.data.data||[]; localStorage.setItem('tl_my_trucks',JSON.stringify(S.myTrucks)); }
-    // Open the truck's card right away instead of dumping to the home list.
-    const truck = (S.myTrucks||[]).find(t=>t.slug===slug);
-    if(truck){ S.activeTruck=truck; localStorage.setItem('tl_active_truck',JSON.stringify(truck)); renderTruckDash(); goC('s-c-truck'); }
-    else { goC('s-c-home'); renderMyTrucks(); }
-  } else showToast('❌ '+(r.data?.error||'Could not join'));
-}
-
-function openTruckFromDiscover(slug){
+function openTruckBySlug(slug){
   const truck = (S.myTrucks||[]).find(t=>t.slug===slug);
   if(truck){ S.activeTruck=truck; localStorage.setItem('tl_active_truck',JSON.stringify(truck)); renderTruckDash(); goC('s-c-truck'); }
   else previewTruckBySlug(slug);
@@ -7334,7 +7195,7 @@ async function previewTruckBySlug(slug){
   hideLoad();
   if(!r.ok || !r.data?.data?.vendor){
     showToast('❌ '+(r.data?.error||"Couldn't find that truck"));
-    goC('s-c-discover');
+    goC('s-c-home');
     return;
   }
   const v = r.data.data.vendor;
