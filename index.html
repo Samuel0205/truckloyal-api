@@ -4874,23 +4874,49 @@ function loadCss(href){
 // Street address -> {lat,lng} via the free OSM Nominatim geocoder, cached in
 // localStorage. Handles the actual posted/scheduled address ("132 Park Ave,
 // Mansfield") — precise pins, not just ZIP centroids.
+/* Address -> {lat,lng}.
+
+   Photon first, Nominatim second. Nominatim's usage policy forbids the kind
+   of traffic a web app generates and asks for an identifying User-Agent that
+   a browser cannot set — so it blocks us, which is why the search box did
+   nothing and pins never appeared. Photon is built for exactly this and is
+   already what the vendor address field uses, so it's proven in this app. */
+async function _geoPhoton(q){
+  const r = await fetch('https://photon.komoot.io/api/?limit=1&lang=en&lat=39.5&lon=-98.35&q=' + encodeURIComponent(q));
+  if(!r.ok) return null;
+  const d = await r.json();
+  const f = (d.features || [])[0];
+  const c = f && f.geometry && f.geometry.coordinates;   // [lng, lat]
+  if(!c || c.length < 2) return null;
+  const coords = { lat: parseFloat(c[1]), lng: parseFloat(c[0]) };
+  return (isNaN(coords.lat) || isNaN(coords.lng)) ? null : coords;
+}
+async function _geoNominatim(q){
+  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' + encodeURIComponent(q),
+    { headers: { 'Accept': 'application/json' } });
+  if(!r.ok) return null;
+  const d = await r.json();
+  if(!d || !d.length) return null;
+  const coords = { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
+  return (isNaN(coords.lat) || isNaN(coords.lng)) ? null : coords;
+}
+
 async function geocodeAddress(addr){
   if(!addr) return null;
   const q = String(addr).trim();
   if(q.length < 4) return null;
   const key = 'addrgeo_' + q.toLowerCase();
   try { const c = localStorage.getItem(key); if(c) return JSON.parse(c); } catch(e){}
-  try {
-    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=us&q=' + encodeURIComponent(q),
-      { headers: { 'Accept': 'application/json' } });
-    if(!r.ok) return null;
-    const d = await r.json();
-    if(!d || !d.length) return null;
-    const coords = { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) };
-    if(isNaN(coords.lat) || isNaN(coords.lng)) return null;
-    try { localStorage.setItem(key, JSON.stringify(coords)); } catch(e){}
-    return coords;
-  } catch(e){ return null; }
+  for(const fn of [_geoPhoton, _geoNominatim]){
+    try {
+      const coords = await fn(q);
+      if(coords){
+        try { localStorage.setItem(key, JSON.stringify(coords)); } catch(e){}
+        return coords;
+      }
+    } catch(e){ /* try the next one */ }
+  }
+  return null;
 }
 
 // ZIP -> {lat,lng} via the free zippopotam.us API (coarse fallback), cached.
@@ -5012,16 +5038,26 @@ async function mapSearch(){
   const q = ((el && el.value) || '').trim();
   if(q.length < 2){ showToast('Type a city, ZIP, or address'); return; }
   showToast('🔎 Searching…');
-  try {
-    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=us&limit=1&q=' + encodeURIComponent(q),
-      { headers: { 'Accept': 'application/json' } });
-    const d = await r.json();
-    if(!d || !d.length){ showToast('Couldn\'t find that — try "city, state" or a ZIP'); return; }
-    const lat = parseFloat(d[0].lat), lng = parseFloat(d[0].lon);
-    if(isNaN(lat) || isNaN(lng)){ showToast('Couldn\'t find that area'); return; }
-    if(_truckMap) _truckMap.setView([lat, lng], 12);
-    if(el) el.blur();
-  } catch(e){ showToast('Search failed — check your connection'); }
+  // Goes through geocodeAddress, so it gets Photon-then-Nominatim and the
+  // cache — the same path the pins use. A pure ZIP falls back to zippopotam.
+  let coords = null;
+  try { coords = await geocodeAddress(q); } catch(e){}
+  if(!coords && /^\d{5}$/.test(q)){
+    try { coords = await geocodeZip(q); } catch(e){}
+  }
+  if(!coords){
+    showToast('Couldn\'t find that — try "city, state" or a ZIP');
+    return;
+  }
+  if(_truckMap){
+    _truckMap.setView([coords.lat, coords.lng], 12);
+    showToast('📍 ' + q);
+  } else {
+    // The map didn't come up, so there's nothing to pan. Say that rather than
+    // appearing to do nothing.
+    showToast('Found it — but the map isn\'t loaded. Tap Try again.');
+  }
+  if(el) el.blur();
 }
 
 // ── Location-permission pop-up (asks, with instructions + Open Settings) ──
@@ -5064,6 +5100,50 @@ function allowLocation(){
 function locateOnMap(){
   if(S._userLoc && _truckMap){ _centerOnUser(S._userLoc.lat, S._userLoc.lng); return; }
   showLocModal();
+}
+
+let _tileLayer = null;
+
+/* Tile providers, in order of preference. All three are free and need no key.
+   OpenStreetMap's own servers rate-limit and block clients they don't like,
+   and when that happens Leaflet draws nothing — a map that is "there but
+   blank", with no error, because the library itself started up fine. */
+const TILE_SOURCES = [
+  { url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: '&copy; OpenStreetMap contributors', maxZoom: 19 },
+  { url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO', maxZoom: 20,
+    subdomains: 'abcd' },
+  { url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    attribution: 'Tiles &copy; Esri', maxZoom: 19 },
+];
+
+/* Add a tile layer and watch it. If enough tiles fail we move to the next
+   provider; if we run out, the screen says so instead of staying blank. */
+function _addTiles(map, idx, mapEl){
+  const src = TILE_SOURCES[idx];
+  if(!src){
+    _mapFailed(mapEl, 'No map tiles would load on this connection.');
+    return;
+  }
+  const opts = { attribution: src.attribution, maxZoom: src.maxZoom };
+  if(src.subdomains) opts.subdomains = src.subdomains;
+  const layer = L.tileLayer(src.url, opts);
+  let errors = 0, ok = false, switched = false;
+  layer.on('tileload', function(){ ok = true; });
+  layer.on('tileerror', function(){
+    errors++;
+    // A couple of failures is normal at the edges of the view; a run of them
+    // with nothing loading means this provider isn't serving us.
+    if(!ok && !switched && errors >= 4){
+      switched = true;
+      console.warn('[MAP] tiles failed from ' + src.url + ' — trying the next provider');
+      try { map.removeLayer(layer); } catch(e){}
+      _addTiles(map, idx + 1, mapEl);
+    }
+  });
+  layer.addTo(map);
+  _tileLayer = layer;
 }
 
 /* The truck list under the map. Rendered from the API alone, so it survives
@@ -5159,9 +5239,7 @@ async function openTruckMap(){
     if(_truckMap){ try { _truckMap.remove(); } catch(e){} _truckMap = null; }
     mapEl.innerHTML = '';
     _truckMap = L.map('truck-map', { zoomControl: true }).setView([39.5, -98.35], 4); // US
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors', maxZoom: 19
-    }).addTo(_truckMap);
+    _addTiles(_truckMap, 0, mapEl);
   } catch(e){
     console.error('[MAP] init failed', e);
     _mapFailed(mapEl, 'Something went wrong starting the map.');
@@ -5169,8 +5247,11 @@ async function openTruckMap(){
   }
   // The container is sized by CSS after this runs; without it Leaflet renders
   // into a zero-size box and you get grey.
-  setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 200);
-  setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, 900);
+  // Leaflet measures the container once. If the screen is still transitioning
+  // it measures zero and draws nothing — another way to end up "there but
+  // blank". Re-measure a few times; a slow phone can take a while to settle.
+  [200, 900, 2000].forEach(ms =>
+    setTimeout(() => { try { _truckMap.invalidateSize(); } catch(e){} }, ms));
   if(noteEl && trucks.length) noteEl.textContent = 'Tap a pin or a card for details.';
 
   const pts = [];
@@ -5200,7 +5281,14 @@ async function openTruckMap(){
     if(pts.length){
       try { _truckMap.fitBounds(pts, { padding: [40, 40], maxZoom: 12 }); } catch(e){}
     }
-    if(!S._locPrompted){ S._locPrompted = true; setTimeout(showLocModal, 400); }
+    // The prompt covers the whole screen, including the search box. Only ask
+    // when there's actually a map to centre — asking to centre a map that
+    // failed to load is nonsense, and the pop-up then blocks the one control
+    // that still works.
+    if(!S._locPrompted && _truckMap && document.querySelector('#truck-map .leaflet-pane')){
+      S._locPrompted = true;
+      setTimeout(showLocModal, 400);
+    }
   }
 }
 
