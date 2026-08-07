@@ -704,6 +704,10 @@
           <div class="co-icon">💡</div>
           <div><div class="co-desc">Add what's on your truck — a photo sells it far better than words. Tap <strong>Sold out</strong> to hide an item without deleting it, or flag one as <strong>Today's Special</strong> to pin it to the top of your page.</div></div>
         </div>
+        <div id="v-menu-nophotos" style="display:none;background:#FDECEA;border:1.5px solid #F5C6CB;color:#B02A37;border-radius:14px;padding:14px 16px;margin-bottom:14px;font-size:13.5px;font-weight:800;line-height:1.6">
+          ⚠️ Photos and specials aren't switched on yet
+          <div style="font-weight:700;font-size:12.5px;margin-top:6px;line-height:1.6;opacity:.9">Everything else saves fine, but a picture you add will be dropped. Run <b>MENU_PHOTOS_SPECIALS_SCHEMA.sql</b> in Supabase once and this goes away.</div>
+        </div>
         <button class="btn btn-s" style="width:100%;margin-bottom:14px" onclick="openMenuSheet(-1)">+ Add Menu Item</button>
         <div id="v-menu-specials"></div>
         <div id="v-menu-list"></div>
@@ -3412,6 +3416,11 @@ function beepNewOrder(){
 async function loadVMenu(){
   const r = await apiGet('/api/vendor/menu');
   S.menu = (r.ok && r.data.data) || [];
+  // The server tells us whether the photo/special columns exist. Without
+  // them a picture silently vanishes on save, so say so up front rather
+  // than letting the vendor wonder why their fries never show up.
+  const warn = document.getElementById('v-menu-nophotos');
+  if(warn) warn.style.display = (r.ok && r.data.photos_enabled === false) ? 'block' : 'none';
   renderVMenu();
 }
 
@@ -3596,7 +3605,11 @@ async function saveMenuItem(){
     ['nm-n','nm-p','nm-d','nm-c','nm-e','nm-sp'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
     const sp=document.getElementById('nm-special'); if(sp) sp.checked=false; onSpecialToggle();
     await loadVMenu();
-    showToast(editing ? '✅ Item updated!' : '✅ Item added!');
+    if(r.data?.extras_dropped){
+      showToast('⚠️ Saved — but the photo needs one more setup step');
+    } else {
+      showToast(editing ? '✅ Item updated!' : '✅ Item added!');
+    }
   } else showToast('❌ '+(r.data?.error||'Could not save item'));
 }
 
