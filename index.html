@@ -3432,16 +3432,25 @@ function menuPrice(m){
 
 /* Photo if there is one, otherwise the emoji on a soft tile. Same thumbnail
    on both the vendor list and the customer menu so they match. */
+/* The item's picture. The slot is always a photo — the item's own if it has
+   one, otherwise /default-truck.png, the same placeholder a truck without a
+   profile picture gets. The emoji is no longer what fills this space; it
+   moved to a small badge on the corner so it still has a home without
+   taking the picture's place. */
 function menuThumb(m, size, radius){
-  const r = radius || 14;
-  if(m.image_url){
-    return `<div style="width:${size}px;height:${size}px;flex:0 0 auto;border-radius:${r}px;overflow:hidden;background:var(--s2)">
-      <img src="${esc(m.image_url)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">
-    </div>`;
-  }
-  return `<div style="width:${size}px;height:${size}px;flex:0 0 auto;border-radius:${r}px;display:flex;align-items:center;justify-content:center;
-    font-size:${Math.round(size*0.44)}px;background:linear-gradient(135deg,rgba(255,87,34,.13),rgba(249,168,37,.16));
-    border:1.5px solid rgba(255,138,80,.28)">${esc(m.emoji||'🍽️')}</div>`;
+  const r    = radius || 14;
+  const src  = m.image_url || '/default-truck.png';
+  const badge = Math.max(20, Math.round(size * 0.42));   // scales with the tile
+  return `<div style="position:relative;width:${size}px;height:${size}px;flex:0 0 auto">
+    <div style="width:100%;height:100%;border-radius:${r}px;overflow:hidden;background:var(--s2);border:1.5px solid var(--b2)">
+      <img src="${escAttr(src)}" alt="" loading="lazy"
+           onerror="this.onerror=null;this.src='/default-truck.png'"
+           style="width:100%;height:100%;object-fit:cover;display:block">
+    </div>
+    <div style="position:absolute;bottom:-4px;right:-4px;width:${badge}px;height:${badge}px;border-radius:50%;
+      background:#fff;border:2px solid #fff;box-shadow:0 2px 7px rgba(120,80,40,.28);
+      display:flex;align-items:center;justify-content:center;font-size:${Math.round(badge*0.6)}px;line-height:1">${esc(m.emoji||'🍽️')}</div>
+  </div>`;
 }
 
 function vMenuCard(m, i){
