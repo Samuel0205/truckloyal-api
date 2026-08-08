@@ -51,8 +51,10 @@
            display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px}
   .step h3{font-size:19px;margin-bottom:5px}
   .step p{font-size:16px;color:var(--mu)}
-  .step .tip{background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:11px;
-             padding:11px 13px;font-size:14.5px;color:#8a4b00;margin-top:11px;line-height:1.55}
+  /* usable outside a .step too — the sign-in note under step 2 is one */
+  .tip{background:#FFF3E0;border:1.5px solid #FFCC80;border-radius:11px;
+       padding:11px 13px;font-size:14.5px;color:#8a4b00;line-height:1.55}
+  .step .tip{margin-top:11px}
 
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;
        text-decoration:none;font-weight:900;font-size:17px;padding:16px 30px;border-radius:14px;
@@ -138,7 +140,11 @@
 <section class="band">
   <div class="wrap">
     <h2>2 · Sign up with your code</h2>
-    <p class="lead">Tap <b>Vendor</b>, then <b>Start free trial</b>, and fill in your truck details.</p>
+    <p class="lead">The button above drops you straight on the truck-owner sign-in. Tap
+       <b>Start free trial</b> and fill in your truck details.</p>
+    <div class="tip" style="margin-bottom:22px">Bookmarked the app already, or opened it from
+      somewhere else? It opens on the customer side now — that's the half your diners use. Scroll to
+      the bottom and tap <b>🚚 Run a food truck? Sign in here</b> to get to yours.</div>
     <div class="step">
       <div class="n">🎟️</div>
       <div>
