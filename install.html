@@ -87,6 +87,10 @@
   var isIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
   var isAndroid = /android/i.test(ua);
   var isRealSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
+  // Facebook, Instagram, Messenger etc. open links in their own WebView. On
+  // Android that WebView NEVER fires beforeinstallprompt, so an Install button
+  // there is a lie — you have to get out to Chrome first.
+  var isInApp = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|Line|musical_ly|Snapchat|Twitter|LinkedInApp|Pinterest/i.test(ua);
   var isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
 
   var action = document.getElementById('action');
@@ -98,6 +102,38 @@
         '<div><div class="step-t">App installed!</div>' +
         '<div class="step-s">Find the Food Truck Rewards icon on your home screen.</div></div></div>' +
       '<a class="applink" href="/app" style="margin-top:18px">Open Food Truck Rewards now →</a>';
+  }
+
+  /* Android + in-app browser: one tap reopens this exact page in Chrome via an
+     intent:// URL, where the real install prompt works. browser_fallback_url
+     covers phones without Chrome. */
+  function renderAndroidInApp(){
+    var here = location.origin + '/install';
+    var intent = 'intent://' + location.host + '/install' +
+                 '#Intent;scheme=https;package=com.android.chrome;' +
+                 'S.browser_fallback_url=' + encodeURIComponent(here) + ';end';
+    action.innerHTML =
+      '<div class="warn">You opened this inside Facebook. Android only lets apps install from <strong>Chrome</strong>.</div>' +
+      '<a class="install-btn" id="to-chrome" href="' + intent + '" ' +
+        'style="display:flex;align-items:center;justify-content:center;text-decoration:none;margin-top:14px">' +
+        '\u27A1\uFE0F  Open in Chrome to install</a>' +
+      '<div class="steps" id="chrome-manual" style="margin-top:16px">' +
+        '<div class="step"><div class="step-num">1</div><div><div class="step-t">Tap the button above</div>' +
+        '<div class="step-s">It reopens this page in Chrome</div></div></div>' +
+        '<div class="step"><div class="step-num gold">2</div><div><div class="step-t">Tap &quot;Install App&quot; there</div>' +
+        '<div class="step-s">Chrome shows the real install pop-up</div></div></div>' +
+      '</div>';
+    // If the intent doesn't fire (some devices block it), say what to do by hand.
+    var btn = document.getElementById('to-chrome');
+    if (btn) btn.addEventListener('click', function(){
+      setTimeout(function(){
+        if (document.visibilityState === 'visible'){
+          document.getElementById('chrome-manual').innerHTML =
+            '<div class="warn">Still here? Tap the <strong>\u22EE</strong> menu in the top-right of ' +
+            'this Facebook window and choose <strong>Open in browser</strong> \u2014 then tap Install.</div>';
+        }
+      }, 1200);
+    });
   }
 
   function renderAndroid(){
@@ -171,6 +207,8 @@
   // Decide what to show
   if (isStandalone) {
     renderInstalled();
+  } else if (isAndroid && isInApp) {
+    renderAndroidInApp();
   } else if (isAndroid) {
     renderAndroid();
   } else if (isIOS && isRealSafari) {
