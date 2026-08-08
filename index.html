@@ -6003,6 +6003,8 @@ if ('serviceWorker' in navigator && !window.ReactNativeWebView) {
   const isIOS    = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
   // Real Safari only — excludes Chrome (CriOS), Firefox (FxiOS), and most in-app browsers
   const isRealSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
+  // Facebook / Instagram / Messenger open links in their own browser
+  const isInApp = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|Line|musical_ly|Snapchat|Twitter|LinkedInApp|Pinterest/i.test(ua);
 
   if (isIOS) {
     // iOS can NEVER auto-install — always manual via real Safari only
@@ -6022,6 +6024,20 @@ if ('serviceWorker' in navigator && !window.ReactNativeWebView) {
       }
       banner.style.display = 'flex';
     }
+  } else if (isInApp) {
+    // Android inside Facebook/Instagram's browser. beforeinstallprompt NEVER
+    // fires in that WebView, so the banner used to just never appear — which
+    // is why a link shared on Facebook showed no install option at all.
+    // Chrome can be reached with an intent:// URL, and the prompt works there.
+    const banner = document.getElementById('install-banner');
+    const btn    = document.getElementById('install-btn');
+    const sub    = document.getElementById('install-sub');
+    if (banner && btn) {
+      btn.textContent = 'Install App';
+      if (sub) sub.textContent = 'Opens in Chrome, where Android allows installing';
+      btn.onclick = openInChrome;
+      banner.style.display = 'flex';
+    }
   } else {
     // Android Chrome — intercept native install prompt
     window.addEventListener('beforeinstallprompt', (e) => {
@@ -6037,6 +6053,23 @@ if ('serviceWorker' in navigator && !window.ReactNativeWebView) {
     });
   }
 })();
+
+/* Reopen this exact page in Chrome. Android's intent:// syntax; the fallback
+   url covers a phone with no Chrome. Once there, the install prompt works. */
+function openInChrome(){
+  const here   = location.href;
+  const intent = 'intent://' + location.host + location.pathname + location.search +
+                 '#Intent;scheme=https;package=com.android.chrome;' +
+                 'S.browser_fallback_url=' + encodeURIComponent(here) + ';end';
+  const sub = document.getElementById('install-sub');
+  // If the intent is blocked we're still here a moment later — say what to do.
+  setTimeout(() => {
+    if (document.visibilityState === 'visible' && sub) {
+      sub.textContent = 'Still here? Tap ⋮ above → "Open in browser", then Install.';
+    }
+  }, 1500);
+  location.href = intent;
+}
 
 function triggerInstall() {
   if (window._installPrompt) {
