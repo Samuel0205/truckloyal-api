@@ -1085,13 +1085,22 @@ def serve_manifest():
         "background_color": "#FF5722",
         "theme_color": "#FF5722",
         "orientation": "portrait",
+        # Largest first, and purpose "any" only.
+        #
+        # Both entries used to say "any maskable". A maskable icon is one with
+        # a 20% safe margin that the OS crops to a circle/squircle and scales
+        # UP to fill it; ours is edge-to-edge artwork with no safe zone. With
+        # the same icon claiming both purposes, the home-screen icon and the
+        # launch screen each picked their own treatment — which is why a small
+        # logo appeared and then swapped for the big one.
         "icons": [
-            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
         ]
     }
     resp = Response(json.dumps(manifest), mimetype='application/manifest+json')
-    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    # An hour, not a day: an icon change shouldn't take 24h to reach a phone.
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
     return resp
 
 
@@ -1111,13 +1120,22 @@ def serve_customer_manifest():
         "background_color": "#FF5722",
         "theme_color": "#FF5722",
         "orientation": "portrait",
+        # Largest first, and purpose "any" only.
+        #
+        # Both entries used to say "any maskable". A maskable icon is one with
+        # a 20% safe margin that the OS crops to a circle/squircle and scales
+        # UP to fill it; ours is edge-to-edge artwork with no safe zone. With
+        # the same icon claiming both purposes, the home-screen icon and the
+        # launch screen each picked their own treatment — which is why a small
+        # logo appeared and then swapped for the big one.
         "icons": [
-            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
         ]
     }
     resp = Response(json.dumps(manifest), mimetype='application/manifest+json')
-    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    # An hour, not a day: an icon change shouldn't take 24h to reach a phone.
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
     return resp
 
 
