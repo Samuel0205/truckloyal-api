@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, date, timezone
 from functools import wraps
 from collections import defaultdict
 
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory, Response, redirect
 import csv, io
 from flask_cors import CORS
 from supabase import create_client, Client
@@ -1248,6 +1248,16 @@ def serve_join_qr(slug):
 
 @app.route("/install")
 def serve_install():
+    """Kept only so old links and printed QR codes don't 404.
+
+    There is no separate install page any more. The app itself carries the
+    install banner at the top, so a shared link shows the food AND the
+    install button in one place instead of an interstitial that shows
+    neither."""
+    return redirect("/app?c=1", code=302)
+
+
+def _retired_install_page():
     resp = send_from_directory('.', 'install.html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
