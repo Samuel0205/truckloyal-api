@@ -307,6 +307,28 @@
 /* First-party website analytics — anonymous page-view ping (no cookies/PII). */
 (function(){
   try{
+    // Your own visits shouldn't look like customers. Open any page with
+    // ?notrack=1 once per device and this browser stops counting forever
+    // (?notrack=0 undoes it). An excluded device sends nothing at all.
+    var _note = function(msg){
+      try{
+        var d = document.createElement("div");
+        d.textContent = msg;
+        d.style.cssText = "position:fixed;left:12px;right:12px;bottom:16px;z-index:99999;" +
+          "background:#1A1A1A;color:#fff;font:700 14px/1.5 system-ui,sans-serif;padding:14px 16px;" +
+          "border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.35);text-align:center";
+        var add = function(){ document.body.appendChild(d); setTimeout(function(){ d.remove(); }, 6000); };
+        if(document.body) add(); else document.addEventListener("DOMContentLoaded", add);
+      }catch(e){}
+    };
+    if(location.search.indexOf("notrack=1") > -1){
+      localStorage.setItem("ftr_notrack","1");
+      _note("Analytics off for this device \u2014 your visits won't be counted.");
+    } else if(location.search.indexOf("notrack=0") > -1){
+      localStorage.removeItem("ftr_notrack");
+      _note("Analytics back on for this device.");
+    }
+    if(localStorage.getItem("ftr_notrack")) return;
     var v=localStorage.getItem("ftr_vid");
     if(!v){ v=Date.now().toString(36)+Math.random().toString(36).slice(2,10); localStorage.setItem("ftr_vid",v); }
     fetch("/api/track",{method:"POST",headers:{"Content-Type":"application/json"},keepalive:true,
