@@ -248,8 +248,11 @@
   .fcell .fi { font-size:40px; line-height:1; margin-bottom:14px; }
   .fcell h3 { font-size:19px; margin-bottom:8px; }
   .fcell p { font-size:15.5px; color:var(--muted); font-weight:700; line-height:1.55; }
-  @media (min-width:1180px){ .feat-row { grid-template-columns:repeat(6,1fr); gap:18px; } }
-  @media (max-width:560px){ .feat-row { grid-template-columns:repeat(2,1fr); } }
+  /* Nine features now. Six used to divide evenly by 6, 3 and 2, which is why
+     the old rules worked; nine doesn't. Three across from 560px up (three tidy
+     rows) and one across below it — a 6-wide row was cramped at this cell
+     count anyway, and full-width cells read better on a phone. */
+  @media (max-width:560px){ .feat-row { grid-template-columns:1fr; gap:22px; } }
 
   /* ── what you get (dark, cards) ──────────────────────── */
   .value-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:15px; }
@@ -500,8 +503,11 @@
       <div class="fcell"><div class="fi">🏆</div><h3>Rewards &amp; Points</h3><p>Build loyalty with points, rewards and spin prizes.</p></div>
       <div class="fcell"><div class="fi">📍</div><h3>Live Location</h3><p>Post where you're parked so customers can find you.</p></div>
       <div class="fcell"><div class="fi">🪟</div><h3>At the Window</h3><p>Scan or search and award points in seconds.</p></div>
-      <div class="fcell"><div class="fi">🔔</div><h3>Notifications</h3><p>Message your members with updates and specials.</p></div>
+      <div class="fcell"><div class="fi">🔔</div><h3>Notifications</h3><p>Message your members when you post a spot or a deal.</p></div>
       <div class="fcell"><div class="fi">📊</div><h3>Analytics</h3><p>Track visits, members and redemptions.</p></div>
+      <div class="fcell"><div class="fi">📸</div><h3>Menu Photos</h3><p>Put a real picture on every item. Food sells itself far better than a list of names.</p></div>
+      <div class="fcell"><div class="fi">🔥</div><h3>Today's Specials</h3><p>Flag an item and it pins to the top of your page — with the old price crossed out.</p></div>
+      <div class="fcell"><div class="fi">👀</div><h3>Found Without Signing Up</h3><p>Anyone can open the app and see your menu and today's spot. No account in the way.</p></div>
     </div>
   </div>
 </section>
@@ -575,13 +581,13 @@
     <span class="track-label vendor">🚚 For you, the vendor</span>
     <div class="steps">
       <div class="step"><span class="emoji">📲</span><div class="n">1</div><h3>Download &amp; sign up</h3><p>One tap to install — no app store. Start your 45-day free trial and add your truck.</p></div>
-      <div class="step"><span class="emoji">🎁</span><div class="n">2</div><h3>Set your rewards</h3><p>Pick your points, rewards, menu and spin-wheel prizes to match your margins.</p></div>
+      <div class="step"><span class="emoji">🎁</span><div class="n">2</div><h3>Set your rewards</h3><p>Pick your points, rewards and spin-wheel prizes to match your margins, then add your menu with photos.</p></div>
       <div class="step"><span class="emoji">🪟</span><div class="n">3</div><h3>Use it at the window</h3><p>Take order-ahead tickets, award points and confirm rewards — even during a rush.</p></div>
     </div>
 
     <span class="track-label customer">🌮 For your customers</span>
     <div class="steps" style="margin-bottom:0">
-      <div class="step cust"><span class="emoji">⬇️</span><div class="n">1</div><h3>Download the app</h3><p>One tap from your poster or link — free, on the home screen, no app store.</p></div>
+      <div class="step cust"><span class="emoji">⬇️</span><div class="n">1</div><h3>Open the app</h3><p>One tap from your poster or link. Your menu and today's spot are right there — they don't even need an account to look.</p></div>
       <div class="step cust"><span class="emoji">📷</span><div class="n">2</div><h3>Order or scan</h3><p>They order ahead from their phone — or scan at the window — and earn points either way.</p></div>
       <div class="step cust"><span class="emoji">🎉</span><div class="n">3</div><h3>Earn &amp; redeem</h3><p>Rack up points, keep a streak alive, and cash in for free food — so they keep coming back.</p></div>
     </div>
