@@ -2502,9 +2502,7 @@ function openSidebar(){
   // Only offer Install when they're in a browser. Someone who already added
   // it to their home screen is running it standalone — telling them to
   // install the thing they're using reads as broken.
-  const installed = window.matchMedia('(display-mode: standalone)').matches
-                    || window.navigator.standalone === true;
-  if(!installed) html += item('⬇️','Install app','sbInstall()', {note:'Home screen'});
+  if(!appInstalled()) html += item('⬇️','Install app','sbInstall()', {note:'Home screen'});
   html += item('🌐','Visit our website','sbSite()')
         + item('⭐','Leave a review','sbReview()')
         + item('🚚','Run a food truck?','sbVendor()');
@@ -2526,12 +2524,20 @@ function sbVendor(){ closeSidebar(); goVendorSide(); }
 function sbSignOut(){ closeSidebar(); customerLogout(); }
 function sbInstall(){
   closeSidebar();
-  // Reuse whatever the install banner would do on this device — native prompt
-  // in Chrome, Chrome hand-off inside Facebook, Safari steps on iPhone.
-  const btn = document.getElementById('install-btn');
-  if(btn && typeof btn.onclick === 'function'){ btn.onclick(); return; }
-  if(window._installPrompt){ triggerInstall(); return; }
-  showToast('Use your browser menu → “Install app” to add it to your home screen');
+  // This used to hand off to #install-btn's onclick. That button carries an
+  // inline onclick attribute, so `typeof btn.onclick === 'function'` was ALWAYS
+  // true — even when the banner had bailed out early (already installed, or
+  // the banner was dismissed) and never rewired it. It then called
+  // triggerInstall() with no prompt captured, and nothing happened at all.
+  // Decide here instead, and always end in something visible.
+  if(appInstalled()){
+    showToast('✅ You already have it — you\u2019re using the installed app');
+    return;
+  }
+  if(devIsIOS()){ showIOSSheet(devIsRealSafari()); return; }
+  if(window._installPrompt){ triggerInstall(); return; }      // Chrome, prompt ready
+  if(devIsInApp()){ openInChrome(); return; }                 // Facebook → Chrome
+  showToast('Open your browser menu (⋮) and tap “Install app”');
 }
 
 function setMode(mode){
@@ -6087,19 +6093,56 @@ if ('serviceWorker' in navigator && !window.ReactNativeWebView) {
 /* ════════════════════════════════════
    PWA INSTALL BANNER
 ════════════════════════════════════ */
+/* Device checks shared by the banner and the drawer's Install item. They
+   used to live inside the banner's IIFE, which meant the drawer had no way
+   to ask them and had to guess from the button's state instead. */
+function appInstalled(){
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
+function devIsIOS(){
+  const ua = navigator.userAgent;
+  return /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+}
+// Real Safari only — excludes Chrome (CriOS), Firefox (FxiOS), and in-app browsers
+function devIsRealSafari(){
+  const ua = navigator.userAgent;
+  return /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
+}
+// Facebook / Instagram / Messenger open links in their own browser
+function devIsInApp(){
+  return /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|Line|musical_ly|Snapchat|Twitter|LinkedInApp|Pinterest/i.test(navigator.userAgent);
+}
+
+/* Capture Chrome's install prompt unconditionally and as early as possible.
+   This used to live inside the banner's IIFE, below an early return — so once
+   someone dismissed the banner, the prompt was never captured again and the
+   drawer's Install item had nothing to fire. Registering it out here keeps the
+   drawer working no matter what the banner decided to do. */
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  window._installPrompt = e;
+  // The banner only wants to appear if it hasn't been dismissed/suppressed.
+  if (window._installBannerArmed) {
+    const banner = document.getElementById('install-banner');
+    if (banner) banner.style.display = 'flex';
+  }
+});
+window.addEventListener('appinstalled', () => {
+  window._installPrompt = null;
+  dismissInstallBanner();
+});
+
 (function(){
   // Don't show if: already installed as PWA, inside native WebView, or user dismissed
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+  const isStandalone = appInstalled();
   const isWebView    = !!window.ReactNativeWebView;
   const dismissed    = localStorage.getItem('tl_install_dismissed');
   if (isStandalone || isWebView || dismissed) return;
 
-  const ua       = navigator.userAgent;
-  const isIOS    = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
-  // Real Safari only — excludes Chrome (CriOS), Firefox (FxiOS), and most in-app browsers
-  const isRealSafari = /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA|FBAN|FBAV|Instagram|Line|musical_ly|Snapchat/i.test(ua);
-  // Facebook / Instagram / Messenger open links in their own browser
-  const isInApp = /FBAN|FBAV|FB_IAB|FBIOS|Instagram|Messenger|Line|musical_ly|Snapchat|Twitter|LinkedInApp|Pinterest/i.test(ua);
+  const isIOS        = devIsIOS();
+  const isRealSafari = devIsRealSafari();
+  const isInApp      = devIsInApp();
 
   if (isIOS) {
     // iOS can NEVER auto-install — always manual via real Safari only
@@ -6134,28 +6177,26 @@ if ('serviceWorker' in navigator && !window.ReactNativeWebView) {
       banner.style.display = 'flex';
     }
   } else {
-    // Android Chrome — intercept native install prompt
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      window._installPrompt = e;
+    // Android Chrome — let the module-level beforeinstallprompt handler show
+    // the banner when Chrome offers the prompt.
+    window._installBannerArmed = true;
+    // If the prompt already fired before this ran, honour it now.
+    if (window._installPrompt) {
       const banner = document.getElementById('install-banner');
       if (banner) banner.style.display = 'flex';
-    });
-
-    // Hide banner if user installs from elsewhere
-    window.addEventListener('appinstalled', () => {
-      dismissInstallBanner();
-    });
+    }
   }
 })();
 
 /* Reopen this exact page in Chrome. Android's intent:// syntax; the fallback
    url covers a phone with no Chrome. Once there, the install prompt works. */
+function chromeIntentUrl(){
+  return 'intent://' + location.host + location.pathname + location.search +
+         '#Intent;scheme=https;package=com.android.chrome;' +
+         'S.browser_fallback_url=' + encodeURIComponent(location.href) + ';end';
+}
 function openInChrome(){
-  const here   = location.href;
-  const intent = 'intent://' + location.host + location.pathname + location.search +
-                 '#Intent;scheme=https;package=com.android.chrome;' +
-                 'S.browser_fallback_url=' + encodeURIComponent(here) + ';end';
+  const intent = chromeIntentUrl();
   const sub = document.getElementById('install-sub');
   // If the intent is blocked we're still here a moment later — say what to do.
   setTimeout(() => {
