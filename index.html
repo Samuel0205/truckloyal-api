@@ -27,14 +27,14 @@
 <div id="app">
 
   <!-- PWA install banner — hidden by default, shown by JS when appropriate -->
-  <div id="install-banner" style="display:none;align-items:center;gap:10px;background:#1A1A1A;padding:10px 14px;flex-shrink:0;z-index:70">
-    <div style="font-size:28px;flex-shrink:0">🔥</div>
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:800;color:white;line-height:1.2">Install Food Truck Rewards</div>
-      <div id="install-sub" style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px">Add to your home screen for the full app experience</div>
+  <div id="install-banner" class="inst-bar">
+    <div class="inst-ic">🔥</div>
+    <div class="inst-tx">
+      <div class="inst-t">Install Food Truck Rewards</div>
+      <div class="inst-s" id="install-sub">Add it to your home screen</div>
     </div>
-    <button id="install-btn" onclick="triggerInstall()" style="background:#FF5722;color:white;border:none;border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;font-family:var(--fb);cursor:pointer;white-space:nowrap;flex-shrink:0">Install App</button>
-    <button onclick="dismissInstallBanner()" style="background:transparent;border:none;color:rgba(255,255,255,.4);font-size:20px;cursor:pointer;padding:0 2px;flex-shrink:0;line-height:1">×</button>
+    <button id="install-btn" class="inst-go" onclick="triggerInstall()">Install</button>
+    <button class="inst-x" onclick="dismissInstallBanner()" aria-label="Dismiss">×</button>
   </div>
 
   <!-- iOS install instructions sheet — shown on iOS Safari -->
@@ -1543,9 +1543,14 @@
         </div><!-- /c-member-home -->
 
         <!-- The app opens on the customer side now, so this is how a truck
-             owner gets to their own login without knowing about ?v=1. -->
-        <div style="text-align:center;padding:22px 0 4px">
-          <span onclick="goVendorSide()" style="font-size:13px;font-weight:800;color:var(--mu);cursor:pointer;border-bottom:1.5px solid var(--b2);padding-bottom:2px">🚚 Run a food truck? Sign in here</span>
+             owner gets to their own login without knowing about ?v=1.
+             It doubles as the page's footer: it stretches to fill whatever
+             room is left over when there aren't many trucks nearby, so the
+             screen never trails off into a slab of blank cream. -->
+        <div class="c-home-foot">
+          <div class="fw">Run a food truck?</div>
+          <div class="fs">Get on the map, take orders ahead, and give your regulars a reason to keep coming back.</div>
+          <button class="fb" onclick="goVendorSide()">🚚 Sign in or start free</button>
         </div>
       </div>
     </div>
@@ -6152,12 +6157,12 @@ window.addEventListener('appinstalled', () => {
     if (banner && btn) {
       if (isRealSafari) {
         btn.textContent = 'How to Install';
-        if (sub) sub.textContent = 'Add to your home screen for the full app experience';
+        if (sub) sub.textContent = 'Add it to your home screen';
         btn.onclick = () => showIOSSheet(true);
       } else {
         // In-app browser or Chrome/Firefox iOS — install is impossible here
         btn.textContent = 'Install';
-        if (sub) sub.textContent = 'Open in Safari to add this to your home screen';
+        if (sub) sub.textContent = 'Open in Safari to add it';
         btn.onclick = () => showIOSSheet(false);
       }
       banner.style.display = 'flex';
@@ -6171,8 +6176,8 @@ window.addEventListener('appinstalled', () => {
     const btn    = document.getElementById('install-btn');
     const sub    = document.getElementById('install-sub');
     if (banner && btn) {
-      btn.textContent = 'Install App';
-      if (sub) sub.textContent = 'Opens in Chrome, where Android allows installing';
+      btn.textContent = 'Install';
+      if (sub) sub.textContent = 'Opens in Chrome, where install works';
       btn.onclick = openInChrome;
       banner.style.display = 'flex';
     }
@@ -6201,7 +6206,7 @@ function openInChrome(){
   // If the intent is blocked we're still here a moment later — say what to do.
   setTimeout(() => {
     if (document.visibilityState === 'visible' && sub) {
-      sub.textContent = 'Still here? Tap ⋮ above → "Open in browser", then Install.';
+      sub.textContent = 'Still here? Tap ⋮ → "Open in browser"';
     }
   }, 1500);
   location.href = intent;
@@ -7841,6 +7846,11 @@ setTimeout(()=>{
     sc.style.transition='opacity .4s ease';
     setTimeout(()=>{sc.style.display='none'; sc.remove();},450);
   }
+  // html/body are painted the splash orange so the very first frame isn't
+  // white. Once the splash is gone that orange only ever shows as a strip
+  // under the nav bar when a phone browser's toolbar collapses. Hand the
+  // page back to the app's own background.
+  document.documentElement.classList.add('booted');
 }, 800);
 
 </script>

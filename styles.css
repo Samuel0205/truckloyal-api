@@ -1,5 +1,12 @@
 /* ── SPLASH (must load before body renders) ── */
 html,body{background:#FF5722 !important}
+/* …but only until the app has booted, and only on a phone, where the app
+   fills the width. There the orange never shows as anything except a stripe
+   under the nav when the browser's toolbar collapses, which looks like a
+   rendering fault. Wider screens keep their orange surround untouched. */
+@media (max-width:430px){
+  html.booted,html.booted body{background:#1A1A1A !important}
+}
 #splash-cover{position:fixed;inset:0;background:#FF5722;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity .5s ease;gap:40px}
 /* NOTE: don't put the logo on this splash. Every icon file is opaque with a
    baked-in rgb(242,90,26) background, which does not match this #FF5722 —
@@ -499,3 +506,51 @@ body:has(#sidebar.open) .rfsh-btn{display:none}
 .confirm-reward-name{font-family:var(--fd);font-weight:900;font-size:22px;color:var(--tx);margin-bottom:4px}
 .confirm-customer{font-size:14px;color:var(--mu);font-weight:600}
 .confirm-pts{font-size:13px;color:var(--rd);margin-top:6px;font-weight:700}
+
+
+/* ── HOME FOOTER — the page has to end somewhere ───────────────
+   When only a couple of trucks are nearby the content stops well short
+   of the nav bar, and what was left behind was a slab of blank cream
+   that reads like the page gave up half way through loading. This
+   footer absorbs whatever room is left over and carries the same dark
+   and the same torn edge as the nav, so the screen always ends on
+   purpose — and the space earns its keep by pitching the trucks. */
+#s-c-home.on{display:flex;flex-direction:column}
+#s-c-home>.bp{flex:1;display:flex;flex-direction:column;padding-bottom:0}
+.c-home-foot{position:relative;flex:1 0 auto;margin:36px -20px 0;
+  padding:34px 24px calc(var(--nav) + var(--sb) + 26px);background:#1A1A1A;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;text-align:center}
+.c-home-foot::before{content:'';position:absolute;bottom:100%;left:-2px;right:-2px;height:30px;
+  background:url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 434 30' preserveAspectRatio='none'><rect x='0' y='16' width='434' height='14' fill='%231A1A1A'/><path d='M0,30 L0,14 C30,12 62,16 94,13 C126,10 158,15 190,12 C222,9 254,14 286,11 C318,8 350,13 382,10 C402,8 420,12 434,10 L434,30 Z' fill='%231A1A1A'/><path d='M-2,16 C26,13 54,18 82,14 C108,10 134,16 160,13' stroke='%231A1A1A' stroke-width='11' fill='none' stroke-linecap='round'/><path d='M110,14 C140,10 168,16 196,12 C222,8 248,14 274,11' stroke='%231A1A1A' stroke-width='10' fill='none' stroke-linecap='round'/><path d='M230,15 C260,11 290,17 320,13 C348,9 375,14 434,11' stroke='%231A1A1A' stroke-width='11' fill='none' stroke-linecap='round'/><path d='M40,11 C72,7 104,13 132,10 C155,7 174,11 194,9' stroke='%231A1A1A' stroke-width='7' fill='none' stroke-linecap='round'/><path d='M290,10 C318,6 348,12 376,9 C400,6 420,10 434,8' stroke='%231A1A1A' stroke-width='7' fill='none' stroke-linecap='round'/></svg>") no-repeat;background-size:100% 100%}
+/* same warm glow as the top band, so it reads as charcoal not a void */
+.c-home-foot::after{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(120% 80% at 50% 108%,rgba(255,87,34,.28) 0%,transparent 62%)}
+.c-home-foot>*{position:relative;z-index:1}
+.c-home-foot .fw{font-family:var(--fd);font-size:17px;font-weight:900;color:#fff;letter-spacing:-.2px}
+.c-home-foot .fs{font-size:12.5px;font-weight:700;color:rgba(255,255,255,.5);line-height:1.5;max-width:280px}
+.c-home-foot .fb{display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.09);
+  border:1.5px solid rgba(255,255,255,.2);color:#fff;border-radius:99px;padding:11px 20px;
+  font-family:var(--fb);font-size:12.5px;font-weight:800;cursor:pointer;margin-top:4px}
+.c-home-foot .fb:active{transform:scale(.96)}
+
+/* ── PWA INSTALL BANNER — one tight row above the brand bar ────
+   The sub line used to wrap to three lines on a narrow phone, turning
+   the banner into a fat black slab that was the first thing anyone saw
+   coming in from a shared link. Both lines are clamped now. */
+.inst-bar{display:none;align-items:center;gap:11px;background:#1A1A1A;
+  padding:9px 12px 9px 14px;flex-shrink:0;z-index:70}
+.inst-ic{font-size:24px;line-height:1;flex-shrink:0}
+.inst-tx{flex:1;min-width:0}
+.inst-t{font-size:13px;font-weight:800;color:#fff;line-height:1.2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inst-s{font-size:11px;font-weight:600;color:rgba(255,255,255,.55);margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inst-go{background:var(--brand);color:#fff;border:none;border-radius:10px;padding:9px 15px;
+  font-size:12.5px;font-weight:800;font-family:var(--fb);cursor:pointer;white-space:nowrap;
+  flex-shrink:0;box-shadow:0 3px 10px rgba(255,87,34,.35)}
+.inst-go:active{transform:scale(.96)}
+.inst-x{background:rgba(255,255,255,.09);border:none;color:rgba(255,255,255,.6);font-size:15px;
+  line-height:1;cursor:pointer;flex-shrink:0;width:26px;height:26px;border-radius:50%;padding:0;
+  display:flex;align-items:center;justify-content:center}
+.inst-x:active{background:rgba(255,255,255,.18)}
