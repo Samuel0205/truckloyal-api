@@ -64,6 +64,27 @@
       <button class="mb" id="mb-c" onclick="setMode('customer')">👤 Customer</button>
     </div>
   </div>
+  <!-- Slide-out settings drawer. The hamburger used to jump to a whole
+       screen (or, for a guest, throw up a login sheet). This keeps you where
+       you are and is also where the website now lives, so the app is the
+       destination and the site is a link inside it. -->
+  <div id="sb-scrim" onclick="closeSidebar()"></div>
+  <aside id="sidebar" aria-label="Menu">
+    <div class="sb-head">
+      <div>
+        <div class="sb-name" id="sb-name">Food Truck Rewards</div>
+        <div class="sb-sub" id="sb-sub">Find trucks, earn free food</div>
+      </div>
+      <button class="sb-x" onclick="closeSidebar()" aria-label="Close">&times;</button>
+    </div>
+    <nav class="sb-body" id="sb-body"></nav>
+    <div class="sb-foot">
+      <a href="/terms" target="_blank" rel="noopener">Terms</a>
+      <span>·</span>
+      <a href="/privacy" target="_blank" rel="noopener">Privacy</a>
+    </div>
+  </aside>
+
   <div class="scroll" id="scroll">
 
     <!-- ══════════════════════════════════════
@@ -2401,6 +2422,7 @@ function show(id){
   document.getElementById('scroll').scrollTop=0;
   document.querySelector('.topbar').classList.toggle('auth-mode',AUTH_SCREENS.has(id));
   updateTopbarAuth(id);
+  closeSidebar();
 }
 
 /* The Log in button belongs to exactly one situation: browsing the customer
@@ -2430,13 +2452,81 @@ function requireLogin(why){
 }
 
 function openMenu(){
+  // Vendors keep their full Settings screen — it's a real page of controls,
+  // not a menu. The customer side gets the drawer.
   if(S.mode==='vendor'){
     if(S.vendorToken&&S.vendor) goV('s-v-settings');
-  } else if(S.customer){
-    goC('s-c-profile');
-  } else {
-    requireLogin('Log in to see your points, your trucks and your order history.');
+    return;
   }
+  openSidebar();
+}
+
+/* ── Settings drawer (customer side) ────────────────────────
+   Built fresh each open so it always matches signed-in state. */
+function openSidebar(){
+  const body = document.getElementById('sb-body');
+  const name = document.getElementById('sb-name');
+  const sub  = document.getElementById('sb-sub');
+  if(!body) return;
+
+  const signedIn = !!S.customer;
+  if(name) name.textContent = signedIn ? (S.customer.name || 'Your account') : 'Food Truck Rewards';
+  if(sub)  sub.textContent  = signedIn ? 'Signed in' : 'Find trucks, earn free food';
+
+  const item = (icon, label, action, opts) => {
+    opts = opts || {};
+    return '<button class="sb-item' + (opts.accent ? ' accent' : '') + '" onclick="' + action + '">' +
+      '<span class="sb-ic">' + icon + '</span><span class="sb-lb">' + label + '</span>' +
+      (opts.note ? '<span class="sb-note">' + opts.note + '</span>' : '') + '</button>';
+  };
+  const gap = '<div class="sb-gap"></div>';
+
+  let html = '';
+  if(signedIn){
+    html += item('🏠','Home',"sbGo('s-c-home')")
+          + item('📍','Truck map',"sbGo('s-c-map')")
+          + item('🪪','My rewards card',"sbGo('s-c-qr')")
+          + item('📋','Visit history',"sbGo('s-c-history')")
+          + item('📰','Feed',"sbGo('s-c-feed')")
+          + item('👤','Profile &amp; settings',"sbGo('s-c-profile')")
+          + gap;
+  } else {
+    html += item('🏠','Home',"sbGo('s-c-home')")
+          + item('📍','Truck map',"sbGo('s-c-map')")
+          + gap
+          + item('🎁','Create free account',"sbGo('s-c-signup')",{accent:true})
+          + item('🔑','Log in',"sbGo('s-c-login')")
+          + gap;
+  }
+
+  html += item('⬇️','Install app','sbInstall()', {note:'Home screen'})
+        + item('🌐','Visit our website','sbSite()')
+        + item('⭐','Leave a review','sbReview()')
+        + item('🚚','Run a food truck?','sbVendor()');
+
+  if(signedIn) html += gap + item('🚪','Sign out','sbSignOut()');
+
+  body.innerHTML = html;
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sb-scrim').classList.add('open');
+}
+function closeSidebar(){
+  document.getElementById('sidebar')?.classList.remove('open');
+  document.getElementById('sb-scrim')?.classList.remove('open');
+}
+function sbGo(id){ closeSidebar(); goC(id); }
+function sbSite(){ closeSidebar(); window.open('https://foodtruckrewards.com/', '_blank', 'noopener'); }
+function sbReview(){ closeSidebar(); window.open('https://foodtruckrewards.com/#review', '_blank', 'noopener'); }
+function sbVendor(){ closeSidebar(); goVendorSide(); }
+function sbSignOut(){ closeSidebar(); customerLogout(); }
+function sbInstall(){
+  closeSidebar();
+  // Reuse whatever the install banner would do on this device — native prompt
+  // in Chrome, Chrome hand-off inside Facebook, Safari steps on iPhone.
+  const btn = document.getElementById('install-btn');
+  if(btn && typeof btn.onclick === 'function'){ btn.onclick(); return; }
+  if(window._installPrompt){ triggerInstall(); return; }
+  showToast('Use your browser menu → “Install app” to add it to your home screen');
 }
 
 function setMode(mode){
