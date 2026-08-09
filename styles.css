@@ -400,10 +400,13 @@ body:has(#sidebar.open) .rfsh-btn{display:none}
 #sb-scrim.open{opacity:1;pointer-events:auto}
 #sidebar{position:fixed;top:0;right:0;bottom:0;width:min(84vw,340px);background:#fff;z-index:301;
   display:flex;flex-direction:column;transform:translateX(100%);transition:transform .26s cubic-bezier(.22,.9,.3,1);
-  box-shadow:-14px 0 40px rgba(45,27,14,.28);padding-top:env(safe-area-inset-top,0px);
+  box-shadow:-14px 0 40px rgba(45,27,14,.28);
   padding-bottom:env(safe-area-inset-bottom,0px)}
 #sidebar.open{transform:translateX(0)}
-.sb-head{display:flex;align-items:flex-start;gap:12px;padding:20px 18px 16px;background:#1A1A1A;color:#fff;position:relative}
+/* The safe-area inset lives here, not on #sidebar — on the sidebar it left
+   a white strip above the dark header. */
+.sb-head{display:flex;align-items:flex-start;gap:12px;background:#1A1A1A;color:#fff;position:relative;
+  padding:calc(20px + env(safe-area-inset-top,0px)) 18px 16px}
 .sb-head::before{content:'';position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(120% 100% at 92% 0%,rgba(255,87,34,.4) 0%,transparent 62%)}
 .sb-head>*{position:relative;z-index:1}

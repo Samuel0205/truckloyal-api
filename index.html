@@ -2499,8 +2499,13 @@ function openSidebar(){
           + gap;
   }
 
-  html += item('⬇️','Install app','sbInstall()', {note:'Home screen'})
-        + item('🌐','Visit our website','sbSite()')
+  // Only offer Install when they're in a browser. Someone who already added
+  // it to their home screen is running it standalone — telling them to
+  // install the thing they're using reads as broken.
+  const installed = window.matchMedia('(display-mode: standalone)').matches
+                    || window.navigator.standalone === true;
+  if(!installed) html += item('⬇️','Install app','sbInstall()', {note:'Home screen'});
+  html += item('🌐','Visit our website','sbSite()')
         + item('⭐','Leave a review','sbReview()')
         + item('🚚','Run a food truck?','sbVendor()');
 
