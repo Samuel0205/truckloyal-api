@@ -18,6 +18,60 @@
 <link rel="apple-touch-icon" sizes="512x512" href="/icon-512.png">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/styles.css">
+<script>
+/* ── MAKE IT FIT THE PHONE ──────────────────────────────────────
+   Some in-app browsers — and any browser with "Desktop site" switched
+   on — lay the page out at the 980px desktop fallback width and ignore
+   the viewport meta above, then zoom the whole thing out to fit the
+   screen. The app is capped at 430px, so it came out as a narrow strip
+   down the middle at about 40% size with the page background either
+   side of it. That is what a link opened from Facebook looked like.
+
+   Two escalating fixes, both no-ops on a browser that behaves:
+     1. Re-insert the viewport meta naming an explicit pixel width. A
+        browser that merely ignored it at parse time honours it now.
+     2. If it STILL lays out desktop-wide, the browser is overriding us
+        on purpose. Zoom the document instead: at zoom N the layout
+        viewport shrinks to width/N, so a phone-width layout fills the
+        screen at full size. */
+(function(){
+  var LIMIT = 1.3;   // how much wider than the screen counts as "wrong"
+  /* screen.width/height don't swap on rotation in every browser, so work out
+     which edge is currently across the screen rather than trusting either
+     one. The short edge is what says "this is a phone". */
+  function dims(){
+    var s = window.screen || {};
+    var w = s.width || 0, h = s.height || 0;
+    if (!w || !h) return null;
+    var land = window.matchMedia && matchMedia('(orientation: landscape)').matches;
+    return { shortEdge: Math.min(w, h), width: land ? Math.max(w, h) : Math.min(w, h) };
+  }
+  function fit(){
+    var doc = document.documentElement;
+    var d   = dims();
+    if (!d || d.shortEdge > 600) return;      // tablet or desktop — leave alone
+    var sw  = d.width;
+    doc.style.zoom = '';                      // measure unzoomed
+    if (doc.clientWidth <= sw * LIMIT) return;
+
+    var old   = document.querySelector('meta[name="viewport"]');
+    var fresh = document.createElement('meta');
+    fresh.name    = 'viewport';
+    fresh.content = 'width=' + sw + ', initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+    if (old && old.parentNode) old.parentNode.replaceChild(fresh, old);
+    else document.head.appendChild(fresh);
+
+    // Give the browser a frame to relayout, then check whether it took.
+    requestAnimationFrame(function(){
+      var w = doc.clientWidth;
+      if (w > sw * LIMIT) doc.style.zoom = w / sw;
+    });
+  }
+  fit();
+  document.addEventListener('DOMContentLoaded', fit);
+  window.addEventListener('orientationchange', function(){ setTimeout(fit, 250); });
+})();
+</script>
 </head>
 <body>
 <!-- Splash screen — orange background with logo, fades when app loads -->
